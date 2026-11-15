@@ -223,6 +223,7 @@ export const SECTIONS = [
   'cleanup',
   'gaming',
   'tweaks',
+  'selftest',
   'script',
   'processes',
   'backup',
@@ -237,6 +238,10 @@ export const SECTION_META: Record<Section, { title: string; subtitle: string }> 
   cleanup: { title: 'Dọn dẹp', subtitle: 'Giải phóng RAM + Disk chỉ với một cú nhấp' },
   gaming: { title: 'Gaming Mode', subtitle: 'Tăng hiệu năng tối đa khi chơi game' },
   tweaks: { title: 'Tinh chỉnh', subtitle: 'Danh sách tối ưu xếp hạng theo độ ưu tiên' },
+  selftest: {
+    title: 'Tự kiểm tra',
+    subtitle: 'Kiểm tra sức khỏe hệ thống + toàn bộ tinh chỉnh, báo cáo về Discord',
+  },
   script: {
     title: 'Script nâng cao',
     subtitle: 'Tự viết và chạy script tùy chỉnh — dành cho người biết code (Advanced)',

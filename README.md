@@ -9,7 +9,8 @@ Dashboard giám sát + tối ưu hệ thống tất-cả-trong-một với giao 
 | **Tổng quan** | Giám sát CPU / RAM / Disk / Network realtime (biểu đồ 3 phút, gauge tròn) |
 | **Dọn dẹp** | Dọn Disk + RAM **cùng lúc** chỉ với 1 nút, kèm lịch sử logs |
 | **Gaming Mode** | Bật 1 công tắc — ép nền đen neon, áp bộ tinh chỉnh hiệu năng, danh sách hiệu ứng minh bạch thành công/thất bại |
-| **Tinh chỉnh** | Danh sách tweak xếp hạng theo độ ưu tiên, badge mức rủi ro, áp dụng/khôi phục từng mục hoặc bộ khuyến nghị |
+| **Tinh chỉnh** | Danh sách **35 tweak Windows** (CPU, GPU, RAM, bàn phím, chuột, mạng, dịch vụ, giao diện) xếp hạng theo độ ưu tiên, badge mức rủi ro, áp dụng/khôi phục từng mục hoặc bộ khuyến nghị |
+| **Tự kiểm tra** (mới) | Kiểm tra sức khỏe hệ thống (PowerShell/Admin/reg.exe/DB/catalog) + **self-test FULL** (apply → revert từng tweak), gửi báo cáo tự động về **Discord webhook**; nút **"Chạy lại với quyền Admin"** (UAC tự hỏi xác nhận) |
 | **Script nâng cao** (mới) | Tự viết script **Bash / Python / PowerShell** chạy trực tiếp: editor + console output, lưu thư viện script, timeout 90s, output tự cắt an toàn |
 | **Tiến trình** | Xem + dừng tiến trình, sắp xếp CPU/RAM |
 | **Sao lưu** | 1) **Tạo backup** file .tar.gz, tải lên bucket 30GB; 2) **Dùng lại backup** từ local hoặc bucket (restore có xác nhận, chặn symlink/path traversal, không ghi đè .env / db / node_modules) |
@@ -53,9 +54,12 @@ npm run dist:win   # kết quả nằm trong release/
 Quy trình: `next build` → `post-build.mjs` (copy static/public/prisma engine vào standalone) → `stage-electron.mjs` (dựng build/electron-app) → `electron-builder --win --x64`.
 
 ### Lưu ý quyền trên Windows
-- Các tinh chỉnh **HKCU** (Game DVR, Game Mode, chuột, hiệu ứng...) áp dụng ngay không cần Admin
-- Các mục **HKLM / service / powercfg** (SystemResponsiveness, SysMain, DiagTrack, Nagle, power plan...) cần chạy app với **quyền Administrator** — thiếu quyền sẽ được báo lỗi trung thực, không giả lập thành công
+- Các tinh chỉnh **HKCU** (Game DVR, Game Mode, chuột, bàn phím, hiệu ứng...) áp dụng ngay không cần Admin
+- Các mục **HKLM / service / powercfg** (SystemResponsiveness, SysMain, DiagTrack, Nagle, power plan...) cần chạy app với **quyền Administrator** — thiếu quyền sẽ được báo lỗi trung thực, không giả lập thành công; có thể bấm nút **"Chạy lại với quyền Admin"** trong tab Tự kiểm tra để app tự nâng quyền qua UAC
+- Quyền Admin được kiểm tra bằng cách **ghi thử key HKLM qua reg.exe** — không phụ thuộc PowerShell, nên không còn cảnh báo nhầm "Cần quyền Admin" khi thực ra là PowerShell bị thiếu/bị chặn
+- **Chống lỗi `spawn powershell.exe ENOENT`**: PowerShell được tìm theo đường dẫn tuyệt đối (`System32\WindowsPowerShell\v1.0` → PowerShell 7 → `where.exe`), còn `reg.exe/powercfg/sc.exe/ipconfig/bcdedit` chạy **trực tiếp không cần PowerShell** — hoạt động cả trên Windows bị rút gọn PowerShell; cấu hình PowerShell tùy chỉnh qua biến môi trường `NEXUS_PS_OVERRIDE`
 - Dọn dẹp mục Temp Windows / Prefetch / Windows Update cache cũng cần Admin
+- Báo cáo Discord self-test cấu hình trong tab Tự kiểm tra (chỉ chấp nhận domain discord.com), hoặc qua biến môi trường `DISCORD_WEBHOOK_URL`
 
 ## GitHub Workflow (tự động sao lưu)
 

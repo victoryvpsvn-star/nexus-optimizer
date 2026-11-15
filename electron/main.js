@@ -120,6 +120,8 @@ function startServer(dbFile) {
       // SQLite file nằm ở userData — nơi người dùng luôn có quyền ghi
       DATABASE_URL: 'file:' + dbFile.replace(/\\/g, '/'),
       NEXUS_DATA_DIR: dataDir(),
+      // Đường dẫn exe electron để server có thể "Chạy lại với quyền Admin" (Start-Process -Verb RunAs)
+      NEXUS_EXE: process.execPath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -128,6 +130,26 @@ function startServer(dbFile) {
   serverProc.on('exit', (code) => {
     serverProc = null
     if (!quitting) {
+      // Exit 0 = thoát sạch: hoặc là yêu cầu "Chạy lại với quyền Admin" (flag do /api/system ghi,
+      // tiến trình PS detached sẽ Start-Process -Verb RunAs sau 3s) → đóng app im lặng.
+      if (code === 0) {
+        let flag = null
+        const flagPath = path.join(dataDir(), 'relaunch-elevated.flag')
+        try {
+          flag = JSON.parse(fs.readFileSync(flagPath, 'utf8'))
+        } catch {
+          /* không có flag — thoát sạch bình thường */
+        }
+        if (flag && typeof flag.at === 'number' && Date.now() - flag.at < 60000) {
+          try {
+            fs.unlinkSync(flagPath)
+          } catch {
+            /* bỏ qua */
+          }
+        }
+        app.quit()
+        return
+      }
       // Server chết đột tử → đóng app thay vì treo cửa sổ trắng
       dialog.showErrorBox(
         'NEXUS Optimizer đã dừng',

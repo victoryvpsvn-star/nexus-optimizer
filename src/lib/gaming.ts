@@ -15,11 +15,48 @@ const GAMING_PRESET_APPLY_LINUX = ['drop-caches', 'governor-performance', 'swapp
 /** Preset tắt Gaming Mode (Linux): hoàn tác các tinh chỉnh nhân đã bật */
 const GAMING_PRESET_REVERT_LINUX = ['governor-performance', 'swappiness-10']
 
-/** Preset bật Gaming Mode (Windows): HKCU áp dụng ngay cho user hiện tại */
-const GAMING_PRESET_APPLY_WIN = ['win-game-dvr-off','win-gamemode-on','win-fse-off','win-power-high','win-netthrottle','win-mouse-accurate','win-ram-clean','win-flush-dns']
+/** Preset bật Gaming Mode (Windows): HKCU áp dụng ngay; các mục Admin thiếu quyền sẽ báo trung thực */
+export const GAMING_PRESET_APPLY_WIN = [
+  'win-game-dvr-off',
+  'win-gamemode-on',
+  'win-fse-off',
+  'win-mouse-accurate',
+  'win-keyboard-fast',
+  'win-keyboard-accessibility-off',
+  'win-menu-delay',
+  'win-startup-delay',
+  'win-ram-clean',
+  'win-flush-dns',
+  'win-power-high',
+  'win-cpu-priority-separation',
+  'win-cpu-core-parking-off',
+  'win-gpu-hwsch-on',
+  'win-mmcss-gaming',
+  'win-netthrottle',
+  'win-background-apps-off',
+]
 
-/** Preset tắt Gaming Mode (Windows): hoàn tác cả sysresp/netthrottle/sysmain/diagtrack có thể đã được bật kèm */
-const GAMING_PRESET_REVERT_WIN = ['win-game-dvr-off','win-gamemode-on','win-fse-off','win-power-high','win-sysresp','win-netthrottle','win-mouse-accurate','win-sysmain-off','win-diagtrack-off']
+/** Preset tắt Gaming Mode (Windows): hoàn tác mọi mục có thể đã được bật kèm */
+export const GAMING_PRESET_REVERT_WIN = [
+  'win-game-dvr-off',
+  'win-gamemode-on',
+  'win-fse-off',
+  'win-mouse-accurate',
+  'win-keyboard-fast',
+  'win-keyboard-accessibility-off',
+  'win-menu-delay',
+  'win-startup-delay',
+  'win-power-high',
+  'win-sysresp',
+  'win-cpu-priority-separation',
+  'win-cpu-core-parking-off',
+  'win-gpu-hwsch-on',
+  'win-mmcss-gaming',
+  'win-netthrottle',
+  'win-background-apps-off',
+  'win-sysmain-off',
+  'win-diagtrack-off',
+]
 
 function nameOf(id: string): string {
   return TWEAK_ACTIONS.find((a) => a.def.id === id)?.def.name ?? id

@@ -9,6 +9,7 @@ import { OverviewPanel } from '@/components/modules/overview-panel'
 import { CleanupPanel } from '@/components/modules/cleanup-panel'
 import { GamingPanel } from '@/components/modules/gaming-panel'
 import { TweaksPanel } from '@/components/modules/tweaks-panel'
+import { SelftestPanel } from '@/components/modules/selftest-panel'
 import { ProcessesPanel } from '@/components/modules/processes-panel'
 import { BackupPanel } from '@/components/modules/backup-panel'
 import { ScreenshotPanel } from '@/components/modules/screenshot-panel'
@@ -244,6 +245,7 @@ export default function Page() {
               {section === 'cleanup' && <CleanupPanel />}
               {section === 'gaming' && <GamingPanel />}
               {section === 'tweaks' && <TweaksPanel />}
+              {section === 'selftest' && <SelftestPanel />}
               {section === 'script' && <ScriptPanel />}
               {section === 'processes' && <ProcessesPanel />}
               {section === 'backup' && <BackupPanel />}
