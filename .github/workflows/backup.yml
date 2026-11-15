@@ -1,0 +1,58 @@
+name: NEXUS Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 02:00 Asia/Bangkok hằng ngày
+    - cron: '0 19 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      HAS_S3: ${{ secrets.S3_SECRET_KEY != '' }}
+      HAS_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Đóng gói bản backup
+        run: |
+          tar -czf nexus-backup-${{ github.run_number }}.tar.gz \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='.next' \
+            --exclude='.env*' \
+            --exclude='upload' \
+            --exclude='backups' \
+            --exclude='db' \
+            .
+
+      - name: Lưu artifact GitHub (giữ 30 ngày)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-backup-${{ github.run_number }}
+          path: nexus-backup-*.tar.gz
+          retention-days: 30
+
+      - name: Đẩy lên bucket U3 30GB (S3)
+        if: env.HAS_S3 == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+        run: |
+          aws s3 cp nexus-backup-${{ github.run_number }}.tar.gz \
+            "s3://${{ secrets.S3_BUCKET }}/nexus-backups/" \
+            --endpoint-url "${{ secrets.S3_ENDPOINT }}" \
+            --region "${{ secrets.S3_REGION }}" \
+            --content-type application/gzip
+          echo "Đã đẩy backup lên bucket (nexus-backups/)"
+
+      - name: Thông báo Discord
+        if: env.HAS_WEBHOOK == 'true'
+        run: |
+          curl -sf -X POST -H 'Content-Type: application/json' \
+            -d "{\"content\":\"NEXUS backup #$(( ${{ github.run_number }} )) hoàn tất - artifact + bucket OK\"}" \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}" || echo "Không gửi được webhook, bỏ qua"

@@ -1,0 +1,257 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono-jb);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
+}
+
+:root,
+.dark {
+  --radius: 1rem;
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --card: rgba(255, 255, 255, 0.04);
+  --card-foreground: #f4f4f5;
+  --popover: #18181b;
+  --popover-foreground: #f4f4f5;
+  --primary: #22d3ee;
+  --primary-foreground: #09090b;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #f4f4f5;
+  --muted: rgba(255, 255, 255, 0.06);
+  --muted-foreground: #a1a1aa;
+  --accent: rgba(255, 255, 255, 0.08);
+  --accent-foreground: #f4f4f5;
+  --destructive: #f43f5e;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #22d3ee;
+  --chart-1: #22d3ee;
+  --chart-2: #a78bfa;
+  --chart-3: #34d399;
+  --chart-4: #fbbf24;
+  --chart-5: #f43f5e;
+  --sidebar: rgba(24, 24, 27, 0.92);
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #22d3ee;
+  --sidebar-primary-foreground: #09090b;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #22d3ee;
+
+  /* Biến nhấn tùy chỉnh — mặc định cyan/violet */
+  --accent-1: #22d3ee;
+  --accent-2: #a78bfa;
+  --glow-strength: 1;
+
+  /* Bề mặt shell (sidebar / topbar / sheet) — đổi màu khi Gaming Mode bật */
+  --surface: #111117;
+  --surface-2: #0d0d12;
+}
+
+/* Bo góc theo cài đặt người dùng */
+body {
+  --radius: var(--user-radius, 1rem);
+}
+
+/* Bảng màu nhấn */
+[data-accent="cyan-violet"] {
+  --accent-1: #22d3ee;
+  --accent-2: #a78bfa;
+}
+[data-accent="emerald-amber"] {
+  --accent-1: #34d399;
+  --accent-2: #fbbf24;
+}
+[data-accent="rose-magenta"] {
+  --accent-1: #fb7185;
+  --accent-2: #e879f9;
+}
+[data-accent="amber-crimson"] {
+  --accent-1: #fbbf24;
+  --accent-2: #f43f5e;
+}
+
+/* Chế độ Gaming: nền đen tuyệt đối, neon tím + đỏ */
+[data-gaming="on"] {
+  --background: #000000;
+  --accent-1: #9933ff;
+  --accent-2: #ff4136;
+  --primary: #9933ff;
+  --ring: #9933ff;
+  --border: rgba(153, 51, 255, 0.25);
+  --glow-strength: 1.8;
+  --surface: #0a0a12;
+  --surface-2: #050508;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "tnum" off;
+}
+
+/* Thẻ kính mờ bo góc */
+.glass {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.07),
+    rgba(255, 255, 255, 0.03)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+[data-gaming="on"] .glass {
+  background: linear-gradient(
+    145deg,
+    rgba(153, 51, 255, 0.08),
+    rgba(255, 65, 54, 0.04)
+  );
+}
+
+/* Viền gradient nhấn */
+.accent-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--card, #121217), var(--card, #121217)) padding-box,
+    linear-gradient(120deg, var(--accent-1), var(--accent-2)) border-box;
+}
+
+.glow-1 {
+  box-shadow: 0 0 calc(24px * var(--glow-strength)) color-mix(in srgb, var(--accent-1) 15%, transparent);
+}
+
+.glow-hover {
+  transition:
+    transform 0.25s ease-out,
+    box-shadow 0.25s ease-out,
+    border-color 0.25s ease-out;
+}
+.glow-hover:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent-1) 45%, transparent);
+  box-shadow: 0 0 calc(28px * var(--glow-strength)) color-mix(in srgb, var(--accent-1) 18%, transparent);
+}
+
+/* Thanh cuộn mảnh tối */
+.thin-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-1) 55%, transparent);
+}
+
+/* Chữ số liệu */
+.num {
+  font-family: var(--font-mono-jb), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Pulse nhẹ cho pill Gaming Mode trên topbar */
+@keyframes pill-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px color-mix(in srgb, var(--accent-1) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent-1) 55%, transparent);
+  }
+}
+
+/* Viền RGB neon cho hero Gaming Mode (chỉ khi bật gaming) */
+@keyframes rgb-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.gaming-rgb {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+[data-gaming='on'] .gaming-rgb::before {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  z-index: -1;
+  background: conic-gradient(
+    from 0deg,
+    #9933ff,
+    #ff4136,
+    #a64dff,
+    #9933ff
+  );
+  opacity: 0.35;
+  animation: rgb-spin 6s linear infinite;
+  filter: blur(26px);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-gaming='on'] .gaming-rgb::before {
+    animation: none;
+  }
+}

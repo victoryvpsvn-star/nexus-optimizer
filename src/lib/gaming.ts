@@ -1,0 +1,84 @@
+// Gaming Mode — bật/tắt preset tinh chỉnh bằng cách TÁI SỬ DỤNG các hàm apply/revert của ./tweaks
+
+import { db } from '@/lib/db'
+import { applyTweakById, TWEAK_ACTIONS, revertTweakById } from '@/lib/tweaks'
+import type { GamingEffect } from '@/lib/types'
+
+export const GAMING_NOTE =
+  'Các tinh chỉnh nhân Linux cần quyền root — trên VPS hiện tại không có sudo nên chúng được báo lỗi trung thực; các mục cấp user vẫn áp dụng.'
+
+/** Preset bật Gaming Mode: xả RAM, governor hiệu năng, giảm swap, dọn cache npm + /tmp */
+const GAMING_PRESET_APPLY = ['drop-caches', 'governor-performance', 'swappiness-10', 'npm-cache-clean', 'tmp-clean']
+
+/** Preset tắt Gaming Mode: hoàn tác các tinh chỉnh nhân đã bật */
+const GAMING_PRESET_REVERT = ['governor-performance', 'swappiness-10']
+
+function nameOf(id: string): string {
+  return TWEAK_ACTIONS.find((a) => a.def.id === id)?.def.name ?? id
+}
+
+async function runPreset(ids: string[], mode: 'apply' | 'revert'): Promise<GamingEffect[]> {
+  const effects: GamingEffect[] = []
+  for (const id of ids) {
+    try {
+      const r = mode === 'apply' ? await applyTweakById(id) : await revertTweakById(id)
+      effects.push({ id, name: nameOf(id), success: r.success, message: r.message })
+    } catch (e) {
+      effects.push({ id, name: nameOf(id), success: false, message: `Lỗi khi chạy: ${(e as Error).message}` })
+    }
+  }
+  return effects
+}
+
+/** Bật/tắt Gaming Mode: chạy preset rồi upsert GamingState (id=1) cùng effects JSON */
+export async function setGaming(enabled: boolean): Promise<GamingEffect[]> {
+  const effects = enabled
+    ? await runPreset(GAMING_PRESET_APPLY, 'apply')
+    : await runPreset(GAMING_PRESET_REVERT, 'revert')
+
+  const now = new Date()
+  try {
+    await db.gamingState.upsert({
+      where: { id: 1 },
+      update: {
+        enabled,
+        enabledAt: enabled ? now : null,
+        effects: JSON.stringify(effects),
+      },
+      create: { id: 1, enabled, enabledAt: enabled ? now : null, effects: JSON.stringify(effects) },
+    })
+  } catch (e) {
+    console.error('[gaming] setGaming upsert', e)
+  }
+  return effects
+}
+
+/** Đọc trạng thái Gaming Mode từ DB (effects là chuỗi JSON) */
+export async function getGamingStatus(): Promise<{
+  enabled: boolean
+  enabledAt?: string
+  effects: GamingEffect[]
+  note: string
+}> {
+  try {
+    const row = await db.gamingState.findUnique({ where: { id: 1 } })
+    let effects: GamingEffect[] = []
+    if (row?.effects) {
+      try {
+        effects = JSON.parse(row.effects) as GamingEffect[]
+        if (!Array.isArray(effects)) effects = []
+      } catch {
+        effects = []
+      }
+    }
+    return {
+      enabled: row?.enabled ?? false,
+      enabledAt: row?.enabledAt ? row.enabledAt.toISOString() : undefined,
+      effects,
+      note: GAMING_NOTE,
+    }
+  } catch (e) {
+    console.error('[gaming] getGamingStatus', e)
+    return { enabled: false, effects: [], note: GAMING_NOTE }
+  }
+}

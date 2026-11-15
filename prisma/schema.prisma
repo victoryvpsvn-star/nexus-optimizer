@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+model TweakState {
+  id         String    @id
+  applied    Boolean   @default(false)
+  appliedAt  DateTime?
+  lastResult String?
+}
+
+model CleanupLog {
+  id         Int      @id @default(autoincrement())
+  kind       String
+  target     String
+  freedBytes Int      @default(0)
+  success    Boolean  @default(true)
+  message    String?
+  createdAt  DateTime @default(now())
+}
+
+model BackupRecord {
+  id        Int      @id @default(autoincrement())
+  name      String
+  path      String
+  sizeBytes Int      @default(0)
+  uploaded  Boolean  @default(false)
+  s3Key     String?
+  createdAt DateTime @default(now())
+}
+
+model GamingState {
+  id        Int       @id @default(1)
+  enabled   Boolean   @default(false)
+  enabledAt DateTime?
+  effects   String?
+}
