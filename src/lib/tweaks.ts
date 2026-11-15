@@ -1,9 +1,11 @@
 // Catalog tinh chỉnh (Tweaks) — xếp hạng theo độ tác động, chuẩn Chris Titus WinUtil style
-// Mọi tinh chỉnh root đều dùng tryRoot() — KHÔNG giả lập thành công khi thiếu sudo.
+// Linux: mọi tinh chỉnh root đều dùng tryRoot() — KHÔNG giả lập thành công khi thiếu sudo.
+// Windows: TWEAK_ACTIONS_WIN chạy qua PowerShell (psRun) với reg.exe/sc.exe/powercfg/ipconfig;
+// các mục requiresRoot bị chặn TRƯỚC khi chạy nếu thiếu quyền Administrator (adminGate).
 
 import fs from 'fs/promises'
 import { db } from '@/lib/db'
-import { run, tryRoot } from '@/lib/exec'
+import { run, tryRoot, psRun, isWin, isAdminWin } from '@/lib/exec'
 import type { RiskLevel, Tweak, TweakRunResult } from '@/lib/types'
 
 const GOV_ORIG_FILE = '/tmp/nexus-gov-orig'
@@ -60,7 +62,81 @@ async function sysctlRoot(key: string, value: string): Promise<TweakActionResult
   return { success: true, message: short(r.stdout || r.stderr || `${key}=${value} OK`) }
 }
 
-export const TWEAK_ACTIONS: TweakAction[] = [
+// ---------- Helpers nhánh Windows (registry / dịch vụ / powercfg qua PowerShell) ----------
+
+const ADMIN_FAIL = 'Cần quyền Administrator — hãy chạy NEXUS Optimizer với quyền Admin'
+
+/**
+ * Cổng quyền Administrator cho các mục requiresRoot trên Windows: chặn TRƯỚC khi chạy
+ * bất kỳ lệnh nào nếu thiếu quyền — không bao giờ chạy nửa vời hay giả lập thành công.
+ */
+async function adminGate(): Promise<TweakActionResult | null> {
+  if (!isWin) return null
+  const admin = await isAdminWin()
+  if (!admin) return { success: false, message: ADMIN_FAIL }
+  return null
+}
+
+/** Chuỗi an toàn nhúng vào script PowerShell: single-quoted literal, escape ' thành '' */
+function psStr(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`
+}
+
+interface RegValue {
+  name: string
+  type: 'REG_DWORD' | 'REG_SZ'
+  data: string
+}
+
+/** reg.exe add lần lượt từng giá trị — thoát với exit code thật ngay khi một lệnh lỗi */
+async function regAddValues(key: string, values: RegValue[], okMsg: string): Promise<TweakActionResult> {
+  const k = psStr(key)
+  const script =
+    values
+      .map(
+        (v) =>
+          `reg.exe add ${k} /v ${v.name} /t ${v.type} /d ${v.data} /f | Out-Null\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`,
+      )
+      .join('\n') + '\nexit $LASTEXITCODE'
+  const r = await psRun(script, 30000)
+  if (!r.ok) return { success: false, message: short(r.stderr || r.stdout || 'reg.exe add thất bại') }
+  return { success: true, message: okMsg }
+}
+
+/**
+ * Xóa nhiều giá trị registry trong cùng key — dùng PowerShell registry provider
+ * (Get-ItemProperty + Remove-ItemProperty) thay vì reg.exe delete, vì:
+ * - reg.exe bị LOCALIZED: trên Windows vi-VN thông báo "unable to find" là tiếng Việt
+ *   → không match được regex, revert giá trị chưa từng set bị báo lỗi ầm ĩ.
+ * - Per-value honesty: kiểm tra tồn tại trước khi xóa; thiếu → đếm missing (không phải lỗi);
+ *   Remove-ItemProperty -ErrorAction Stop → lỗi thật (Access denied...) vẫn thất bại trung thực.
+ */
+async function regDeleteValues(key: string, names: string[], okMsg: string): Promise<TweakActionResult> {
+  const k = psStr(key)
+  const script =
+    '$missing = 0\n' +
+    '$failed = 0\n' +
+    `$props = (Get-ItemProperty -LiteralPath ${k} -ErrorAction SilentlyContinue)\n` +
+    'foreach ($n in @(' + names.map((n) => `'${n.replace(/'/g, "''")}'`).join(',') + ')) {\n' +
+    '  if ($null -eq $props -or -not ($props.PSObject.Properties.Name -contains $n)) { $missing++; continue }\n' +
+    '  try {\n' +
+    '    Remove-ItemProperty -LiteralPath ' + k + ' -Name $n -ErrorAction Stop\n' +
+    '  } catch {\n' +
+    '    $failed++\n' +
+    '    Write-Output $_.Exception.Message\n' +
+    '  }\n' +
+    '}\n' +
+    'if ($failed -gt 0) { exit 1 }\n' +
+    'exit 0'
+  const r = await psRun(script, 30000)
+  if (!r.ok) {
+    return { success: false, message: short(r.stderr || r.stdout || 'Xóa giá trị registry thất bại') }
+  }
+  // Giá trị không tồn tại cũng là kết quả hợp lệ của revert (đã ở trạng thái mặc định)
+  return { success: true, message: okMsg }
+}
+
+const TWEAK_ACTIONS_LINUX: TweakAction[] = [
   {
     def: {
       id: 'drop-caches',
@@ -481,6 +557,580 @@ export const TWEAK_ACTIONS: TweakAction[] = [
   },
 ]
 
+// ---------- Catalog Windows (WinUtil style) — requiresRoot = cần Administrator ----------
+
+const REG_GAME_CONFIG = 'HKCU\\System\\GameConfigStore'
+const REG_GAMEDVR = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR'
+const REG_GAMEBAR = 'HKCU\\Software\\Microsoft\\GameBar'
+const REG_SYSMULTI = 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile'
+const REG_MOUSE = 'HKCU\\Control Panel\\Mouse'
+const REG_VISUALFX = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer'
+const REG_PERSONALIZE = 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize'
+const REG_SERIALIZE = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize'
+const PS_SERIALIZE = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize'
+const REG_CDM = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager'
+
+const TWEAK_ACTIONS_WIN: TweakAction[] = [
+  {
+    def: {
+      id: 'win-game-dvr-off',
+      name: 'Tắt Game DVR / ghi hình nền',
+      description: 'Tắt ghi hình nền Xbox Game DVR/AppCapture để giảm overhead GPU và ổ đĩa khi chơi game.',
+      category: 'Gaming',
+      risk: 'medium',
+      requiresRoot: false,
+      recommended: true,
+      order: 1,
+    },
+    apply: async () => {
+      const a = await regAddValues(REG_GAME_CONFIG, [{ name: 'GameDVR_Enabled', type: 'REG_DWORD', data: '0' }], '')
+      if (!a.success) return a
+      const b = await regAddValues(REG_GAMEDVR, [{ name: 'AppCaptureEnabled', type: 'REG_DWORD', data: '0' }], '')
+      if (!b.success) return b
+      return { success: true, message: 'Đã tắt Game DVR (GameDVR_Enabled=0 + AppCaptureEnabled=0)' }
+    },
+    revert: async () => {
+      const a = await regAddValues(REG_GAME_CONFIG, [{ name: 'GameDVR_Enabled', type: 'REG_DWORD', data: '1' }], '')
+      if (!a.success) return a
+      const b = await regAddValues(REG_GAMEDVR, [{ name: 'AppCaptureEnabled', type: 'REG_DWORD', data: '1' }], '')
+      if (!b.success) return b
+      return { success: true, message: 'Đã bật lại Game DVR (GameDVR_Enabled=1 + AppCaptureEnabled=1)' }
+    },
+  },
+  {
+    def: {
+      id: 'win-gamemode-on',
+      name: 'Bật Windows Game Mode',
+      description: 'Bật Game Mode để Windows ưu tiên tài nguyên cho game và hoãn các tác vụ nền/cập nhật khi chơi.',
+      category: 'Gaming',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: true,
+      order: 2,
+    },
+    apply: () =>
+      regAddValues(
+        REG_GAMEBAR,
+        [
+          { name: 'AutoGameModeEnabled', type: 'REG_DWORD', data: '1' },
+          { name: 'AllowAutoGameMode', type: 'REG_DWORD', data: '1' },
+        ],
+        'Đã bật Windows Game Mode (AutoGameModeEnabled + AllowAutoGameMode=1)',
+      ),
+    revert: () =>
+      regDeleteValues(
+        REG_GAMEBAR,
+        ['AutoGameModeEnabled', 'AllowAutoGameMode'],
+        'Đã xóa giá trị Game Mode — Windows trở về mặc định',
+      ),
+  },
+  {
+    def: {
+      id: 'win-fse-off',
+      name: 'Tắt fullscreen optimizations',
+      description: 'Tắt fullscreen optimizations để game chiếm exclusive fullscreen thật, giảm độ trễ hiển thị và stutter.',
+      category: 'Gaming',
+      risk: 'medium',
+      requiresRoot: false,
+      recommended: true,
+      order: 3,
+    },
+    apply: () =>
+      regAddValues(
+        REG_GAME_CONFIG,
+        [
+          { name: 'GameDVR_FSEBehaviorMode', type: 'REG_DWORD', data: '2' },
+          { name: 'GameDVR_HonorUserFSEBehaviorMode', type: 'REG_DWORD', data: '1' },
+          { name: 'GameDVR_DXGIHonorFSEWindowsCompatible', type: 'REG_DWORD', data: '1' },
+          { name: 'GameDVR_EFSEFeatureFlags', type: 'REG_DWORD', data: '0' },
+        ],
+        'Đã tắt fullscreen optimizations (GameDVR_FSEBehaviorMode=2)',
+      ),
+    revert: () =>
+      regDeleteValues(
+        REG_GAME_CONFIG,
+        [
+          'GameDVR_FSEBehaviorMode',
+          'GameDVR_HonorUserFSEBehaviorMode',
+          'GameDVR_DXGIHonorFSEWindowsCompatible',
+          'GameDVR_EFSEFeatureFlags',
+        ],
+        'Đã xóa 4 giá trị FSE — trả về mặc định của Windows',
+      ),
+  },
+  {
+    def: {
+      id: 'win-power-high',
+      name: 'Chuyển kế hoạch nguồn Hiệu năng cao',
+      description: 'powercfg /setactive sang High performance; nếu máy chưa có kế hoạch này sẽ tự nhân bản từ mẫu ẩn rồi bật.',
+      category: 'Hiệu năng',
+      risk: 'medium',
+      requiresRoot: true,
+      recommended: true,
+      order: 4,
+    },
+    apply: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const direct = await psRun(
+        'powercfg.exe /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c\nexit $LASTEXITCODE',
+        60000,
+      )
+      if (direct.ok) {
+        return { success: true, message: 'Đã bật kế hoạch nguồn Hiệu năng cao (High performance)' }
+      }
+      const dup = await psRun(
+        `$out = powercfg.exe -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$m = [regex]::Match(($out -join ' '), '[0-9a-f-]{36}')
+if (-not $m.Success) { Write-Output 'NoGuid'; exit 1 }
+powercfg.exe /setactive $m.Value
+exit $LASTEXITCODE`,
+        60000,
+      )
+      if (!dup.ok) {
+        return {
+          success: false,
+          message: short(dup.stderr || dup.stdout || direct.stderr || 'Không bật được kế hoạch nguồn Hiệu năng cao'),
+        }
+      }
+      return { success: true, message: 'Đã tạo mới và bật kế hoạch nguồn Hiệu năng cao (nhân bản từ mẫu ẩn)' }
+    },
+    revert: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const r = await psRun(
+        'powercfg.exe /setactive 381b4222-f694-41f0-9685-ff5bb260df2e\nexit $LASTEXITCODE',
+        60000,
+      )
+      if (!r.ok) {
+        return { success: false, message: short(r.stderr || r.stdout || 'Không hoàn tác được kế hoạch nguồn') }
+      }
+      return { success: true, message: 'Đã hoàn tác kế hoạch nguồn về Balanced (mặc định)' }
+    },
+  },
+  {
+    def: {
+      id: 'win-sysresp',
+      name: 'SystemResponsiveness = 0 (ưu tiên app foreground)',
+      description: 'Đặt SystemResponsiveness=0 để MMCSS ưu tiên CPU cho ứng dụng foreground thay vì dịch vụ nền.',
+      category: 'Hiệu năng',
+      risk: 'medium',
+      requiresRoot: true,
+      recommended: true,
+      order: 5,
+    },
+    apply: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      return regAddValues(
+        REG_SYSMULTI,
+        [{ name: 'SystemResponsiveness', type: 'REG_DWORD', data: '0' }],
+        'Đã đặt SystemResponsiveness=0 — ưu tiên ứng dụng foreground',
+      )
+    },
+    revert: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      return regAddValues(
+        REG_SYSMULTI,
+        [{ name: 'SystemResponsiveness', type: 'REG_DWORD', data: '20' }],
+        'Đã hoàn tác SystemResponsiveness về 20 (mặc định)',
+      )
+    },
+  },
+  {
+    def: {
+      id: 'win-netthrottle',
+      name: 'Tắt Network Throttling',
+      description: 'Đặt NetworkThrottlingIndex=0xFFFFFFFF để tắt giới hạn băng thông nền khi có multimedia đang phát.',
+      category: 'Mạng',
+      risk: 'medium',
+      requiresRoot: true,
+      recommended: true,
+      order: 6,
+    },
+    apply: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      return regAddValues(
+        REG_SYSMULTI,
+        [{ name: 'NetworkThrottlingIndex', type: 'REG_DWORD', data: '4294967295' }],
+        'Đã tắt Network Throttling (NetworkThrottlingIndex=0xFFFFFFFF)',
+      )
+    },
+    revert: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      return regAddValues(
+        REG_SYSMULTI,
+        [{ name: 'NetworkThrottlingIndex', type: 'REG_DWORD', data: '10' }],
+        'Đã hoàn tác NetworkThrottlingIndex về 10 (mặc định)',
+      )
+    },
+  },
+  {
+    def: {
+      id: 'win-nagle',
+      name: 'Tắt Nagle (giảm ping game online)',
+      description: 'Đặt TcpAckFrequency=1 + TCPNoDelay=1 trên mọi interface TCP/IP để tắt thuật toán Nagle, giảm độ trễ mạng.',
+      category: 'Mạng',
+      risk: 'medium',
+      requiresRoot: true,
+      recommended: false,
+      order: 7,
+    },
+    apply: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const r = await psRun(
+        `$base = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces'
+$keys = Get-ChildItem -Path $base -ErrorAction SilentlyContinue
+if (-not $keys -or @($keys).Count -eq 0) { Write-Output 'NoNic'; exit 1 }
+$n = 0
+foreach ($k in @($keys)) {
+  try {
+    New-ItemProperty -Path $k.PSPath -Name TcpAckFrequency -Value 1 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+    New-ItemProperty -Path $k.PSPath -Name TCPNoDelay -Value 1 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+    $n++
+  } catch { }
+}
+Write-Output "set=$n"
+if ($n -eq 0) { exit 1 }
+exit 0`,
+        60000,
+      )
+      if (!r.ok) {
+        return {
+          success: false,
+          message: short(r.stderr || r.stdout || 'Không đặt được TcpAckFrequency/TCPNoDelay trên interface nào'),
+        }
+      }
+      const n = r.stdout.match(/set=(\d+)/)?.[1]
+      return {
+        success: true,
+        message: n
+          ? `Đã tắt Nagle trên ${n} interface mạng (TcpAckFrequency=1 + TCPNoDelay=1)`
+          : 'Đã tắt Nagle trên các interface mạng',
+      }
+    },
+    revert: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const r = await psRun(
+        `$base = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces'
+$keys = Get-ChildItem -Path $base -ErrorAction SilentlyContinue
+if (-not $keys) { Write-Output 'NoNic'; exit 0 }
+foreach ($k in @($keys)) {
+  Remove-ItemProperty -Path $k.PSPath -Name TcpAckFrequency -ErrorAction SilentlyContinue
+  Remove-ItemProperty -Path $k.PSPath -Name TCPNoDelay -ErrorAction SilentlyContinue
+}
+Write-Output 'cleaned'
+exit 0`,
+        60000,
+      )
+      if (!r.ok) {
+        return { success: false, message: short(r.stderr || 'Không xóa được giá trị Nagle trên các interface') }
+      }
+      return { success: true, message: 'Đã xóa TcpAckFrequency/TCPNoDelay khỏi mọi interface mạng' }
+    },
+  },
+  {
+    def: {
+      id: 'win-mouse-accurate',
+      name: 'Tắt gia tốc chuột (aim chính xác)',
+      description: 'MouseSpeed=0 và hai ngưỡng =0 để tắt hoàn toàn gia tốc con trỏ — chuyển động chuột 1:1 trong game FPS.',
+      category: 'Gaming',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: true,
+      order: 8,
+    },
+    apply: () =>
+      regAddValues(
+        REG_MOUSE,
+        [
+          { name: 'MouseSpeed', type: 'REG_SZ', data: '0' },
+          { name: 'MouseThreshold1', type: 'REG_SZ', data: '0' },
+          { name: 'MouseThreshold2', type: 'REG_SZ', data: '0' },
+        ],
+        'Đã tắt gia tốc chuột (MouseSpeed=0, Threshold 0/0)',
+      ),
+    revert: () =>
+      regAddValues(
+        REG_MOUSE,
+        [
+          { name: 'MouseSpeed', type: 'REG_SZ', data: '1' },
+          { name: 'MouseThreshold1', type: 'REG_SZ', data: '6' },
+          { name: 'MouseThreshold2', type: 'REG_SZ', data: '10' },
+        ],
+        'Đã hoàn tác gia tốc chuột về mặc định (1/6/10)',
+      ),
+  },
+  {
+    def: {
+      id: 'win-visualfx',
+      name: 'Hiệu ứng trực quan: hiệu năng tốt nhất',
+      description: 'Đặt VisualFXSetting=2 để Windows tắt các hiệu ứng trực quan nặng, dành tài nguyên cho hiệu năng.',
+      category: 'Hiệu năng',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: false,
+      order: 9,
+    },
+    apply: () =>
+      regAddValues(
+        REG_VISUALFX,
+        [{ name: 'VisualFXSetting', type: 'REG_DWORD', data: '2' }],
+        'Đã đặt hiệu ứng trực quan = hiệu năng tốt nhất (VisualFXSetting=2)',
+      ),
+    revert: () =>
+      regAddValues(
+        REG_VISUALFX,
+        [{ name: 'VisualFXSetting', type: 'REG_DWORD', data: '0' }],
+        'Đã hoàn tác VisualFXSetting về 0 (để Windows tự chọn)',
+      ),
+  },
+  {
+    def: {
+      id: 'win-transparency-off',
+      name: 'Tắt hiệu ứng trong suốt',
+      description: 'Tắt hiệu ứng acrylic/transparent của Windows để giảm tải GPU và tăng độ mượt của giao diện.',
+      category: 'Hiệu năng',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: false,
+      order: 10,
+    },
+    apply: () =>
+      regAddValues(
+        REG_PERSONALIZE,
+        [{ name: 'EnableTransparency', type: 'REG_DWORD', data: '0' }],
+        'Đã tắt hiệu ứng trong suốt (EnableTransparency=0)',
+      ),
+    revert: () =>
+      regAddValues(
+        REG_PERSONALIZE,
+        [{ name: 'EnableTransparency', type: 'REG_DWORD', data: '1' }],
+        'Đã bật lại hiệu ứng trong suốt (mặc định)',
+      ),
+  },
+  {
+    def: {
+      id: 'win-startup-delay',
+      name: 'Xóa delay khởi động app',
+      description: 'Đặt StartupDelayInMSec=0 (tự tạo key Serialize nếu thiếu) để Windows không trì hoãn khởi chạy app sau đăng nhập.',
+      category: 'Hiệu năng',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: true,
+      order: 11,
+    },
+    apply: async () => {
+      const r = await psRun(
+        `New-Item -Path ${psStr(PS_SERIALIZE)} -Force | Out-Null
+reg.exe add ${psStr(REG_SERIALIZE)} /v StartupDelayInMSec /t REG_DWORD /d 0 /f | Out-Null
+exit $LASTEXITCODE`,
+        30000,
+      )
+      if (!r.ok) return { success: false, message: short(r.stderr || 'Không đặt được StartupDelayInMSec=0') }
+      return { success: true, message: 'Đã đặt StartupDelayInMSec=0 — app khởi động không bị trì hoãn' }
+    },
+    revert: () =>
+      regDeleteValues(REG_SERIALIZE, ['StartupDelayInMSec'], 'Đã xóa StartupDelayInMSec — Windows dùng delay mặc định'),
+  },
+  {
+    def: {
+      id: 'win-ram-clean',
+      name: 'Xả RAM tiến trình (EmptyWorkingSet)',
+      description: 'Gọi EmptyWorkingSet (psapi.dll) cho mọi tiến trình dùng >50MB RAM (trừ chính app) để ép Windows xả working set.',
+      category: 'Bộ nhớ',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: true,
+      order: 12,
+    },
+    apply: async () => {
+      const r = await psRun(
+        `try {
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class NexusPsApi {
+  [DllImport("psapi.dll", SetLastError = true)]
+  public static extern bool EmptyWorkingSet(IntPtr hProc);
+}
+'@ -ErrorAction Stop
+} catch {
+  Write-Output $_.Exception.Message
+  exit 1
+}
+$me = $PID
+$n = 0
+$procs = Get-Process | Where-Object { $_.Id -ne $me -and $_.WorkingSet64 -gt 50MB }
+foreach ($p in $procs) {
+  try {
+    if ([NexusPsApi]::EmptyWorkingSet($p.Handle)) { $n++ }
+  } catch { }
+}
+Write-Output "trimmed=$n"
+exit 0`,
+        30000,
+      )
+      if (!r.ok) {
+        return {
+          success: false,
+          message: short(r.stderr || r.stdout || 'Không nạp được EmptyWorkingSet (psapi.dll)'),
+        }
+      }
+      return { success: true, message: 'Đã yêu cầu giải phóng working set của các tiến trình nặng' }
+    },
+    revert: async () => ({
+      success: true,
+      message: 'Hành động tức thời — không cần hoàn tác',
+    }),
+  },
+  {
+    def: {
+      id: 'win-flush-dns',
+      name: 'Xả cache DNS (ipconfig /flushdns)',
+      description: 'ipconfig /flushdns xóa cache DNS resolver của Windows, giúp phân giải tên miền theo bản ghi mới nhất.',
+      category: 'Mạng',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: true,
+      order: 13,
+    },
+    apply: async () => {
+      const r = await psRun('ipconfig.exe /flushdns | Out-Null\nexit $LASTEXITCODE', 30000)
+      if (!r.ok) return { success: false, message: short(r.stderr || 'ipconfig /flushdns thất bại') }
+      return { success: true, message: 'Đã xả cache DNS của Windows (ipconfig /flushdns)' }
+    },
+    revert: async () => ({
+      success: true,
+      message: 'Hành động tức thời — không cần hoàn tác',
+    }),
+  },
+  {
+    def: {
+      id: 'win-sysmain-off',
+      name: 'Tắt SysMain (Superfetch) — chỉ nên dùng khi ổ SSD',
+      description: 'sc.exe stop + start=disabled cho SysMain; giảm tải nền nhưng làm HDD chậm hơn khi mở app — chỉ dùng khi ổ SSD.',
+      category: 'Hiệu năng',
+      risk: 'high',
+      requiresRoot: true,
+      recommended: false,
+      order: 14,
+    },
+    apply: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const r = await psRun(
+        `sc.exe stop SysMain | Out-Null
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1062) { exit $LASTEXITCODE }
+sc.exe config SysMain start= disabled | Out-Null
+exit $LASTEXITCODE`,
+        30000,
+      )
+      if (!r.ok) return { success: false, message: short(r.stderr || r.stdout || 'Không tắt được dịch vụ SysMain') }
+      return { success: true, message: 'Đã tắt dịch vụ SysMain (Superfetch) — start=disabled' }
+    },
+    revert: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const r = await psRun(
+        `sc.exe config SysMain start= auto | Out-Null
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+sc.exe start SysMain | Out-Null
+exit 0`,
+        30000,
+      )
+      if (!r.ok) return { success: false, message: short(r.stderr || r.stdout || 'Không hoàn tác được dịch vụ SysMain') }
+      return { success: true, message: 'Đã hoàn tác SysMain về start=auto (+ thử start — lỗi start được bỏ qua)' }
+    },
+  },
+  {
+    def: {
+      id: 'win-diagtrack-off',
+      name: 'Tắt telemetry (DiagTrack + dmwappushservice)',
+      description: 'Disable + stop dịch vụ DiagTrack (Connected User Experiences) và dmwappushservice để dừng gửi dữ liệu chẩn đoán.',
+      category: 'Bảo mật & riêng tư',
+      risk: 'medium',
+      requiresRoot: true,
+      recommended: false,
+      order: 15,
+    },
+    apply: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const r = await psRun(
+        `sc.exe config DiagTrack start= disabled | Out-Null
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+sc.exe config dmwappushservice start= disabled | Out-Null
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1060) { exit $LASTEXITCODE }
+sc.exe stop DiagTrack | Out-Null
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1062) { exit $LASTEXITCODE }
+sc.exe stop dmwappushservice | Out-Null
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1060 -and $LASTEXITCODE -ne 1062) { exit $LASTEXITCODE }
+exit 0`,
+        30000,
+      )
+      if (!r.ok) return { success: false, message: short(r.stderr || r.stdout || 'Không tắt được dịch vụ telemetry') }
+      return { success: true, message: 'Đã tắt telemetry: DiagTrack + dmwappushservice (start=disabled)' }
+    },
+    revert: async () => {
+      const gate = await adminGate()
+      if (gate) return gate
+      const r = await psRun(
+        `sc.exe config DiagTrack start= auto | Out-Null
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+sc.exe config dmwappushservice start= demand | Out-Null
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1060) { exit $LASTEXITCODE }
+exit 0`,
+        30000,
+      )
+      if (!r.ok) {
+        return { success: false, message: short(r.stderr || r.stdout || 'Không hoàn tác được dịch vụ telemetry') }
+      }
+      return { success: true, message: 'Đã hoàn tác telemetry: DiagTrack start=auto, dmwappushservice start=demand' }
+    },
+  },
+  {
+    def: {
+      id: 'win-tips-off',
+      name: 'Tắt gợi ý/quảng cáo Windows',
+      description: 'Tắt SystemPaneSuggestions + SubscribedContent 338388/338389/338393 để loại bỏ gợi ý và quảng cáo trong Start.',
+      category: 'Bảo mật & riêng tư',
+      risk: 'low',
+      requiresRoot: false,
+      recommended: false,
+      order: 16,
+    },
+    apply: () =>
+      regAddValues(
+        REG_CDM,
+        [
+          { name: 'SystemPaneSuggestionsEnabled', type: 'REG_DWORD', data: '0' },
+          { name: 'SubscribedContent-338388Enabled', type: 'REG_DWORD', data: '0' },
+          { name: 'SubscribedContent-338389Enabled', type: 'REG_DWORD', data: '0' },
+          { name: 'SubscribedContent-338393Enabled', type: 'REG_DWORD', data: '0' },
+        ],
+        'Đã tắt gợi ý/quảng cáo Windows (ContentDeliveryManager)',
+      ),
+    revert: () =>
+      regAddValues(
+        REG_CDM,
+        [
+          { name: 'SystemPaneSuggestionsEnabled', type: 'REG_DWORD', data: '1' },
+          { name: 'SubscribedContent-338388Enabled', type: 'REG_DWORD', data: '1' },
+          { name: 'SubscribedContent-338389Enabled', type: 'REG_DWORD', data: '1' },
+          { name: 'SubscribedContent-338393Enabled', type: 'REG_DWORD', data: '1' },
+        ],
+        'Đã bật lại gợi ý/quảng cáo Windows (mặc định)',
+      ),
+  },
+]
+
 function findAction(id: string): TweakAction | undefined {
   return TWEAK_ACTIONS.find((a) => a.def.id === id)
 }
@@ -534,3 +1184,6 @@ export async function getTweaks(): Promise<Tweak[]> {
     }
   }).sort((x, y) => x.order - y.order)
 }
+
+/** Catalog đang hiệu lực theo nền tảng — findAction/applyTweakById/revertTweakById/getTweaks đều dùng catalog này */
+export const TWEAK_ACTIONS: TweakAction[] = isWin ? TWEAK_ACTIONS_WIN : TWEAK_ACTIONS_LINUX

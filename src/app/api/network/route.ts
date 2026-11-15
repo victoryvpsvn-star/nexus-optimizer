@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import os from 'os'
 import fs from 'fs/promises'
-import { run } from '@/lib/exec'
+import { run, psRun, isWin } from '@/lib/exec'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +16,29 @@ interface PortInfo {
   proto: string
 }
 
-/** Đọc cổng LISTEN từ /proc/net/tcp + tcp6 (state 0A), không cần quyền đặc biệt. */
+/** Đọc cổng LISTEN từ /proc/net/tcp + tcp6 (state 0A), không cần quyền đặc biệt.
+ *  Windows: Get-NetTCPConnection (TCP LISTEN, không cần admin) — không có UDP, trung thực. */
 async function listeningPorts(): Promise<PortInfo[]> {
+  if (isWin) {
+    try {
+      const r = await psRun(
+        '@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort -Unique) | Sort-Object | ConvertTo-Json -Compress',
+        8000,
+      )
+      if (!r.ok || !r.stdout.trim()) return []
+      const parsed: unknown = JSON.parse(r.stdout.trim())
+      const arr: unknown[] = Array.isArray(parsed) ? parsed : [parsed]
+      const ports = arr
+        .map((p) => Math.trunc(Number(p)))
+        .filter((p) => Number.isFinite(p) && p > 0 && p <= 65535)
+      return [...new Set(ports)]
+        .sort((a, b) => a - b)
+        .slice(0, 40)
+        .map((port) => ({ port, proto: 'tcp' }))
+    } catch {
+      return []
+    }
+  }
   const ports: PortInfo[] = []
   const seen = new Set<string>()
   for (const [file, proto] of [
@@ -63,7 +84,8 @@ export async function GET() {
     }
     const [ports, hostnameRes] = await Promise.all([
       listeningPorts(),
-      run('hostname -f 2>/dev/null', 3000),
+      // Windows không có `hostname -f` — dùng hostname thường (không phải FQDN thật)
+      isWin ? run('hostname', 3000) : run('hostname -f 2>/dev/null', 3000),
     ])
     return NextResponse.json({
       ifaces,

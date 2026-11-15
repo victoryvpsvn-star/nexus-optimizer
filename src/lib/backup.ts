@@ -3,17 +3,21 @@
 import { promises as fs } from 'fs'
 import { randomBytes } from 'crypto'
 import path from 'path'
+import os from 'os'
 import { db } from '@/lib/db'
-import { run } from '@/lib/exec'
+import { run, isWin } from '@/lib/exec'
 import type { BackupBucketItem, BackupLocal } from '@/lib/types'
 
 /** Lỗi "không tìm thấy" — route map sang HTTP 404 */
 export class NotFoundError extends Error {}
 
-const PROJECT_ROOT = '/home/z/my-project'
-export const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups')
+const PROJECT_ROOT = process.cwd()
+/** Thư mục dữ liệu người dùng — Electron đặt NEXUS_DATA_DIR trỏ tới userData;
+ * trên VPS/Linux dùng thẳng PROJECT_ROOT như cũ. */
+const DATA_ROOT = process.env.NEXUS_DATA_DIR || PROJECT_ROOT
+export const BACKUP_DIR = path.join(DATA_ROOT, 'backups')
 export const S3_PREFIX = 'nexus-backups/'
-const SIDECAR = 'python3 scripts/s3_sidecar.py'
+const SIDECAR = isWin ? 'python scripts/s3_sidecar.py' : 'python3 scripts/s3_sidecar.py'
 
 export interface SidecarResult {
   ok: boolean
@@ -28,6 +32,9 @@ export interface SidecarResult {
 // ---------- helpers ----------
 
 function shellQuote(v: string): string {
+  // Windows exec() chạy qua cmd.exe — nháy đơn không có tác dụng, phải dùng nháy kép;
+  // tên file trên Windows không được chứa " nên bỏ ký tự này là an toàn.
+  if (isWin) return `"${v.replace(/"/g, '')}"`
   return `'${v.replace(/'/g, `'\\''`)}'`
 }
 
@@ -101,11 +108,15 @@ export async function createBackup(name: string): Promise<BackupLocal> {
   const filePath = path.join(BACKUP_DIR, fileName)
 
   // KHÔNG đóng gói db/ (SQLite đang chạy!), upload/ (credential!), .env*, node_modules, .next, .git, backups
-  const cmd =
-    `tar -czf ${shellQuote(filePath)} -C ${shellQuote(PROJECT_ROOT)}` +
-    ` --exclude=node_modules --exclude=.next --exclude=backups --exclude=.git` +
-    ` --exclude=upload --exclude='.env*'` +
-    ` src prisma scripts public package.json next.config.ts`
+  // Windows (bản Electron đóng gói): cwd là thư mục app — backup TOÀN BỘ DATA_ROOT
+  // (nexus.db + cấu hình người dùng), loại trừ chính thư mục backups.
+  const cmd = isWin
+    ? `tar -czf ${shellQuote(filePath)} -C ${shellQuote(DATA_ROOT)}` +
+      ` --exclude=backups --exclude=restored --exclude=nexus-backup-* --exclude=*.db-journal .`
+    : `tar -czf ${shellQuote(filePath)} -C ${shellQuote(PROJECT_ROOT)}` +
+      ` --exclude=node_modules --exclude=.next --exclude=backups --exclude=.git` +
+      ` --exclude=upload --exclude='.env*'` +
+      ` src prisma scripts public package.json next.config.ts`
   const r = await run(cmd, 120000)
   if (!r.ok) {
     try {
@@ -116,8 +127,9 @@ export async function createBackup(name: string): Promise<BackupLocal> {
     throw new Error('Không tạo được file backup (tar thất bại)')
   }
 
-  // Xác thực tính toàn vẹn của file lưu trữ TRƯỚC khi ghi nhận vào DB
-  const verify = await run(`tar -tzf ${shellQuote(filePath)} >/dev/null 2>&1`)
+  // Xác thực tính toàn vẹn của file lưu trữ TRƯỚC khi ghi nhận vào DB.
+  // KHÔNG dùng >/dev/null (cmd.exe trên Windows không hiểu) — chỉ tar thuần.
+  const verify = await run(`tar -tzf ${shellQuote(filePath)}`)
   if (!verify.ok) {
     try {
       await fs.unlink(filePath)
@@ -214,16 +226,20 @@ async function extractArchive(archivePath: string, destDir: string): Promise<{ o
     return { ok: false, message: 'File backup bị hỏng hoặc không đọc được — từ chối khôi phục' }
   }
   // Chặn symlink/hardlink trong archive (escape khỏi thư mục đích khi extract).
-  // tar -tvzf: ký tự đầu tiên của dòng là loại file — 'l' = symlink, 'h' = hardlink.
-  const verbose = await run(`tar -tvzf ${shellQuote(archivePath)}`, 60000)
-  if (verbose.ok && verbose.stdout.split('\n').some((l) => /^[lh]/.test(l.trim()))) {
-    return {
-      ok: false,
-      message: 'Backup chứa symlink/hardlink — đã từ chối khôi phục vì lý do an toàn',
+  // Chỉ áp dụng GNU tar (Linux) — bsdtar trên Windows có định dạng -tv khác.
+  if (!isWin) {
+    const verbose = await run(`tar -tvzf ${shellQuote(archivePath)}`, 60000)
+    if (verbose.ok && verbose.stdout.split('\n').some((l) => /^[lh]/.test(l.trim()))) {
+      return {
+        ok: false,
+        message: 'Backup chứa symlink/hardlink — đã từ chối khôi phục vì lý do an toàn',
+      }
     }
   }
   const members = list.stdout.split('\n').map((l) => l.trim()).filter(Boolean)
-  const dangerous = members.find((m) => m.startsWith('/') || m.split('/').includes('..'))
+  const dangerous = members.find(
+    (m) => m.startsWith('/') || m.split('/').includes('..') || m.split('\\').includes('..'),
+  )
   if (dangerous) {
     return {
       ok: false,
@@ -234,25 +250,41 @@ async function extractArchive(archivePath: string, destDir: string): Promise<{ o
   // An toàn khi giải nén: không ghi đè node_modules, upload/ (credential!), .env
   // và CƠ SỞ DỮ LIỆU đang chạy (db/custom.db + WAL) — tránh làm hỏng SQLite live.
   // --no-same-owner/--no-same-permissions: không giữ owner/permission từ archive.
-  const extract =
-    `tar -xzf ${shellQuote(archivePath)} -C ${shellQuote(destDir)}` +
-    ` --no-same-owner --no-same-permissions` +
-    ` --exclude='node_modules*' --exclude='upload*' --exclude='.env*'` +
-    ` --exclude='db' --exclude='db/*' --exclude='*.db-wal' --exclude='*.db-shm'`
+  try {
+    await fs.mkdir(destDir, { recursive: true })
+  } catch {
+    /* đã có sẵn */
+  }
+  const excludeFlags = isWin
+    ? // cmd.exe KHÔNG strip nháy đơn — pattern có dấu nháy sẽ không khớp gì cả
+      ` --exclude=node_modules --exclude=.env* --exclude=*.db-wal --exclude=*.db-shm`
+    : ` --no-same-owner --no-same-permissions` +
+      ` --exclude='node_modules*' --exclude='upload*' --exclude='.env*'` +
+      ` --exclude='db' --exclude='db/*' --exclude='*.db-wal' --exclude='*.db-shm'`
+  const extract = `tar -xzf ${shellQuote(archivePath)} -C ${shellQuote(destDir)}${excludeFlags}`
   const r = await run(extract, 120000)
   if (!r.ok) {
     return { ok: false, message: 'Giải nén backup thất bại — không khôi phục được dữ liệu' }
   }
   return {
     ok: true,
-    message: 'Đã khôi phục backup (không ghi đè node_modules, upload, .env, db)',
+    message: isWin
+      ? 'Đã khôi phục backup vào thư mục đích (không ghi đè file cấu hình nhạy cảm)'
+      : 'Đã khôi phục backup (không ghi đè node_modules, upload, .env, db)',
   }
+}
+
+/** Đích khôi phục: Windows giải nén vào thư mục con "restored/<timestamp>" của DATA_ROOT
+ * (không ghi đè app đang chạy); Linux giữ nguyên PROJECT_ROOT như cũ. */
+function restoreDestDir(): string {
+  if (!isWin) return PROJECT_ROOT
+  return path.join(DATA_ROOT, 'restored', timestamp())
 }
 
 /** Dùng lại backup từ file local trên máy chủ (backups/) */
 export async function restoreLocalBackup(
   id: number,
-  destDir = PROJECT_ROOT,
+  destDir = restoreDestDir(),
 ): Promise<{ ok: boolean; message: string }> {
   const record = await db.backupRecord.findUnique({ where: { id } })
   if (!record) throw new NotFoundError('Không tìm thấy bản sao lưu trên máy chủ')
@@ -270,11 +302,11 @@ export async function restoreLocalBackup(
 
 export async function restoreFromBucket(
   key: string,
-  destDir = PROJECT_ROOT,
+  destDir = restoreDestDir(),
 ): Promise<{ ok: boolean; message: string }> {
   if (!key.startsWith(S3_PREFIX)) throw new Error('Key bucket không hợp lệ')
   // Tên file tạm ngẫu nhiên (crypto) — không dùng timestamp đoán được
-  const tmpPath = `/tmp/restore-${randomBytes(12).toString('hex')}.tar.gz`
+  const tmpPath = path.join(os.tmpdir(), `restore-${randomBytes(12).toString('hex')}.tar.gz`)
   try {
     const dl = await sidecar('download', [key, tmpPath], 600000)
     if (!dl.ok) {

@@ -30,6 +30,33 @@ bunx prisma db push
 bun run dev        # mở http://localhost:3000
 ```
 
+## Build Windows x64 (bản .exe thật)
+
+App được đóng gói bằng **Electron + electron-builder**: mở lên là cửa sổ riêng chạy server Next.js standalone nội bộ (cổng 127.0.0.1:32123), dữ liệu (SQLite, backup) nằm trong `%APPDATA%/NEXUS Optimizer/data`.
+
+### Cách 1 — Bấm nút trên GitHub (khuyến nghị)
+1. Vào tab **Actions** → chọn **Build Windows x64 (exe)** → **Run workflow**
+2. Chờ ~10–15 phút → tải kết quả ở 2 chỗ:
+   - **Artifacts**: `NEXUS-Optimizer-win-x64-<số build>`
+   - **Releases** (khi chạy workflow_dispatch): file exe đính kèm release
+3. Sản phẩm: `NEXUS-Optimizer-Setup-*-x64.exe` (installer) + `NEXUS-Optimizer-Portable-*-x64.exe` (chạy trực tiếp)
+
+> File chưa ký số — SmartScreen hiện "Windows protected your PC" thì bấm **More info → Run anyway**.
+
+### Cách 2 — Build trên máy Windows
+
+```powershell
+npm install
+npm run dist:win   # kết quả nằm trong release/
+```
+
+Quy trình: `next build` → `post-build.mjs` (copy static/public/prisma engine vào standalone) → `stage-electron.mjs` (dựng build/electron-app) → `electron-builder --win --x64`.
+
+### Lưu ý quyền trên Windows
+- Các tinh chỉnh **HKCU** (Game DVR, Game Mode, chuột, hiệu ứng...) áp dụng ngay không cần Admin
+- Các mục **HKLM / service / powercfg** (SystemResponsiveness, SysMain, DiagTrack, Nagle, power plan...) cần chạy app với **quyền Administrator** — thiếu quyền sẽ được báo lỗi trung thực, không giả lập thành công
+- Dọn dẹp mục Temp Windows / Prefetch / Windows Update cache cũng cần Admin
+
 ## GitHub Workflow (tự động sao lưu)
 
 - `.github/workflows/backup.yml` — đóng gói backup .tar.gz:
@@ -43,6 +70,8 @@ bun run dev        # mở http://localhost:3000
 
 - Next.js 16 (App Router, Turbopack) + TypeScript + Tailwind CSS v4 + shadcn/ui
 - Prisma + SQLite (`Setting`, `TweakState`, `CleanupLog`, `BackupRecord`, `GamingState`, `SavedScript`)
+- **Electron 33 + electron-builder** (NSIS + portable, x64) cho bản Windows; server Next standalone chạy bằng `ELECTRON_RUN_AS_NODE`
+- **Đa nền tảng**: Linux dùng /proc + sysctl + sudo; Windows dùng PowerShell (`psRun` qua stdin) + registry (`reg.exe`) + `sc.exe`/`powercfg` — mọi lệnh đều báo lỗi trung thực khi thiếu quyền
 - framer-motion + sonner + lucide-react
 - Ảnh AI: `public/img/wall-sakura.png`, `public/img/logo-sakura.png`
 

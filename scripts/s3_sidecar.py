@@ -16,6 +16,7 @@ Mọi lỗi được bọc trong {"ok": false, "error": ...} (đã redact creden
 import json
 import logging
 import pathlib
+import os
 import re
 import sys
 
@@ -26,8 +27,12 @@ ENDPOINT = 'https://u3-asia.altare.global'
 REGION = 'asia'
 BUCKET = 'vic'
 PREFIX = 'nexus-backups/'
-WORK_FILE = pathlib.Path('/home/z/my-project/upload/work.txt')
-KEYSET_FILE = pathlib.Path('/home/z/my-project/scripts/.s3_keyset')
+WORK_FILE = pathlib.Path(
+    os.environ.get('NEXUS_WORK_FILE', '/home/z/my-project/upload/work.txt')
+)
+KEYSET_FILE = pathlib.Path(
+    os.environ.get('NEXUS_KEYSET_FILE', '/home/z/my-project/scripts/.s3_keyset')
+)
 MAX_ITEMS = 200  # an toàn hiệu năng với bucket tới 30GB (paginate + cap)
 
 

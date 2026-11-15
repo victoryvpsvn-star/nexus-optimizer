@@ -1,0 +1,79 @@
+name: Build Windows x64 (exe)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/backup.yml'
+
+concurrency:
+  group: build-win-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-win-x64:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cài dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prisma generate + tạo DB template (Windows engine)
+        env:
+          # Schema-relative (file:../build/nexus.db tính từ prisma/schema.prisma)
+          # → path forward-slash đa nền tảng, tránh backslash của github.workspace
+          DATABASE_URL: file:../build/nexus.db
+        run: |
+          New-Item -ItemType Directory -Force "${{ github.workspace }}/build" | Out-Null
+          npx prisma generate
+          npx prisma db push --accept-data-loss --skip-generate
+          if (Test-Path "${{ github.workspace }}/build/nexus.db") { Write-Host "DB template OK" } else { Write-Error "Không tạo được build/nexus.db" }
+
+      - name: Build Next.js standalone
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          DATABASE_URL: file:../build/nexus.db
+        run: npm run build:win
+
+      - name: Đóng gói exe Windows x64 (NSIS installer + portable)
+        run: cd build/electron-app; npx electron-builder --win --x64 --config electron-builder.json
+
+      - name: Liệt kê kết quả
+        run: Get-ChildItem release | Format-Table Name, Length
+
+      - name: Upload artifact (exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXUS-Optimizer-win-x64-${{ github.run_number }}
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Tạo GitHub Release (khi bấm Run workflow)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: win-x64-v${{ github.run_number }}
+          name: NEXUS Optimizer win-x64 build #${{ github.run_number }}
+          body: |
+            Bản build Windows x64 tự động của NEXUS Optimizer (Sakura Edition).
+            - **NEXUS-Optimizer-Setup-*-x64.exe**: installer có chọn thư mục cài đặt + shortcut desktop
+            - **NEXUS-Optimizer-Portable-*-x64.exe**: bản portable, chạy trực tiếp không cần cài
+            > File chưa ký số (no code signing) — Windows SmartScreen có thể hỏi "More info → Run anyway".
+          files: release/*.exe
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
