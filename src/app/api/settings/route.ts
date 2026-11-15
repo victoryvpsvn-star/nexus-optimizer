@@ -6,14 +6,31 @@ import type { UISettings } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 const DEFAULTS: UISettings = {
-  accent: 'cyan-violet',
-  background: 'glow',
+  accent: 'sakura-pink',
+  background: 'sakura',
   customBgUrl: '',
-  radius: 1.0,
+  radius: 1.25,
+  petals: true,
 }
 
-const ACCENT_KEYS = ['cyan-violet', 'emerald-amber', 'rose-magenta', 'amber-crimson'] as const
-const BACKGROUND_KEYS = ['gradient', 'glow', 'mesh', 'wall-default', 'wall-gaming', 'custom'] as const
+const ACCENT_KEYS = [
+  'sakura-pink',
+  'sakura-lavender',
+  'cyan-violet',
+  'emerald-amber',
+  'rose-magenta',
+  'amber-crimson',
+] as const
+const BACKGROUND_KEYS = [
+  'sakura',
+  'wall-sakura',
+  'gradient',
+  'glow',
+  'mesh',
+  'wall-default',
+  'wall-gaming',
+  'custom',
+] as const
 
 const schema = z.object({
   accent: z.enum(ACCENT_KEYS),
@@ -25,6 +42,7 @@ const schema = z.object({
       message: 'URL nền chỉ chấp nhận http(s) hoặc đường dẫn nội bộ',
     }),
   radius: z.number().min(0.5).max(1.5),
+  petals: z.boolean(),
 })
 
 /** Kiểm tra từng trường sau khi gộp — hàng DB cũ/hỏng sẽ rơi về giá trị mặc định, không bao giờ trả accent sai enum hay radius NaN */
@@ -40,11 +58,18 @@ function sanitizeSettings(map: Record<string, string | undefined>): UISettings {
       ? (rawBackground as UISettings['background'])
       : DEFAULTS.background,
     customBgUrl:
-      typeof map.customBgUrl === 'string' ? map.customBgUrl.slice(0, 500) : DEFAULTS.customBgUrl,
+      typeof map.customBgUrl === 'string' &&
+      !/["'\\]/.test(map.customBgUrl) &&
+      (map.customBgUrl === '' ||
+        /^https?:\/\//i.test(map.customBgUrl) ||
+        map.customBgUrl.startsWith('/'))
+        ? map.customBgUrl.slice(0, 500)
+        : DEFAULTS.customBgUrl,
     radius:
       Number.isFinite(rawRadius) && rawRadius >= 0.5 && rawRadius <= 1.5
         ? rawRadius
         : DEFAULTS.radius,
+    petals: map.petals === undefined ? DEFAULTS.petals : map.petals === 'true',
   }
 }
 

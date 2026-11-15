@@ -17,9 +17,9 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "NEXUS OPTIMIZER — Bộ công cụ hệ thống đa năng",
   description:
-    "Giám sát CPU/RAM/Disk realtime, dọn dẹp bộ nhớ, Gaming Mode, tinh chỉnh hệ thống, sao lưu 30GB — tất cả trong một dashboard.",
+    "Giám sát CPU/RAM/Disk realtime, dọn dẹp bộ nhớ, Gaming Mode, tinh chỉnh hệ thống, script nâng cao, sao lưu 30GB — tất cả trong một dashboard sakura.",
   icons: {
-    icon: "/img/logo.png",
+    icon: "/img/logo-sakura.png",
   },
 };
 
@@ -29,12 +29,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi" className="dark" suppressHydrationWarning>
+    <html lang="vi" className="dark" data-theme="sakura" suppressHydrationWarning>
       <body
-        className={`${display.variable} ${mono.variable} antialiased bg-[#09090b] text-zinc-100 font-sans`}
+        className={`${display.variable} ${mono.variable} antialiased font-sans`}
       >
         {children}
-        <Toaster position="top-right" richColors theme="dark" closeButton />
+        <Toaster position="top-right" richColors theme="light" closeButton />
       </body>
     </html>
   );

@@ -12,6 +12,7 @@ import {
   Settings2,
   SlidersHorizontal,
   Sparkles,
+  Terminal,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -25,6 +26,7 @@ const NAV: { key: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'cleanup', label: 'Dọn dẹp', icon: Sparkles },
   { key: 'gaming', label: 'Gaming Mode', icon: Gamepad2 },
   { key: 'tweaks', label: 'Tinh chỉnh', icon: SlidersHorizontal },
+  { key: 'script', label: 'Script nâng cao', icon: Terminal },
   { key: 'processes', label: 'Tiến trình', icon: Activity },
   { key: 'backup', label: 'Sao lưu', icon: DatabaseBackup },
   { key: 'screenshot', label: 'Ảnh chụp', icon: Camera },
@@ -54,7 +56,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, onNavigate, sheetMode = 
       {/* Logo */}
       <div className={cn('flex items-center gap-2.5 px-3.5 py-4', collapsed && 'justify-center px-0')}>
         <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10">
-          <Image src="/img/logo.png" alt="NEXUS OPTIMIZER" fill className="object-cover" sizes="40px" />
+          <Image src="/img/logo-sakura.png" alt="NEXUS OPTIMIZER" fill className="object-cover" sizes="40px" />
         </div>
         {!collapsed && (
           <div className="min-w-0">
@@ -98,7 +100,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, onNavigate, sheetMode = 
             >
               {active && (
                 <motion.span
-                  layoutId="nav-active-pill"
+                  layoutId={sheetMode ? 'nav-active-pill-sheet' : 'nav-active-pill'}
                   className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full"
                   style={{
                     background: 'var(--accent-1)',

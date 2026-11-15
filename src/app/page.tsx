@@ -12,12 +12,15 @@ import { TweaksPanel } from '@/components/modules/tweaks-panel'
 import { ProcessesPanel } from '@/components/modules/processes-panel'
 import { BackupPanel } from '@/components/modules/backup-panel'
 import { ScreenshotPanel } from '@/components/modules/screenshot-panel'
+import { ScriptPanel } from '@/components/modules/script-panel'
 import { SettingsPanel } from '@/components/modules/settings-panel'
+import { Petals } from '@/components/shell/petals'
 import { useApp } from '@/lib/store'
 
 function BackgroundLayer() {
   const background = useApp((s) => s.settings.background)
   const customBgUrl = useApp((s) => s.settings.customBgUrl)
+  const petals = useApp((s) => s.settings.petals)
   const gaming = useApp((s) => s.gaming)
 
   // Chỉ chấp nhận URL http(s) hoặc đường dẫn nội bộ; chặn ký tự phá vỡ cú pháp url("...")
@@ -28,6 +31,18 @@ function BackgroundLayer() {
     (/^https?:\/\//i.test(customBgUrl) || customBgUrl.startsWith('/'))
       ? encodeURI(customBgUrl)
       : null
+
+  /* ====== Gaming Mode: luôn nền tối bất kể chọn nền gì — đặt TRƯỚC mọi nhánh nền ====== */
+  if (gaming && background !== 'wall-gaming') {
+    return (
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background: 'linear-gradient(160deg, #000000 0%, #0a0a12 55%, #17061f 100%)',
+        }}
+      />
+    )
+  }
 
   if (safeCustomUrl) {
     return (
@@ -40,6 +55,45 @@ function BackgroundLayer() {
       </div>
     )
   }
+
+  /* ====== Nền Sakura (mặc định khi mở app) ====== */
+  if (background === 'sakura') {
+    return (
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background:
+            'linear-gradient(165deg, #fff7fa 0%, #ffe9f2 42%, #ffdcec 100%)',
+        }}
+      >
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-70"
+          style={{
+            backgroundImage: 'url(/img/wall-sakura.png)',
+            maskImage:
+              'linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.25) 55%, transparent 100%)',
+            WebkitMaskImage:
+              'linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.25) 55%, transparent 100%)',
+          }}
+        />
+        {!gaming && petals && <Petals />}
+      </div>
+    )
+  }
+  if (background === 'wall-sakura') {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: 'url(/img/wall-sakura.png)' }}
+        />
+        <div className="absolute inset-0 bg-white/35" />
+        {!gaming && petals && <Petals />}
+      </div>
+    )
+  }
+
+  /* ====== Nền tối truyền thống (khi gaming tắt) ====== */
   if (background === 'wall-default') {
     return (
       <div className="pointer-events-none fixed inset-0 -z-10">
@@ -126,6 +180,12 @@ export default function Page() {
     document.documentElement.dataset.gaming = gaming ? 'on' : 'off'
   }, [gaming])
 
+  // Theme sáng Sakura chỉ khi nền là sakura; nền tối/gaming dùng bảng màu tối
+  useEffect(() => {
+    const light = !gaming && (settings.background === 'sakura' || settings.background === 'wall-sakura')
+    document.documentElement.dataset.theme = light ? 'sakura' : 'dark'
+  }, [settings.background, gaming])
+
   useEffect(() => {
     document.documentElement.dataset.accent = settings.accent
   }, [settings.accent])
@@ -184,6 +244,7 @@ export default function Page() {
               {section === 'cleanup' && <CleanupPanel />}
               {section === 'gaming' && <GamingPanel />}
               {section === 'tweaks' && <TweaksPanel />}
+              {section === 'script' && <ScriptPanel />}
               {section === 'processes' && <ProcessesPanel />}
               {section === 'backup' && <BackupPanel />}
               {section === 'screenshot' && <ScreenshotPanel />}

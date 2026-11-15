@@ -19,7 +19,7 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$BRANCH" != "main" ]; then git branch -M main; fi
 
 git add -A
-git commit -m "NEXUS OPTIMIZER v1.0 - multi-tool system suite (monitor, cleanup, gaming, tweaks, backup, screenshot)" || echo "nothing to commit"
+git commit -m "NEXUS OPTIMIZER v1.1 - Sakura UI + Advanced Script + Config Export + Local Backup Restore" || echo "nothing to commit"
 
 git remote remove origin 2>/dev/null || true
 git remote add origin "https://x-access-token:${TOKEN}@github.com/victoryvpsvn-star/nexus-optimizer.git"

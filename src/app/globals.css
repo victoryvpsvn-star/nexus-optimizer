@@ -6,6 +6,18 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* Bảng zinc điều khiển qua biến để đổi tông màu theo theme (sakura sáng / tối) */
+  --color-zinc-50: var(--zk-50);
+  --color-zinc-100: var(--zk-100);
+  --color-zinc-200: var(--zk-200);
+  --color-zinc-300: var(--zk-300);
+  --color-zinc-400: var(--zk-400);
+  --color-zinc-500: var(--zk-500);
+  --color-zinc-600: var(--zk-600);
+  --color-zinc-700: var(--zk-700);
+  --color-zinc-800: var(--zk-800);
+  --color-zinc-900: var(--zk-900);
+  --color-zinc-950: var(--zk-950);
   --font-sans: var(--font-display);
   --font-mono: var(--font-mono-jb);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -47,7 +59,21 @@
 
 :root,
 .dark {
-  --radius: 1rem;
+  --radius: 1.25rem;
+
+  /* Bảng zinc gốc (theme tối) */
+  --zk-50: #fafafa;
+  --zk-100: #f4f4f5;
+  --zk-200: #e4e4e7;
+  --zk-300: #d4d4d8;
+  --zk-400: #a1a1aa;
+  --zk-500: #71717a;
+  --zk-600: #52525b;
+  --zk-700: #3f3f46;
+  --zk-800: #27272a;
+  --zk-900: #18181b;
+  --zk-950: #09090b;
+
   --background: #09090b;
   --foreground: #f4f4f5;
   --card: rgba(255, 255, 255, 0.04);
@@ -96,6 +122,14 @@ body {
 }
 
 /* Bảng màu nhấn */
+[data-accent="sakura-pink"] {
+  --accent-1: #f06ba8;
+  --accent-2: #b990e8;
+}
+[data-accent="sakura-lavender"] {
+  --accent-1: #a86ee8;
+  --accent-2: #f47fb1;
+}
 [data-accent="cyan-violet"] {
   --accent-1: #22d3ee;
   --accent-2: #a78bfa;
@@ -124,10 +158,138 @@ body {
   --glow-strength: 1.8;
   --surface: #0a0a12;
   --surface-2: #050508;
+
+  /* Gaming luôn dùng bảng zinc tối gốc */
+  --zk-50: #fafafa;
+  --zk-100: #f4f4f5;
+  --zk-200: #e4e4e7;
+  --zk-300: #d4d4d8;
+  --zk-400: #a1a1aa;
+  --zk-500: #71717a;
+  --zk-600: #52525b;
+  --zk-700: #3f3f46;
+  --zk-800: #27272a;
+  --zk-900: #18181b;
+  --zk-950: #09090b;
 }
 
-* {
-  border-color: var(--border);
+/* ============ THEME SAKURA — mặc định khi mở app ============ */
+[data-theme="sakura"] {
+  --background: #fff3f7;
+  --foreground: #45242f;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #45242f;
+  --popover: #fffbfd;
+  --popover-foreground: #45242f;
+  --primary: #f06ba8;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(255, 255, 255, 0.78);
+  --secondary-foreground: #45242f;
+  --muted: rgba(255, 214, 229, 0.55);
+  --muted-foreground: #a26a80;
+  --accent: rgba(255, 205, 226, 0.6);
+  --accent-foreground: #45242f;
+  --destructive: #e11d48;
+  --border: rgba(224, 167, 190, 0.38);
+  --input: rgba(255, 255, 255, 0.9);
+  --ring: #f06ba8;
+  --chart-1: #f06ba8;
+  --chart-2: #b990e8;
+  --chart-3: #67d0b8;
+  --chart-4: #f4b26b;
+  --chart-5: #f2637e;
+  --sidebar: rgba(255, 244, 249, 0.92);
+  --sidebar-foreground: #45242f;
+  --sidebar-primary: #f06ba8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255, 205, 226, 0.5);
+  --sidebar-accent-foreground: #45242f;
+  --sidebar-border: rgba(224, 167, 190, 0.35);
+  --sidebar-ring: #f06ba8;
+
+  /* Biến nhấn + bề mặt shell tông hồng dịu */
+  --accent-1: #f06ba8;
+  --accent-2: #b990e8;
+  --surface: rgba(255, 242, 248, 0.9);
+  --surface-2: rgba(255, 235, 244, 0.94);
+
+  /* Zinc chuyển sang tông rose: chữ đậm rõ trên nền sáng */
+  --zk-50: #4f2b38;
+  --zk-100: #532d3a;
+  --zk-200: #57303e;
+  --zk-300: #6b4150;
+  --zk-400: #8a6577;
+  --zk-500: #8a5f74;
+  --zk-600: #7d5066;
+  --zk-700: #6e4054;
+  --zk-800: #e4d5dd;
+  --zk-900: #f0e5ea;
+  --zk-950: #f8eef3;
+}
+
+/* Viền trắng mờ → viền hồng dịu trên nền sáng (trừ viền gradient accent-border) */
+[data-theme="sakura"] [class*="border-white/"]:not(.accent-border) {
+  border-color: rgba(216, 142, 173, 0.32);
+}
+
+/* hover:text-white trên nền sáng sẽ biến mất → đổi sang màu nhấn */
+[data-theme="sakura"] [class*="hover:text-white"]:hover {
+  color: var(--accent-1);
+}
+
+/* Thẻ kính trắng mờ trên nền sakura */
+[data-theme="sakura"] .glass {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.85), rgba(255, 243, 249, 0.62));
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 34px rgba(214, 108, 154, 0.12);
+}
+
+[data-theme="sakura"] .thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(214, 108, 154, 0.25);
+}
+[data-theme="sakura"] .thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(214, 108, 154, 0.5);
+}
+
+/* Cánh hoa sakura rơi */
+@keyframes petal-fall {
+  0% {
+    transform: translate3d(0, -6vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--petal-opacity, 0.8);
+  }
+  50% {
+    transform: translate3d(var(--petal-drift, 4vw), 52vh, 0) rotate(185deg);
+  }
+  90% {
+    opacity: var(--petal-opacity, 0.8);
+  }
+  100% {
+    transform: translate3d(calc(var(--petal-drift, 4vw) * -0.6), 106vh, 0) rotate(345deg);
+    opacity: 0;
+  }
+}
+
+.petal {
+  position: absolute;
+  top: 0;
+  opacity: 0;
+  border-radius: 999px 2px 999px 2px;
+  background: linear-gradient(135deg, rgba(255, 183, 210, 0.95), rgba(244, 143, 177, 0.85));
+  box-shadow: 0 1px 4px rgba(240, 107, 168, 0.25);
+  animation: petal-fall linear infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
 }
 
 body {

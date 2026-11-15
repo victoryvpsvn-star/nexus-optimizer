@@ -45,3 +45,11 @@ model GamingState {
   enabledAt DateTime?
   effects   String?
 }
+
+model SavedScript {
+  id        Int      @id @default(autoincrement())
+  name      String
+  language  String   @default("bash")
+  code      String
+  updatedAt DateTime @default(now()) @updatedAt
+}

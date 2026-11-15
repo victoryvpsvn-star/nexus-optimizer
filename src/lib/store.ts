@@ -5,10 +5,11 @@ import { toast } from 'sonner'
 import type { Section, UISettings } from './types'
 
 const DEFAULT_SETTINGS: UISettings = {
-  accent: 'cyan-violet',
-  background: 'glow',
+  accent: 'sakura-pink',
+  background: 'sakura',
   customBgUrl: '',
-  radius: 1.0,
+  radius: 1.25,
+  petals: true,
 }
 
 interface AppState {
@@ -53,16 +54,17 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
   saveSettings: async (patch) => {
-    const next = { ...get().settings, ...patch }
-    set({ settings: next })
+    const prev = get().settings
+    set({ settings: { ...prev, ...patch } })
     try {
       const r = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
+        body: JSON.stringify({ ...prev, ...patch }),
       })
       if (!r.ok) throw new Error('bad response')
     } catch {
+      set({ settings: prev }) // rollback về giá trị cũ khi server từ chối
       toast.error('Không lưu được cài đặt lên máy chủ')
     }
   },

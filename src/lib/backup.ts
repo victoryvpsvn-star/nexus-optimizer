@@ -206,6 +206,68 @@ export async function presignKey(key: string): Promise<{ url: string }> {
   return { url: r.url }
 }
 
+/** Giải nén an toàn một file backup .tar.gz vào thư mục đích (dùng chung cho local + bucket) */
+async function extractArchive(archivePath: string, destDir: string): Promise<{ ok: boolean; message: string }> {
+  // Kiểm tra toàn vẹn + rà soát danh sách thành viên TRƯỚC khi giải nén
+  const list = await run(`tar -tzf ${shellQuote(archivePath)}`, 60000)
+  if (!list.ok) {
+    return { ok: false, message: 'File backup bị hỏng hoặc không đọc được — từ chối khôi phục' }
+  }
+  // Chặn symlink/hardlink trong archive (escape khỏi thư mục đích khi extract).
+  // tar -tvzf: ký tự đầu tiên của dòng là loại file — 'l' = symlink, 'h' = hardlink.
+  const verbose = await run(`tar -tvzf ${shellQuote(archivePath)}`, 60000)
+  if (verbose.ok && verbose.stdout.split('\n').some((l) => /^[lh]/.test(l.trim()))) {
+    return {
+      ok: false,
+      message: 'Backup chứa symlink/hardlink — đã từ chối khôi phục vì lý do an toàn',
+    }
+  }
+  const members = list.stdout.split('\n').map((l) => l.trim()).filter(Boolean)
+  const dangerous = members.find((m) => m.startsWith('/') || m.split('/').includes('..'))
+  if (dangerous) {
+    return {
+      ok: false,
+      message: `Backup chứa đường dẫn nguy hiểm, đã từ chối khôi phục: ${dangerous.slice(0, 120)}`,
+    }
+  }
+
+  // An toàn khi giải nén: không ghi đè node_modules, upload/ (credential!), .env
+  // và CƠ SỞ DỮ LIỆU đang chạy (db/custom.db + WAL) — tránh làm hỏng SQLite live.
+  // --no-same-owner/--no-same-permissions: không giữ owner/permission từ archive.
+  const extract =
+    `tar -xzf ${shellQuote(archivePath)} -C ${shellQuote(destDir)}` +
+    ` --no-same-owner --no-same-permissions` +
+    ` --exclude='node_modules*' --exclude='upload*' --exclude='.env*'` +
+    ` --exclude='db' --exclude='db/*' --exclude='*.db-wal' --exclude='*.db-shm'`
+  const r = await run(extract, 120000)
+  if (!r.ok) {
+    return { ok: false, message: 'Giải nén backup thất bại — không khôi phục được dữ liệu' }
+  }
+  return {
+    ok: true,
+    message: 'Đã khôi phục backup (không ghi đè node_modules, upload, .env, db)',
+  }
+}
+
+/** Dùng lại backup từ file local trên máy chủ (backups/) */
+export async function restoreLocalBackup(
+  id: number,
+  destDir = PROJECT_ROOT,
+): Promise<{ ok: boolean; message: string }> {
+  const record = await db.backupRecord.findUnique({ where: { id } })
+  if (!record) throw new NotFoundError('Không tìm thấy bản sao lưu trên máy chủ')
+  const resolved = path.resolve(record.path)
+  if (!resolved.startsWith(path.resolve(BACKUP_DIR) + path.sep)) {
+    throw new Error('Đường dẫn backup không hợp lệ')
+  }
+  try {
+    await fs.access(resolved)
+  } catch {
+    throw new NotFoundError('File backup không còn tồn tại trên máy chủ')
+  }
+  return extractArchive(resolved, destDir)
+}
+
 export async function restoreFromBucket(
   key: string,
   destDir = PROJECT_ROOT,
@@ -222,37 +284,7 @@ export async function restoreFromBucket(
       }
       throw new Error(dl.error || 'Tải backup từ bucket về máy thất bại')
     }
-
-    // Kiểm tra toàn vẹn + rà soát danh sách thành viên TRƯỚC khi giải nén
-    const list = await run(`tar -tzf ${shellQuote(tmpPath)}`, 60000)
-    if (!list.ok) {
-      return { ok: false, message: 'File backup tải về bị hỏng hoặc không đọc được — từ chối khôi phục' }
-    }
-    const members = list.stdout.split('\n').map((l) => l.trim()).filter(Boolean)
-    const dangerous = members.find(
-      (m) => m.startsWith('/') || m.split('/').includes('..'),
-    )
-    if (dangerous) {
-      return {
-        ok: false,
-        message: `Backup chứa đường dẫn nguy hiểm, đã từ chối khôi phục: ${dangerous.slice(0, 120)}`,
-      }
-    }
-
-    // An toàn khi giải nén: không ghi đè node_modules, upload/ (credential!), .env
-    // và CƠ SỞ DỮ LIỆU đang chạy (db/custom.db + WAL) — tránh làm hỏng SQLite live.
-    const extract =
-      `tar -xzf ${shellQuote(tmpPath)} -C ${shellQuote(destDir)}` +
-      ` --exclude='node_modules*' --exclude='upload*' --exclude='.env*'` +
-      ` --exclude='db' --exclude='db/*' --exclude='*.db-wal' --exclude='*.db-shm'`
-    const r = await run(extract, 120000)
-    if (!r.ok) {
-      return { ok: false, message: 'Giải nén backup thất bại — không khôi phục được dữ liệu' }
-    }
-    return {
-      ok: true,
-      message: 'Đã khôi phục backup từ bucket về máy chủ (không ghi đè node_modules, upload, .env, db)',
-    }
+    return await extractArchive(tmpPath, destDir)
   } finally {
     try {
       await fs.unlink(tmpPath)

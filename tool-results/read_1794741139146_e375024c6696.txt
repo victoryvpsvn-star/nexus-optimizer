@@ -1,0 +1,648 @@
+     1→'use client'
+     2→
+     3→import { useCallback, useEffect, useState } from 'react'
+     4→import {
+     5→  Cloud,
+     6→  DatabaseBackup,
+     7→  Download,
+     8→  Github,
+     9→  HardDrive,
+    10→  Loader2,
+    11→  PackageOpen,
+    12→  RotateCcw,
+    13→  ShieldCheck,
+    14→  Trash2,
+    15→  TriangleAlert,
+    16→  UploadCloud,
+    17→} from 'lucide-react'
+    18→import { Card } from '@/components/ui/card'
+    19→import { Button } from '@/components/ui/button'
+    20→import { Badge } from '@/components/ui/badge'
+    21→import { Input } from '@/components/ui/input'
+    22→import { Skeleton } from '@/components/ui/skeleton'
+    23→import {
+    24→  Table,
+    25→  TableBody,
+    26→  TableCell,
+    27→  TableHead,
+    28→  TableHeader,
+    29→  TableRow,
+    30→} from '@/components/ui/table'
+    31→import {
+    32→  AlertDialog,
+    33→  AlertDialogAction,
+    34→  AlertDialogCancel,
+    35→  AlertDialogContent,
+    36→  AlertDialogDescription,
+    37→  AlertDialogFooter,
+    38→  AlertDialogHeader,
+    39→  AlertDialogTitle,
+    40→  AlertDialogTrigger,
+    41→} from '@/components/ui/alert-dialog'
+    42→import { toast } from 'sonner'
+    43→import type { BackupBucketItem, BackupListResponse, BackupLocal } from '@/lib/types'
+    44→import { formatBytes, formatTime } from '@/lib/format'
+    45→
+    46→type ListData = BackupListResponse & { totalLocalBytes?: number }
+    47→
+    48→export function BackupPanel() {
+    49→  const [data, setData] = useState<ListData | null>(null)
+    50→  const [loading, setLoading] = useState(true)
+    51→  const [name, setName] = useState('')
+    52→  const [creating, setCreating] = useState(false)
+    53→  const [busyLocalId, setBusyLocalId] = useState<number | null>(null)
+    54→  const [busyBucketKey, setBusyBucketKey] = useState<string | null>(null)
+    55→
+    56→  const local = data?.local ?? []
+    57→  const bucket = data?.bucket ?? []
+    58→  const totalLocalBytes = data?.totalLocalBytes ?? local.reduce((s, b) => s + b.sizeBytes, 0)
+    59→  const totalBucketBytes = bucket.reduce((s, b) => s + b.sizeBytes, 0)
+    60→
+    61→  const load = useCallback(async () => {
+    62→    try {
+    63→      const r = await fetch('/api/backups', { cache: 'no-store' })
+    64→      const json = (await r.json().catch(() => null)) as (ListData & { error?: string }) | null
+    65→      if (!r.ok || !json || json.error) throw new Error(json?.error ?? 'Không tải được danh sách backup')
+    66→      setData(json)
+    67→    } catch (e) {
+    68→      /* giữ danh sách cũ khi lỗi — không làm trống bảng */
+    69→      toast.error((e as Error).message || 'Không tải được danh sách backup')
+    70→    } finally {
+    71→      setLoading(false)
+    72→    }
+    73→  }, [])
+    74→
+    75→  useEffect(() => {
+    76→    load()
+    77→  }, [load])
+    78→
+    79→  const create = async () => {
+    80→    setCreating(true)
+    81→    try {
+    82→      const r = await fetch('/api/backups', {
+    83→        method: 'POST',
+    84→        headers: { 'Content-Type': 'application/json' },
+    85→        body: JSON.stringify({ name: name.trim() || 'backup' }),
+    86→      })
+    87→      const json = (await r.json()) as { backup?: BackupLocal; error?: string }
+    88→      if (!r.ok || json.error) throw new Error(json.error || 'Tạo backup thất bại')
+    89→      toast.success(
+    90→        `Đã tạo backup ${json.backup?.name ?? ''} (${formatBytes(json.backup?.sizeBytes ?? 0)})`,
+    91→      )
+    92→      setName('')
+    93→      await load()
+    94→    } catch (e) {
+    95→      toast.error((e as Error).message || 'Tạo backup thất bại')
+    96→    } finally {
+    97→      setCreating(false)
+    98→    }
+    99→  }
+   100→
+   101→  const uploadOne = async (b: BackupLocal) => {
+   102→    setBusyLocalId(b.id)
+   103→    toast.info(`Đang tải ${b.name} lên bucket...`)
+   104→    try {
+   105→      const r = await fetch('/api/backups', {
+   106→        method: 'PUT',
+   107→        headers: { 'Content-Type': 'application/json' },
+   108→        body: JSON.stringify({ action: 'upload', id: b.id }),
+   109→      })
+   110→      const json = (await r.json()) as { ok?: boolean; error?: string; key?: string }
+   111→      if (!r.ok || !json.ok) throw new Error(json.error || 'Tải lên bucket thất bại')
+   112→      toast.success(`Đã tải lên bucket: ${json.key ?? b.name}`)
+   113→      await load()
+   114→    } catch (e) {
+   115→      toast.error((e as Error).message || 'Tải lên bucket thất bại')
+   116→    } finally {
+   117→      setBusyLocalId(null)
+   118→    }
+   119→  }
+   120→
+   121→  const restoreLocal = async (b: BackupLocal) => {
+   122→    setBusyLocalId(b.id)
+   123→    toast.info('Đang dùng lại backup từ file local...')
+   124→    try {
+   125→      const r = await fetch('/api/backups', {
+   126→        method: 'PUT',
+   127→        headers: { 'Content-Type': 'application/json' },
+   128→        body: JSON.stringify({ action: 'restore-local', id: b.id }),
+   129→      })
+   130→      const json = (await r.json()) as { ok?: boolean; message?: string; error?: string }
+   131→      if (!r.ok || !json.ok) throw new Error(json.error || 'Khôi phục thất bại')
+   132→      toast.success(json.message || 'Đã khôi phục backup từ máy chủ')
+   133→    } catch (e) {
+   134→      toast.error((e as Error).message || 'Khôi phục thất bại')
+   135→    } finally {
+   136→      setBusyLocalId(null)
+   137→    }
+   138→  }
+   139→
+   140→  const downloadLocal = async (b: BackupLocal) => {
+   141→    setBusyLocalId(b.id)
+   142→    try {
+   143→      const r = await fetch('/api/backups', {
+   144→        method: 'PUT',
+   145→        headers: { 'Content-Type': 'application/json' },
+   146→        body: JSON.stringify({ action: 'presign', id: b.id }),
+   147→      })
+   148→      const json = (await r.json()) as { url?: string; error?: string }
+   149→      if (!r.ok || !json.url) throw new Error(json.error || 'Không tạo được link tải về')
+   150→      window.open(json.url, '_blank', 'noopener')
+   151→      toast.success('Đã mở link tải về (hết hạn sau 1 giờ)')
+   152→    } catch (e) {
+   153→      toast.error((e as Error).message || 'Không tạo được link tải về')
+   154→    } finally {
+   155→      setBusyLocalId(null)
+   156→    }
+   157→  }
+   158→
+   159→  const downloadBucket = async (key: string) => {
+   160→    setBusyBucketKey(key)
+   161→    try {
+   162→      const r = await fetch('/api/backups', {
+   163→        method: 'PUT',
+   164→        headers: { 'Content-Type': 'application/json' },
+   165→        body: JSON.stringify({ action: 'presign', key }),
+   166→      })
+   167→      const json = (await r.json()) as { url?: string; error?: string }
+   168→      if (!r.ok || !json.url) throw new Error(json.error || 'Không tạo được link tải về')
+   169→      window.open(json.url, '_blank', 'noopener')
+   170→      toast.success('Đã mở link tải về (hết hạn sau 1 giờ)')
+   171→    } catch (e) {
+   172→      toast.error((e as Error).message || 'Không tạo được link tải về')
+   173→    } finally {
+   174→      setBusyBucketKey(null)
+   175→    }
+   176→  }
+   177→
+   178→  const restoreBucket = async (key: string) => {
+   179→    setBusyBucketKey(key)
+   180→    toast.info('Đang khôi phục backup về máy chủ...')
+   181→    try {
+   182→      const r = await fetch('/api/backups', {
+   183→        method: 'PUT',
+   184→        headers: { 'Content-Type': 'application/json' },
+   185→        body: JSON.stringify({ action: 'restore', key }),
+   186→      })
+   187→      const json = (await r.json()) as { ok?: boolean; message?: string; error?: string }
+   188→      if (!r.ok || !json.ok) throw new Error(json.error || 'Khôi phục thất bại')
+   189→      toast.success(json.message || 'Đã khôi phục backup về máy chủ')
+   190→    } catch (e) {
+   191→      toast.error((e as Error).message || 'Khôi phục thất bại')
+   192→    } finally {
+   193→      setBusyBucketKey(null)
+   194→    }
+   195→  }
+   196→
+   197→  const deleteLocal = async (id: number) => {
+   198→    setBusyLocalId(id)
+   199→    try {
+   200→      const r = await fetch(`/api/backups?type=local&id=${id}`, { method: 'DELETE' })
+   201→      const json = (await r.json()) as { success?: boolean; error?: string }
+   202→      if (!r.ok || !json.success) throw new Error(json.error || 'Không xóa được bản backup')
+   203→      toast.success('Đã xóa bản backup trên máy chủ')
+   204→      await load()
+   205→    } catch (e) {
+   206→      toast.error((e as Error).message || 'Không xóa được bản backup')
+   207→    } finally {
+   208→      setBusyLocalId(null)
+   209→    }
+   210→  }
+   211→
+   212→  const deleteBucket = async (key: string) => {
+   213→    setBusyBucketKey(key)
+   214→    try {
+   215→      const r = await fetch(`/api/backups?type=bucket&key=${encodeURIComponent(key)}`, {
+   216→        method: 'DELETE',
+   217→      })
+   218→      const json = (await r.json()) as { success?: boolean; error?: string }
+   219→      if (!r.ok || !json.success) throw new Error(json.error || 'Không xóa được object trên bucket')
+   220→      toast.success('Đã xóa object trên bucket')
+   221→      await load()
+   222→    } catch (e) {
+   223→      toast.error((e as Error).message || 'Không xóa được object trên bucket')
+   224→    } finally {
+   225→      setBusyBucketKey(null)
+   226→    }
+   227→  }
+   228→
+   229→  return (
+   230→    <div className="space-y-4">
+   231→      {/* Hero: tạo backup + trạng thái */}
+   232→      <Card className="glass rounded-2xl p-6">
+   233→        <div className="flex flex-col gap-5">
+   234→          <div className="flex flex-wrap items-center justify-between gap-4">
+   235→            <div className="flex items-center gap-3">
+   236→              <div
+   237→                className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10"
+   238→                style={{ background: 'color-mix(in srgb, var(--accent-1) 14%, transparent)' }}
+   239→              >
+   240→                <DatabaseBackup className="h-5 w-5" style={{ color: 'var(--accent-1)' }} />
+   241→              </div>
+   242→              <div>
+   243→                <h3 className="text-base font-semibold text-zinc-100">Tạo bản sao lưu</h3>
+   244→                <p className="text-xs text-zinc-500">
+   245→                  Nén toàn bộ mã nguồn + cấu hình thành file .tar.gz (loại trừ node_modules,
+   246→                  .next, upload, .env)
+   247→                </p>
+   248→              </div>
+   249→            </div>
+   250→            <div className="flex flex-wrap items-center gap-2">
+   251→              {data ? (
+   252→                data.bucketOk ? (
+   253→                  <Badge className="rounded-full border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
+   254→                    <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+   255→                    Bucket <span className="num mx-1">{data.bucketName ?? 'vic'}</span> sẵn sàng
+   256→                  </Badge>
+   257→                ) : (
+   258→                  <Badge className="rounded-full border-rose-500/40 bg-rose-500/10 text-rose-400">
+   259→                    <TriangleAlert className="mr-1 h-3.5 w-3.5" />
+   260→                    Bucket lỗi: {data.bucketError ?? 'không kết nối được'}
+   261→                  </Badge>
+   262→                )
+   263→              ) : (
+   264→                <Skeleton className="h-6 w-44 rounded-full" />
+   265→              )}
+   266→              <Badge variant="outline" className="rounded-full border-white/10 text-zinc-300">
+   267→                <HardDrive className="mr-1 h-3.5 w-3.5" style={{ color: 'var(--accent-2)' }} />
+   268→                Dung lượng local: <span className="num ml-1">{formatBytes(totalLocalBytes)}</span>
+   269→              </Badge>
+   270→              <Badge variant="outline" className="rounded-full border-white/10 text-zinc-300">
+   271→                <Cloud className="mr-1 h-3.5 w-3.5" style={{ color: 'var(--accent-1)' }} />
+   272→                Dung lượng bucket: <span className="num ml-1">{formatBytes(totalBucketBytes)}</span>
+   273→                <span className="num ml-1 text-zinc-500">/ 30GB</span>
+   274→              </Badge>
+   275→            </div>
+   276→          </div>
+   277→
+   278→          <div className="flex flex-col gap-3 sm:flex-row">
+   279→            <Input
+   280→              value={name}
+   281→              onChange={(e) => setName(e.target.value)}
+   282→              onKeyDown={(e) => {
+   283→                if (e.key === 'Enter' && !creating) create()
+   284→              }}
+   285→              placeholder="vd: nexus-full-2025"
+   286→              className="h-11 flex-1 rounded-xl border-white/10 bg-white/5 text-zinc-100 placeholder:text-zinc-400"
+   287→              aria-label="Tên bản sao lưu"
+   288→            />
+   289→            <Button
+   290→              onClick={create}
+   291→              disabled={creating}
+   292→              className="h-11 rounded-xl px-6 font-semibold text-black"
+   293→              style={{ background: 'var(--accent-1)' }}
+   294→            >
+   295→              {creating ? (
+   296→                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+   297→              ) : (
+   298→                <DatabaseBackup className="mr-1.5 h-4 w-4" />
+   299→              )}
+   300→              {creating ? 'Đang tạo backup...' : 'Tạo backup ngay'}
+   301→            </Button>
+   302→          </div>
+   303→        </div>
+   304→      </Card>
+   305→
+   306→      {/* Hai danh sách */}
+   307→      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+   308→        {/* Local */}
+   309→        <Card className="glass rounded-2xl p-4">
+   310→          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-200">
+   311→            <HardDrive className="h-4 w-4" style={{ color: 'var(--accent-2)' }} />
+   312→            Bản sao lưu trên máy chủ
+   313→            <Badge variant="outline" className="num ml-auto rounded-full border-white/10 text-zinc-400">
+   314→              {loading ? '...' : local.length}
+   315→            </Badge>
+   316→          </h3>
+   317→          {loading ? (
+   318→            <div className="space-y-2">
+   319→              <Skeleton className="h-10 w-full rounded-xl" />
+   320→              <Skeleton className="h-10 w-full rounded-xl" />
+   321→            </div>
+   322→          ) : local.length === 0 ? (
+   323→            <div className="flex flex-col items-center gap-2 py-10 text-center">
+   324→              <PackageOpen className="h-8 w-8 text-zinc-400" />
+   325→              <p className="text-sm text-zinc-500">
+   326→                Chưa có bản backup nào trên máy chủ — tạo bản đầu tiên ở trên.
+   327→              </p>
+   328→            </div>
+   329→          ) : (
+   330→            <div className="thin-scroll max-h-96 overflow-y-auto">
+   331→              <Table>
+   332→                <TableHeader>
+   333→                  <TableRow className="border-white/10">
+   334→                    <TableHead className="text-zinc-400">Tên</TableHead>
+   335→                    <TableHead className="text-zinc-400">Dung lượng</TableHead>
+   336→                    <TableHead className="text-zinc-400">Thời gian</TableHead>
+   337→                    <TableHead className="text-zinc-400">Bucket</TableHead>
+   338→                    <TableHead className="text-right text-zinc-400">Hành động</TableHead>
+   339→                  </TableRow>
+   340→                </TableHeader>
+   341→                <TableBody>
+   342→                  {local.map((b) => (
+   343→                    <TableRow key={b.id} className="border-white/5">
+   344→                      <TableCell className="max-w-[180px] truncate font-medium text-zinc-200" title={b.name}>
+   345→                        {b.name}
+   346→                      </TableCell>
+   347→                      <TableCell className="num whitespace-nowrap text-zinc-300">
+   348→                        {formatBytes(b.sizeBytes)}
+   349→                      </TableCell>
+   350→                      <TableCell className="num whitespace-nowrap text-zinc-400">
+   351→                        {formatTime(b.createdAt)}
+   352→                      </TableCell>
+   353→                      <TableCell>
+   354→                        {b.uploaded ? (
+   355→                          <Badge className="rounded-full border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
+   356→                            Đã tải lên
+   357→                          </Badge>
+   358→                        ) : (
+   359→                          <Badge variant="outline" className="rounded-full border-white/10 text-zinc-500">
+   360→                            Chưa tải lên
+   361→                          </Badge>
+   362→                        )}
+   363→                      </TableCell>
+   364→                      <TableCell className="text-right">
+   365→                        <div className="flex justify-end gap-1">
+   366→                          <Button
+   367→                            size="sm"
+   368→                            variant="ghost"
+   369→                            title={b.uploaded ? 'Đã tải lên bucket' : 'Tải lên bucket'}
+   370→                            aria-label={b.uploaded ? `Bản backup ${b.name} đã tải lên bucket` : `Tải bản backup ${b.name} lên bucket`}
+   371→                            disabled={b.uploaded || busyLocalId === b.id}
+   372→                            className="h-9 rounded-lg px-2.5 text-zinc-300 hover:text-white disabled:opacity-40"
+   373→                            onClick={() => uploadOne(b)}
+   374→                          >
+   375→                            {busyLocalId === b.id ? (
+   376→                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   377→                            ) : (
+   378→                              <UploadCloud className="h-3.5 w-3.5" />
+   379→                            )}
+   380→                          </Button>
+   381→                          <Button
+   382→                            size="sm"
+   383→                            variant="ghost"
+   384→                            title="Tải về (link pre-signed)"
+   385→                            aria-label={`Tải về bản backup ${b.name}`}
+   386→                            disabled={!b.uploaded || busyLocalId === b.id}
+   387→                            className="h-9 rounded-lg px-2.5 text-zinc-300 hover:text-white disabled:opacity-40"
+   388→                            onClick={() => downloadLocal(b)}
+   389→                          >
+   390→                            <Download className="h-3.5 w-3.5" />
+   391→                          </Button>
+   392→                          <Button
+   393→                            size="sm"
+   394→                            variant="ghost"
+   395→                            title="Dùng lại backup này (khôi phục về máy chủ)"
+   396→                            aria-label={`Dùng lại backup ${b.name}`}
+   397→                            disabled={busyLocalId === b.id}
+   398→                            className="h-9 rounded-lg px-2.5 text-zinc-300 hover:text-white disabled:opacity-40"
+   399→                            onClick={() => restoreLocal(b)}
+   400→                          >
+   401→                            {busyLocalId === b.id ? (
+   402→                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   403→                            ) : (
+   404→                              <RotateCcw className="h-3.5 w-3.5" />
+   405→                            )}
+   406→                          </Button>
+   407→                          <AlertDialog>
+   408→                            <AlertDialogTrigger asChild>
+   409→                              <Button
+   410→                                size="sm"
+   411→                                variant="ghost"
+   412→                                title="Xóa bản backup này"
+   413→                                aria-label={`Xóa bản backup ${b.name}`}
+   414→                                disabled={busyLocalId === b.id}
+   415→                                className="h-9 rounded-lg px-2.5 text-rose-400 hover:text-rose-300"
+   416→                              >
+   417→                                <Trash2 className="h-3.5 w-3.5" />
+   418→                              </Button>
+   419→                            </AlertDialogTrigger>
+   420→                            <AlertDialogContent className="glass rounded-2xl border-white/10">
+   421→                              <AlertDialogHeader>
+   422→                                <AlertDialogTitle className="text-zinc-100">
+   423→                                  Xóa bản backup trên máy chủ?
+   424→                                </AlertDialogTitle>
+   425→                                <AlertDialogDescription className="text-zinc-400">
+   426→                                  File <span className="num">{b.name}</span> sẽ bị xóa vĩnh viễn khỏi
+   427→                                  máy chủ. Bản copy trên bucket (nếu đã tải lên) vẫn được giữ.
+   428→                                </AlertDialogDescription>
+   429→                              </AlertDialogHeader>
+   430→                              <AlertDialogFooter>
+   431→                                <AlertDialogCancel className="rounded-xl border-white/10 bg-transparent text-zinc-200 hover:bg-white/10">
+   432→                                  Hủy
+   433→                                </AlertDialogCancel>
+   434→                                <AlertDialogAction
+   435→                                  className="rounded-xl bg-rose-600 text-white hover:bg-rose-500"
+   436→                                  onClick={() => deleteLocal(b.id)}
+   437→                                >
+   438→                                  Xóa
+   439→                                </AlertDialogAction>
+   440→                              </AlertDialogFooter>
+   441→                            </AlertDialogContent>
+   442→                          </AlertDialog>
+   443→                        </div>
+   444→                      </TableCell>
+   445→                    </TableRow>
+   446→                  ))}
+   447→                </TableBody>
+   448→              </Table>
+   449→            </div>
+   450→          )}
+   451→        </Card>
+   452→
+   453→        {/* Bucket */}
+   454→        <Card className="glass rounded-2xl p-4">
+   455→          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-200">
+   456→            <Cloud className="h-4 w-4" style={{ color: 'var(--accent-1)' }} />
+   457→            Trên bucket (30GB)
+   458→            <Badge variant="outline" className="num ml-auto rounded-full border-white/10 text-zinc-400">
+   459→              {loading ? '...' : bucket.length}
+   460→            </Badge>
+   461→          </h3>
+   462→          {loading ? (
+   463→            <div className="space-y-2">
+   464→              <Skeleton className="h-10 w-full rounded-xl" />
+   465→              <Skeleton className="h-10 w-full rounded-xl" />
+   466→            </div>
+   467→          ) : bucket.length === 0 ? (
+   468→            <div className="flex flex-col items-center gap-2 py-10 text-center">
+   469→              <Cloud className="h-8 w-8 text-zinc-400" />
+   470→              <p className="text-sm text-zinc-500">
+   471→                Chưa có backup nào trên bucket — bấm “Tải lên bucket” ở bảng bên trái.
+   472→              </p>
+   473→            </div>
+   474→          ) : (
+   475→            <div className="thin-scroll max-h-96 overflow-y-auto">
+   476→              <Table>
+   477→                <TableHeader>
+   478→                  <TableRow className="border-white/10">
+   479→                    <TableHead className="text-zinc-400">Key</TableHead>
+   480→                    <TableHead className="text-zinc-400">Dung lượng</TableHead>
+   481→                    <TableHead className="text-zinc-400">Ngày</TableHead>
+   482→                    <TableHead className="text-right text-zinc-400">Hành động</TableHead>
+   483→                  </TableRow>
+   484→                </TableHeader>
+   485→                <TableBody>
+   486→                  {bucket.map((item: BackupBucketItem) => {
+   487→                    const busy = busyBucketKey === item.key
+   488→                    return (
+   489→                      <TableRow key={item.key} className="border-white/5">
+   490→                        <TableCell className="max-w-[200px] truncate text-zinc-200" title={item.key}>
+   491→                          {item.key}
+   492→                        </TableCell>
+   493→                        <TableCell className="num whitespace-nowrap text-zinc-300">
+   494→                          {formatBytes(item.sizeBytes)}
+   495→                        </TableCell>
+   496→                        <TableCell className="num whitespace-nowrap text-zinc-400">
+   497→                          {formatTime(item.lastModified)}
+   498→                        </TableCell>
+   499→                        <TableCell className="text-right">
+   500→                          <div className="flex justify-end gap-1">
+   501→                            <Button
+   502→                              size="sm"
+   503→                              variant="ghost"
+   504→                              title="Tải về (link pre-signed)"
+   505→                              aria-label={`Tải về backup ${item.key} từ bucket`}
+   506→                              disabled={busy}
+   507→                              className="h-9 rounded-lg px-2.5 text-zinc-300 hover:text-white"
+   508→                              onClick={() => downloadBucket(item.key)}
+   509→                            >
+   510→                              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+   511→                            </Button>
+   512→                            <AlertDialog>
+   513→                              <AlertDialogTrigger asChild>
+   514→                                <Button
+   515→                                  size="sm"
+   516→                                  variant="ghost"
+   517→                                  title="Khôi phục về máy chủ"
+   518→                                  aria-label={`Khôi phục backup ${item.key} về máy chủ`}
+   519→                                  disabled={busy}
+   520→                                  className="h-9 rounded-lg px-2.5 text-zinc-300 hover:text-white"
+   521→                                >
+   522→                                  <RotateCcw className="h-3.5 w-3.5" />
+   523→                                </Button>
+   524→                              </AlertDialogTrigger>
+   525→                              <AlertDialogContent className="glass rounded-2xl border-white/10">
+   526→                                <AlertDialogHeader>
+   527→                                  <AlertDialogTitle className="text-zinc-100">
+   528→                                    Khôi phục từ bucket?
+   529→                                  </AlertDialogTitle>
+   530→                                  <AlertDialogDescription className="text-zinc-400">
+   531→                                    Backup <span className="num">{item.key}</span> sẽ được tải về và
+   532→                                    giải nén vào thư mục dự án. Node_modules, thư mục upload và file
+   533→                                    .env sẽ KHÔNG bị ghi đè.
+   534→                                  </AlertDialogDescription>
+   535→                                </AlertDialogHeader>
+   536→                                <AlertDialogFooter>
+   537→                                  <AlertDialogCancel className="rounded-xl border-white/10 bg-transparent text-zinc-200 hover:bg-white/10">
+   538→                                    Hủy
+   539→                                  </AlertDialogCancel>
+   540→                                  <AlertDialogAction
+   541→                                    className="rounded-xl text-black"
+   542→                                    style={{ background: 'var(--accent-1)' }}
+   543→                                    onClick={() => restoreBucket(item.key)}
+   544→                                  >
+   545→                                    Khôi phục
+   546→                                  </AlertDialogAction>
+   547→                                </AlertDialogFooter>
+   548→                              </AlertDialogContent>
+   549→                            </AlertDialog>
+   550→                            <AlertDialog>
+   551→                              <AlertDialogTrigger asChild>
+   552→                                <Button
+   553→                                  size="sm"
+   554→                                  variant="ghost"
+   555→                                  title="Xóa object trên bucket"
+   556→                                  aria-label={`Xóa backup ${item.key} trên bucket`}
+   557→                                  disabled={busy}
+   558→                                  className="h-9 rounded-lg px-2.5 text-rose-400 hover:text-rose-300"
+   559→                                >
+   560→                                  <Trash2 className="h-3.5 w-3.5" />
+   561→                                </Button>
+   562→                              </AlertDialogTrigger>
+   563→                              <AlertDialogContent className="glass rounded-2xl border-white/10">
+   564→                                <AlertDialogHeader>
+   565→                                  <AlertDialogTitle className="text-zinc-100">
+   566→                                    Xóa backup trên bucket?
+   567→                                  </AlertDialogTitle>
+   568→                                  <AlertDialogDescription className="text-zinc-400">
+   569→                                    Object <span className="num">{item.key}</span> sẽ bị xóa vĩnh
+   570→                                    viễn khỏi bucket và không thể khôi phục lại.
+   571→                                  </AlertDialogDescription>
+   572→                                </AlertDialogHeader>
+   573→                                <AlertDialogFooter>
+   574→                                  <AlertDialogCancel className="rounded-xl border-white/10 bg-transparent text-zinc-200 hover:bg-white/10">
+   575→                                    Hủy
+   576→                                  </AlertDialogCancel>
+   577→                                  <AlertDialogAction
+   578→                                    className="rounded-xl bg-rose-600 text-white hover:bg-rose-500"
+   579→                                    onClick={() => deleteBucket(item.key)}
+   580→                                  >
+   581→                                    Xóa
+   582→                                  </AlertDialogAction>
+   583→                                </AlertDialogFooter>
+   584→                              </AlertDialogContent>
+   585→                            </AlertDialog>
+   586→                          </div>
+   587→                        </TableCell>
+   588→                      </TableRow>
+   589→                    )
+   590→                  })}
+   591→                </TableBody>
+   592→              </Table>
+   593→            </div>
+   594→          )}
+   595→        </Card>
+   596→      </div>
+   597→
+   598→      {/* GitHub Actions card */}
+   599→      <Card className="glass rounded-2xl p-6">
+   600→        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+   601→          <div className="flex items-start gap-3">
+   602→            <div
+   603→              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10"
+   604→              style={{ background: 'color-mix(in srgb, var(--accent-2) 14%, transparent)' }}
+   605→            >
+   606→              <Github className="h-5 w-5" style={{ color: 'var(--accent-2)' }} />
+   607→            </div>
+   608→            <div className="space-y-2">
+   609→              <h3 className="text-base font-semibold text-zinc-100">
+   610→                Tự động sao lưu bằng GitHub Actions
+   611→              </h3>
+   612→              <ul className="max-w-3xl space-y-1.5 text-sm text-zinc-400">
+   613→                <li className="flex gap-2">
+   614→                  <span style={{ color: 'var(--accent-1)' }}>•</span>
+   615→                  Repo GitHub chứa workflow chạy tự động <strong className="text-zinc-200">hằng ngày lúc 02:00 giờ Việt Nam</strong> (cron theo múi giờ Asia/Ho_Chi_Minh).
+   616→                </li>
+   617→                <li className="flex gap-2">
+   618→                  <span style={{ color: 'var(--accent-1)' }}>•</span>
+   619→                  Có thể bấm <strong className="text-zinc-200">&quot;Run workflow&quot;</strong> thủ công ngay trên GitHub để backup bất cứ lúc nào.
+   620→                </li>
+   621→                <li className="flex gap-2">
+   622→                  <span style={{ color: 'var(--accent-1)' }}>•</span>
+   623→                  Backup được nén thành file .tar.gz rồi đẩy thẳng vào bucket 30GB (nền tảng S3 tương thích), key dạng <span className="num">nexus-backups/...</span>.
+   624→                </li>
+   625→                <li className="flex gap-2">
+   626→                  <span style={{ color: 'var(--accent-1)' }}>•</span>
+   627→                  Thông tin xác thực được lưu dưới dạng GitHub Secrets — không bao giờ nằm trong mã nguồn.
+   628→                </li>
+   629→              </ul>
+   630→            </div>
+   631→          </div>
+   632→          <a href="https://github.com/" target="_blank" rel="noopener noreferrer" className="shrink-0">
+   633→            <Badge
+   634→              variant="outline"
+   635→              className="cursor-pointer rounded-full border-white/15 px-4 py-2 text-zinc-100 hover:bg-white/10"
+   636→            >
+   637→              <Github className="mr-1.5 h-3.5 w-3.5" />
+   638→              Mở GitHub Actions
+   639→            </Badge>
+   640→          </a>
+   641→        </div>
+   642→      </Card>
+   643→    </div>
+   644→  )
+   645→}
+   646→
+   647→export default BackupPanel
+   648→

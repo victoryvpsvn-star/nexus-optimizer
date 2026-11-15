@@ -118,6 +118,25 @@ export function BackupPanel() {
     }
   }
 
+  const restoreLocal = async (b: BackupLocal) => {
+    setBusyLocalId(b.id)
+    toast.info('Đang dùng lại backup từ file local...')
+    try {
+      const r = await fetch('/api/backups', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore-local', id: b.id }),
+      })
+      const json = (await r.json()) as { ok?: boolean; message?: string; error?: string }
+      if (!r.ok || !json.ok) throw new Error(json.error || 'Khôi phục thất bại')
+      toast.success(json.message || 'Đã khôi phục backup từ máy chủ')
+    } catch (e) {
+      toast.error((e as Error).message || 'Khôi phục thất bại')
+    } finally {
+      setBusyLocalId(null)
+    }
+  }
+
   const downloadLocal = async (b: BackupLocal) => {
     setBusyLocalId(b.id)
     try {
@@ -370,6 +389,48 @@ export function BackupPanel() {
                           >
                             <Download className="h-3.5 w-3.5" />
                           </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Dùng lại backup này (khôi phục về máy chủ)"
+                                aria-label={`Dùng lại backup ${b.name}`}
+                                disabled={busyLocalId === b.id}
+                                className="h-9 rounded-lg px-2.5 text-zinc-300 hover:text-white disabled:opacity-40"
+                              >
+                                {busyLocalId === b.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="glass rounded-2xl border-white/10">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="text-zinc-100">
+                                  Dùng lại backup này?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-zinc-400">
+                                  Backup <span className="num">{b.name}</span> sẽ được giải nén và
+                                  GHI ĐÈ code hiện tại (src, prisma, scripts, public). Node_modules,
+                                  thư mục upload, file .env và database đang chạy KHÔNG bị ghi đè.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl border-white/10 bg-transparent text-zinc-200 hover:bg-white/10">
+                                  Hủy
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="rounded-xl text-black"
+                                  style={{ background: 'var(--accent-1)' }}
+                                  onClick={() => restoreLocal(b)}
+                                >
+                                  Khôi phục
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button

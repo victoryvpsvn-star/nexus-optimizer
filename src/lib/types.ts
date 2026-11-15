@@ -154,8 +154,16 @@ export interface BackupListResponse {
   bucketError?: string
 }
 
-export type AccentKey = 'cyan-violet' | 'emerald-amber' | 'rose-magenta' | 'amber-crimson'
+export type AccentKey =
+  | 'sakura-pink'
+  | 'sakura-lavender'
+  | 'cyan-violet'
+  | 'emerald-amber'
+  | 'rose-magenta'
+  | 'amber-crimson'
 export type BackgroundKey =
+  | 'sakura'
+  | 'wall-sakura'
   | 'gradient'
   | 'glow'
   | 'mesh'
@@ -168,6 +176,8 @@ export interface UISettings {
   background: BackgroundKey
   customBgUrl: string
   radius: number // đơn vị rem
+  /** Hiệu ứng cánh hoa sakura rơi trên nền sáng */
+  petals: boolean
 }
 
 export interface ScreenshotInfo {
@@ -177,11 +187,43 @@ export interface ScreenshotInfo {
   sizeBytes: number
 }
 
+// ---------- Script nâng cao (Advanced) ----------
+
+export type ScriptLanguage = 'bash' | 'python' | 'powershell'
+
+export interface ScriptRecord {
+  id: number
+  name: string
+  language: ScriptLanguage
+  code?: string
+  updatedAt: string
+}
+
+export interface ScriptRunResponse {
+  success: boolean
+  exitCode: number
+  durationMs: number
+  output: string
+  timedOut?: boolean
+  message?: string
+}
+
+export interface ConfigExport {
+  app: 'nexus-optimizer'
+  type: 'config'
+  version: 1
+  exportedAt: string
+  settings: UISettings
+  gaming: boolean
+  appliedTweakIds: string[]
+}
+
 export const SECTIONS = [
   'overview',
   'cleanup',
   'gaming',
   'tweaks',
+  'script',
   'processes',
   'backup',
   'screenshot',
@@ -195,6 +237,10 @@ export const SECTION_META: Record<Section, { title: string; subtitle: string }> 
   cleanup: { title: 'Dọn dẹp', subtitle: 'Giải phóng RAM + Disk chỉ với một cú nhấp' },
   gaming: { title: 'Gaming Mode', subtitle: 'Tăng hiệu năng tối đa khi chơi game' },
   tweaks: { title: 'Tinh chỉnh', subtitle: 'Danh sách tối ưu xếp hạng theo độ ưu tiên' },
+  script: {
+    title: 'Script nâng cao',
+    subtitle: 'Tự viết và chạy script tùy chỉnh — dành cho người biết code (Advanced)',
+  },
   processes: { title: 'Tiến trình', subtitle: 'Quản lý tiến trình đang chạy' },
   backup: { title: 'Sao lưu', subtitle: 'Tạo file backup, lưu lên bucket 30GB' },
   screenshot: { title: 'Ảnh chụp', subtitle: 'Chụp & sửa lỗi chụp màn hình dashboard' },
