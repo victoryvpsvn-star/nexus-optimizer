@@ -37,6 +37,7 @@ jobs:
 
       - name: Lưu artifact GitHub (giữ 30 ngày)
         uses: actions/upload-artifact@v4
+        continue-on-error: true # quota artifact có thể đầy — bucket 30GB mới là kho chính
         with:
           name: nexus-backup-${{ github.run_number }}
           path: nexus-backup-*.tar.gz
