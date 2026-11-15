@@ -20,7 +20,8 @@ jobs:
 
       - name: Đóng gói bản backup
         run: |
-          tar -czf nexus-backup-${{ github.run_number }}.tar.gz \
+          # Ghi ra /tmp để tar không tự đọc đúng file đang ghi; đồng thời loại trừ mọi backup cũ
+          tar -czf "/tmp/nexus-backup-${{ github.run_number }}.tar.gz" \
             --exclude='.git' \
             --exclude='node_modules' \
             --exclude='.next' \
@@ -28,7 +29,11 @@ jobs:
             --exclude='upload' \
             --exclude='backups' \
             --exclude='db' \
+            --exclude='nexus-backup-*' \
+            --warning=no-file-changed \
             .
+          mv "/tmp/nexus-backup-${{ github.run_number }}.tar.gz" .
+          ls -la nexus-backup-*.tar.gz
 
       - name: Lưu artifact GitHub (giữ 30 ngày)
         uses: actions/upload-artifact@v4
