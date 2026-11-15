@@ -60,3 +60,6 @@ upload/
 backups/
 db/
 public/screenshots/
+# tool outputs / dev logs
+tool-results/
+dev.log
