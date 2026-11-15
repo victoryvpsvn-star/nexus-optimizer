@@ -98,3 +98,33 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   (6) `node --check` main.js OK, `npm run build:win` OK (post-build + stage-electron).
 - LƯU Ý: dialog "45 giây" trong screenshot có thể là bản CŨ đang cài trên máy (v4/v5/v6 đều dùng
   text cũ) — user cần cài/chạy lại bản ≥ v7; bản mới tự dọn cổng nên không cần can thiệp tay.
+
+## Bổ sung 9-c: Go edition — viết lại toàn bộ app (nexus-go/)
+- User feedback: bản Electron vẫn lỗi khởi động + mở RẤT LÂU (portable 140MB giải nén mỗi lần + AV
+  quét node_modules). User yêu cầu Rust/Tauri/Go. Chọn GO (lý do): build + verify được ngay trong
+  sandbox Linux (cross-compile GOOS=windows — thuần Go, không CGO), Rust/Tauri phải build mù trên CI.
+- Kiến trúc MỚI (nexus-go/): 1 tiến trình duy nhất — HTTP server bind `127.0.0.1:0` (cổng trống do
+  OS cấp → HẾT lỗi kẹt cổng/zombie 32123), UI tĩnh nhúng (embed.FS), cửa sổ WebView2 qua
+  jchv/go-webview2 (thuần Go), fallback mở browser nếu thiếu runtime WebView2. Exe ~8.9MB
+  (-ldflags "-s -w -H windowsgui"). Cờ: --web (chế độ web), --port N (cố định cổng).
+- Thư mục module: nexus-go/ trong repo. Deps: shirou/gopsutil/v4 (stats — thay toàn bộ PowerShell
+  sysinfo), jchv/go-webview2. GOATH cache trong sandbox: /home/z/my-project/.tools (go1.27.4).
+- File: main.go (entry+dataDir), store.go (config.json nguyên tử thay Prisma: settings/webhook/
+  tweakStates/gaming/cleanupLogs/scripts), exec.go (port exec.ts: runExe/runSysExe/psRun BOM UTF-8/
+  resolvePowerShellExe/getWinStatus HKLM probe/adminGate), tweaks.go (35 tweaks WIN port 1:1 —
+  id/name/description/message giữ nguyên), ram.go (EmptyWorkingSet + NtSetSystemInformation standby
+  purge), stats.go (stats/processes/kill taskkill /T /F/network ports qua gopsutil), cleanup.go
+  (11 target Windows, đo size bằng Go WalkDir thay PS, recyclebin/deliveryopt qua PS), gaming.go
+  (preset apply/revert), selftest.go (check/full + Discord embed như cũ), system.go (relaunch-admin
+  Start-Process -Verb RunAs; backup registry .reg 20 key), script.go (powershell/bash/python + 
+  screenshots), api.go (mux cùng đường dẫn API cũ + static), ui_windows.go / ui_other.go (build tags).
+- UI mới: static/index.html + style.css + app.js — vanilla JS SPA dark theme, cùng sections
+  (overview/cleanup/gaming/tweaks/processes/network/script/selftest/screenshot/backup/settings).
+- VERIFY trong sandbox: go vet OK; linux build OK; GOOS=windows build OK (8.9MB); smoke test curl:
+  35 tweaks unique ids/orders, stats/gaming/network/settings OK, apply tweak trên Linux trả lỗi
+  trung thực "Không tìm thấy reg.exe", selftest check: pass 2 / skip 36 / ok=true (trung thực),
+  UI 200 cho index/app.js/style.css, config.json persist đúng.
+- CI: .github/workflows/build-go.yml — ubuntu-latest (go vet + linux build + GOOS=windows exe),
+  release tag `go-v<run_number>` khi workflow_dispatch. Bản Electron cũ vẫn giữ ở win-x64-v*.
+- Cleanup target filePattern (thumbcache) + browser cache (Default|Profile N → Cache/Code Cache/
+  GPUCache) port đúng từ cleanup.ts. RAM_NOTE/gaming note giữ nguyên text.

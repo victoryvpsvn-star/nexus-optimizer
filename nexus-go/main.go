@@ -1,0 +1,86 @@
+// NEXUS Optimizer — bản Go (single-file exe, không Electron, không server con)
+// Kiến trúc: 1 tiến trình duy nhất — HTTP server lắng nghe 127.0.0.1:<cổng ngẫu nhiên trống>,
+// UI nhúng trong exe, mở cửa sổ WebView2 (Windows) hoặc trình duyệt mặc định (fallback).
+// Không còn cổng cố định 32123 → không còn lỗi kẹt cổng / tiến trình zombie giữ cổng.
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"time"
+)
+
+const AppVersion = "2.0.0"
+
+var appState *Store
+
+func main() {
+	web := flag.Bool("web", false, "Chạy chế độ web (mở trình duyệt, không mở cửa sổ app)")
+	port := flag.Int("port", 0, "Cổng HTTP cụ thể (mặc định: chọn cổng trống ngẫu nhiên)")
+	flag.Parse()
+
+	appState = NewStore(dataDir())
+	if err := appState.Load(); err != nil {
+		log.Printf("[store] đọc config lỗi (dùng mặc định): %v", err)
+	}
+	appState.StartAutosave(3 * time.Second)
+
+	// HTTP server: bind cổng yêu cầu hoặc cổng trống do OS cấp (127.0.0.1:0) — không thể kẹt cổng
+	mux := buildMux()
+	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprint(*port)))
+	if err != nil {
+		log.Fatalf("Không mở được cổng HTTP: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
+
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server dừng: %v", err)
+		}
+	}()
+	log.Printf("NEXUS Optimizer %s (%s/%s) — %s — dữ liệu: %s", AppVersion, runtime.GOOS, runtime.GOARCH, baseURL, dataDir())
+
+	// Mở UI: cửa sổ WebView2 trên Windows (không có runtime WebView2 → tự fallback trình duyệt);
+	// --web hoặc không phải Windows → mở trình duyệt mặc định.
+	if *web || runtime.GOOS != "windows" {
+		openBrowser(baseURL)
+		fmt.Println("Chế độ web đang chạy — mở", baseURL, "(Ctrl+C để thoát)")
+		select {} // giữ tiến trình sống
+	}
+	if !runWebView(baseURL) {
+		log.Printf("WebView2 không khả dụng — mở trình duyệt mặc định")
+		openBrowser(baseURL)
+		select {}
+	}
+}
+
+/** Thư mục dữ liệu: %APPDATA%/NEXUS Optimizer (Windows) hoặc NEXUS_DATA_DIR/XDG (khác) */
+func dataDir() string {
+	if v := os.Getenv("NEXUS_DATA_DIR"); v != "" {
+		_ = os.MkdirAll(v, 0o755)
+		return v
+	}
+	if runtime.GOOS == "windows" {
+		if ad := os.Getenv("APPDATA"); ad != "" {
+			p := filepath.Join(ad, "NEXUS Optimizer")
+			_ = os.MkdirAll(p, 0o755)
+			return p
+		}
+	}
+	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
+		p := filepath.Join(x, "nexus-optimizer")
+		_ = os.MkdirAll(p, 0o755)
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	p := filepath.Join(home, ".local", "share", "nexus-optimizer")
+	_ = os.MkdirAll(p, 0o755)
+	return p
+}

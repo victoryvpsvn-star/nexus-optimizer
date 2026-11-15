@@ -1,0 +1,77 @@
+name: Build Go Edition (exe nhẹ ~9MB)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'nexus-go/**'
+      - '.github/workflows/build-go.yml'
+
+concurrency:
+  group: build-go-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Vet (kiểm tra tĩnh)
+        working-directory: nexus-go
+        run: go vet ./...
+
+      - name: Build Linux (kiểm tra dịch được ở cả 2 nền tảng)
+        working-directory: nexus-go
+        run: go build -o /tmp/nexus-go-linux .
+
+      - name: Build Windows x64 exe (GUI, không cửa sổ console)
+        working-directory: nexus-go
+        run: GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui" -o release/NEXUS-Optimizer-Go-x64.exe .
+
+      - name: Liệt kê kết quả
+        run: ls -la nexus-go/release/
+
+      - name: Upload artifact (exe Go)
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: NEXUS-Optimizer-Go-x64-${{ github.run_number }}
+          path: nexus-go/release/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Tạo GitHub Release (khi bấm Run workflow)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: go-v${{ github.run_number }}
+          name: NEXUS Optimizer Go edition — build #${{ github.run_number }}
+          body: |
+            **Go edition** — viết lại toàn bộ bằng Go, KHÔNG còn Electron/Node/Next.js.
+
+            - **1 file duy nhất `NEXUS-Optimizer-Go-x64.exe` (~9MB)** — chạy trực tiếp, không cần cài đặt
+            - Khởi động gần như tức thì (<1s), không giải nén như bản portable cũ (140MB)
+            - **Không còn cổng cố định 32123**: HTTP nội bộ bind cổng trống do Windows cấp → không thể kẹt cổng, không còn tiến trình zombie giữ cổng
+            - UI nhúng sẵn trong exe (WebView2 Win10/11); thiếu runtime WebView2 sẽ tự mở trình duyệt mặc định
+            - Đủ tính năng bản cũ: Tổng quan realtime (gopsutil), 35 tinh chỉnh Windows nguyên vẹn, Dọn dẹp disk+RAM, Gaming Mode, Tiến trình, Mạng, Script, Tự kiểm tra + webhook Discord, Ảnh chụp, **Sao lưu registry (.reg)**, Cài đặt giao diện
+            - Dữ liệu lưu `%APPDATA%\NEXUS Optimizer\config.json` (thay Prisma/SQLite — nhẹ và bền hơn)
+            - Cờ `--web` để chạy chế độ web; `--port N` để cố định cổng nếu muốn
+
+            > File chưa ký số (no code signing) — Windows SmartScreen có thể hỏi "More info → Run anyway".
+            > Bản Electron cũ vẫn ở các release `win-x64-v*` nếu cần quay lại.
+          files: nexus-go/release/*.exe
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

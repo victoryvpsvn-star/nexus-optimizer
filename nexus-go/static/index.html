@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS Optimizer</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div>
+        <div class="brand-name">NEXUS Optimizer</div>
+        <div class="brand-sub" id="brandVersion">Go edition</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <button class="nav-item active" data-section="overview"><span class="ico">📊</span>Tổng quan</button>
+      <button class="nav-item" data-section="cleanup"><span class="ico">🧹</span>Dọn dẹp</button>
+      <button class="nav-item" data-section="gaming"><span class="ico">🎮</span>Gaming Mode</button>
+      <button class="nav-item" data-section="tweaks"><span class="ico">🛠️</span>Tinh chỉnh</button>
+      <button class="nav-item" data-section="processes"><span class="ico">⚙️</span>Tiến trình</button>
+      <button class="nav-item" data-section="network"><span class="ico">🌐</span>Mạng</button>
+      <button class="nav-item" data-section="script"><span class="ico">📜</span>Script nâng cao</button>
+      <button class="nav-item" data-section="selftest"><span class="ico">🧪</span>Tự kiểm tra</button>
+      <button class="nav-item" data-section="screenshot"><span class="ico">📷</span>Ảnh chụp</button>
+      <button class="nav-item" data-section="backup"><span class="ico">💾</span>Sao lưu</button>
+      <button class="nav-item" data-section="settings"><span class="ico">🎨</span>Cài đặt</button>
+    </nav>
+    <div class="sidebar-footer" id="sidebarFooter">—</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="sectionTitle">Tổng quan</h1>
+        <p id="sectionSub" class="section-sub">Giám sát CPU, RAM, Disk realtime</p>
+      </div>
+      <div class="badges" id="topBadges"></div>
+    </header>
+
+    <div id="toast-wrap"></div>
+
+    <section id="sec-overview" class="section active">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-label">CPU</div><div class="stat-value" id="ovCpu">–</div><div class="stat-desc" id="ovCpuDesc">—</div><div class="bar"><div class="bar-fill" id="ovCpuBar"></div></div></div>
+        <div class="stat-card"><div class="stat-label">RAM</div><div class="stat-value" id="ovMem">–</div><div class="stat-desc" id="ovMemDesc">—</div><div class="bar"><div class="bar-fill warn" id="ovMemBar"></div></div></div>
+        <div class="stat-card"><div class="stat-label">Ổ đĩa</div><div class="stat-value" id="ovDisk">–</div><div class="stat-desc" id="ovDiskDesc">—</div><div class="bar"><div class="bar-fill ok" id="ovDiskBar"></div></div></div>
+        <div class="stat-card"><div class="stat-label">Mạng</div><div class="stat-value" id="ovNet">–</div><div class="stat-desc" id="ovNetDesc">↓ / ↑ KB/s</div></div>
+      </div>
+      <div class="card-row">
+        <div class="card"><h3>Ổ đĩa chi tiết</h3><table id="ovDisks"><thead><tr><th>Ổ</th><th>Tổng</th><th>Đã dùng</th><th>Còn lại</th><th>%</th></tr></thead><tbody></tbody></table></div>
+        <div class="card"><h3>Hệ thống</h3><div id="ovSys" class="kv"></div></div>
+      </div>
+    </section>
+
+    <section id="sec-cleanup" class="section">
+      <div class="actions-row">
+        <button class="btn primary" id="cleanupDisk">🧹 Dọn Disk</button>
+        <button class="btn primary" id="cleanupRam">⚡ Dọn RAM</button>
+        <button class="btn" id="cleanupAll">🚀 Dọn tất cả</button>
+        <span id="cleanupBusy" class="muted"></span>
+      </div>
+      <p class="muted" id="cleanupRamNote"></p>
+      <div class="card"><h3>Mục tiêu dọn dẹp</h3><table id="cleanupTargets"><thead><tr><th>Mục tiêu</th><th>Đường dẫn</th><th>Dung lượng</th><th>Ghi chú</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><h3>Lịch sử dọn dẹp</h3><table id="cleanupLogs"><thead><tr><th>Thời gian</th><th>Loại</th><th>Mục tiêu</th><th>Giải phóng</th><th>Kết quả</th></tr></thead><tbody></tbody></table></div>
+      <div class="card" id="cleanupResultsCard" style="display:none"><h3>Kết quả lần chạy gần nhất</h3><div id="cleanupResults"></div></div>
+    </section>
+
+    <section id="sec-gaming" class="section">
+      <div class="card">
+        <div class="row-between">
+          <div><h3>Gaming Mode</h3><p class="muted" id="gamingNote">—</p></div>
+          <button class="btn primary big" id="gamingToggle">Bật Gaming Mode</button>
+        </div>
+        <div id="gamingStatus" class="muted">—</div>
+      </div>
+      <div class="card"><h3>Kết quả áp dụng</h3><table id="gamingEffects"><thead><tr><th>Tinh chỉnh</th><th>Kết quả</th><th>Chi tiết</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section id="sec-tweaks" class="section">
+      <div class="actions-row">
+        <button class="btn primary" id="tweaksApplySel">✅ Áp dụng mục đã chọn</button>
+        <button class="btn danger" id="tweaksRevertSel">↩️ Hoàn tác mục đã chọn</button>
+        <button class="btn" id="tweaksSelAll">Chọn tất cả</button>
+        <button class="btn" id="tweaksSelNone">Bỏ chọn</button>
+        <span id="tweaksBusy" class="muted"></span>
+      </div>
+      <div class="filters" id="tweakFilters">
+        <button class="chip active" data-cat="all">Tất cả</button>
+        <button class="chip" data-cat="Hiệu năng">Hiệu năng</button>
+        <button class="chip" data-cat="Gaming">Gaming</button>
+        <button class="chip" data-cat="Mạng">Mạng</button>
+        <button class="chip" data-cat="Bộ nhớ">Bộ nhớ</button>
+        <button class="chip" data-cat="Bảo mật & riêng tư">Bảo mật</button>
+      </div>
+      <div id="tweakList"></div>
+    </section>
+
+    <section id="sec-processes" class="section">
+      <div class="actions-row">
+        <button class="btn" id="procRefresh">🔄 Làm mới</button>
+        <input type="text" id="procSearch" placeholder="Tìm tiến trình theo tên / PID…" class="input">
+      </div>
+      <div class="card"><table id="procTable"><thead><tr><th>PID</th><th>Tên</th><th>Người dùng</th><th>CPU %</th><th>RAM %</th><th>RAM (MB)</th><th></th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section id="sec-network" class="section">
+      <div class="card-row">
+        <div class="card"><h3>Giao diện mạng</h3><div id="netIfaces" class="kv"></div></div>
+        <div class="card"><h3>Cổng đang LISTEN</h3><div id="netPorts" class="chips"></div></div>
+      </div>
+      <div class="actions-row"><button class="btn" id="netRefresh">🔄 Làm mới</button></div>
+    </section>
+
+    <section id="sec-script" class="section">
+      <div class="card">
+        <h3>Chạy script tùy chỉnh (Advanced)</h3>
+        <p class="muted">Chỉ dành cho người biết code — script chạy với quyền của app. Timeout tối đa 180s.</p>
+        <div class="row-gap">
+          <select id="scriptLang" class="input w-auto"></select>
+          <input type="number" id="scriptTimeout" class="input w-auto" value="90000" min="1000" max="180000" step="1000" title="Timeout (ms)">
+          <button class="btn primary" id="scriptRun">▶️ Chạy</button>
+        </div>
+        <textarea id="scriptCode" class="code" rows="10" spellcheck="false" placeholder="Nhập code ở đây…"></textarea>
+        <pre id="scriptOut" class="code out" hidden></pre>
+      </div>
+      <div class="card"><h3>Script đã lưu</h3><div id="scriptSaved" class="chips"></div></div>
+    </section>
+
+    <section id="sec-selftest" class="section">
+      <div class="card">
+        <div class="row-between">
+          <div><h3>Tự kiểm tra</h3><p class="muted" id="selftestNote">Kiểm tra môi trường + toàn bộ catalog tinh chỉnh.</p></div>
+          <div class="row-gap">
+            <button class="btn" id="selftestCheck">🧪 Kiểm tra (check)</button>
+            <button class="btn primary" id="selftestFull">🚀 Full (apply → revert)</button>
+          </div>
+        </div>
+        <div class="kv" id="selftestRuntime">—</div>
+        <div class="row-gap">
+          <input type="text" id="webhookUrl" class="input grow" placeholder="https://discord.com/api/webhooks/… (để gửi báo cáo về Discord)">
+          <button class="btn" id="webhookSave">Lưu webhook</button>
+        </div>
+        <p class="muted" id="webhookMasked"></p>
+      </div>
+      <div class="card" id="selftestReportCard" style="display:none"><h3>Báo cáo</h3><div id="selftestSummary"></div><div id="selftestItems"></div></div>
+    </section>
+
+    <section id="sec-screenshot" class="section">
+      <div class="card">
+        <h3>Ảnh chụp màn hình</h3>
+        <p class="muted">Chụp dashboard (Ctrl+Shift+S hoặc nút bên dưới) → lưu vào thư mục dữ liệu.</p>
+        <div class="actions-row"><button class="btn primary" id="shotCapture">📷 Chụp dashboard</button></div>
+        <div id="shotGrid" class="shot-grid"></div>
+      </div>
+    </section>
+
+    <section id="sec-backup" class="section">
+      <div class="card">
+        <h3>Sao lưu registry</h3>
+        <p class="muted">Export các key registry mà tinh chỉnh đụng tới thành file .reg — chạy TRƯỚC khi áp dụng tinh chỉnh để có thể khôi phục bằng cách import.</p>
+        <div class="actions-row">
+          <button class="btn primary" id="backupCreate">💾 Tạo backup registry</button>
+          <button class="btn" id="backupOpen">📂 Mở thư mục backup</button>
+        </div>
+        <table id="backupTable"><thead><tr><th>File</th><th>Kích thước</th><th>Thời gian</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <section id="sec-settings" class="section">
+      <div class="card">
+        <h3>Giao diện</h3>
+        <div class="form-grid">
+          <label>Màu nhấn
+            <select id="setAccent" class="input">
+              <option value="sakura-pink">Sakura Pink</option>
+              <option value="sakura-lavender">Sakura Lavender</option>
+              <option value="cyan-violet">Cyan Violet</option>
+              <option value="emerald-amber">Emerald Amber</option>
+              <option value="rose-magenta">Rose Magenta</option>
+              <option value="amber-crimson">Amber Crimson</option>
+            </select>
+          </label>
+          <label>Bo góc (rem)
+            <input type="number" id="setRadius" class="input" step="0.05" min="0" max="2.5">
+          </label>
+          <label class="check"><input type="checkbox" id="setPetals"> Hiệu ứng cánh hoa</label>
+        </div>
+        <button class="btn primary" id="settingsSave">Lưu cài đặt</button>
+      </div>
+      <div class="card">
+        <h3>Hệ thống</h3>
+        <div class="kv" id="settingsSystem">—</div>
+        <div class="actions-row"><button class="btn" id="relaunchAdmin">🛡️ Chạy lại với quyền Admin</button></div>
+        <p class="muted">Phiên bản <span id="setVersion"></span> — Go edition, 1 exe duy nhất, không cần cài đặt.</p>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
