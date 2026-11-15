@@ -56,6 +56,9 @@ jobs:
 
       - name: Upload artifact (exe)
         uses: actions/upload-artifact@v4
+        # Soft-fail: quota storage account-wide có thể đầy và chỉ refresh mỗi 6-12h —
+        # artifact là kênh phụ, GitHub Release (không tốn quota Actions) là kênh chính.
+        continue-on-error: true
         with:
           name: NEXUS-Optimizer-win-x64-${{ github.run_number }}
           path: release/*.exe
