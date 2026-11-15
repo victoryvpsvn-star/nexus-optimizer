@@ -83,3 +83,18 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   set env DISCORD_WEBHOOK_URL. Masked hiển thị dạng .../webhooks/1234…5678/***xxxx.
 - selftest full mode CHỈ chạy trên Windows; trên Linux trả skipped trung thực.
 - regDeleteValues/Query dựa vào exit code của reg.exe (locale-free) — KHÔNG parse text localize.
+
+## Bổ sung 9-b: fix "Server nội bộ không trả lời sau 45 giây — cổng 32123" (main.js)
+- User screenshot lỗi khởi động Electron: server nội bộ không bind/đáp ứng được cổng 32123.
+  Chẩn đoán khả năng cao nhất: tiến trình NEXUS cũ bị kill mạnh (Task Manager/đóng app khi đang
+  lỗi đợt trước) còn chạy nền giữ cổng → server mới bị EADDRINUSE, ready-check không bao giờ thấy
+  phản hồi. (Cổng 32123 là cổng nội bộ 127.0.0.1 của app — không phải thứ user cần cấu hình.)
+- main.js giờ: (1) `sweepZombieServers()` quét Win32_Process Name LIKE 'NEXUS%' + CommandLine có
+  'server.js' và pid khác mình → Stop-Process (best-effort qua PowerShell, fail thì bỏ qua);
+  (2) `pickPort()` bind-test 32123..32132 chọn cổng trống → PORT/BASE_URL động; (3) output server
+  ghi vào `%APPDATA%/NEXUS Optimizer/data/server.log` + ring buffer `srvTail`; (4) dialog lỗi
+  khởi động/server-chết giờ kèm 8 dòng output cuối của server + đường dẫn log đầy đủ;
+  (5) waitReady 45s→75s, poll 500ms→400ms (chống AV quét chậm lần đầu chạy exe mới);
+  (6) `node --check` main.js OK, `npm run build:win` OK (post-build + stage-electron).
+- LƯU Ý: dialog "45 giây" trong screenshot có thể là bản CŨ đang cài trên máy (v4/v5/v6 đều dùng
+  text cũ) — user cần cài/chạy lại bản ≥ v7; bản mới tự dọn cổng nên không cần can thiệp tay.

@@ -1,17 +1,38 @@
 // NEXUS Optimizer — Electron wrapper cho bản Windows x64
 // Khởi động Next.js standalone server (ELECTRON_RUN_AS_NODE) rồi mở cửa sổ app.
 const { app, BrowserWindow, dialog, shell } = require('electron')
-const { spawn } = require('child_process')
+const { spawn, execFile } = require('child_process')
 const http = require('http')
+const net = require('net')
 const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
 
-const PORT = 32123
-const BASE_URL = `http://127.0.0.1:${PORT}`
+const PREFERRED_PORT = 32123
+const PORT_RANGE = 10 // 32123..32132 — cổng bận thì tự dịch sang cổng kế tiếp
+let PORT = PREFERRED_PORT
+let BASE_URL = `http://127.0.0.1:${PORT}`
 let serverProc = null
 let win = null
 let quitting = false
+// Ring buffer giữ phần cuối output của server — hiển thị trong dialog khi khởi động lỗi
+const SRV_TAIL_MAX = 6000
+let srvTail = ''
+let srvLogPath = null
+
+function srvAppend(kind, chunk) {
+  const text = String(chunk)
+  srvTail = (srvTail + text).slice(-SRV_TAIL_MAX)
+  if (srvLogPath) {
+    try {
+      fs.appendFileSync(srvLogPath, `[${new Date().toISOString()}] [${kind}] ${text}`)
+    } catch {
+      /* không ghi được log thì bỏ qua */
+    }
+  }
+  if (kind === 'out') process.stdout.write('[srv] ' + text)
+  else process.stderr.write('[srv] ' + text)
+}
 
 /** server.js của bản build standalone: trong package đóng gói nằm ở resources/app */
 function serverEntry() {
@@ -22,6 +43,52 @@ function serverEntry() {
 /** Thư mục dữ liệu người dùng (DB SQLite, backups, restored) */
 function dataDir() {
   return path.join(app.getPath('userData'), 'data')
+}
+
+/**
+ * Quét dọn tiến trình "zombie" từ phiên trước: server cũ chạy nền (exe NEXUS với
+ * ELECTRON_RUN_AS_NODE giữ server.js) từng bị giữ cổng 32123 khiến lần mở sau
+ * "Server nội bộ không trả lời sau 45 giây". Chỉ kill process CỦA CHÍNH APP NÀY
+ * (đúng tên exe + command line chứa server.js) — không đụng tiến trình node/app khác.
+ * Best-effort qua PowerShell; máy không có PowerShell thì bỏ qua (cổng fallback lo phần còn lại).
+ */
+function sweepZombieServers() {
+  if (!app.isPackaged || process.platform !== 'win32') return Promise.resolve()
+  return new Promise((resolve) => {
+    const psScript =
+      `$me = ${process.pid}\n` +
+      // Name LIKE 'NEXUS%' khớp cả "NEXUS Optimizer.exe" (bản cài) lẫn
+      // "NEXUS-Optimizer-Portable-…exe" (bản chạy trực tiếp)
+      `Get-CimInstance Win32_Process -Filter "Name LIKE 'NEXUS%'" | Where-Object {\n` +
+      `  $_.ProcessId -ne $me -and $_.CommandLine -like '*server.js*'\n` +
+      `} | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch { } }\n` +
+      `exit 0`
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psScript],
+      { windowsHide: true, timeout: 15000 },
+      () => resolve(), // thành công/thất bại đều tiếp tục — cổng fallback sẽ xử lý phần còn lại
+    )
+  })
+}
+
+/** Kiểm tra một cổng trên 127.0.0.1 còn trống không (bind thử rồi nhả ngay) */
+function portFree(port) {
+  return new Promise((resolve) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve(false))
+    srv.once('listening', () => srv.close(() => resolve(true)))
+    srv.listen(port, '127.0.0.1')
+  })
+}
+
+/** Tìm cổng trống bắt đầu từ PREFERRED_PORT — hết bị chiếm bởi tiến trình zombie cũ */
+async function pickPort() {
+  for (let i = 0; i < PORT_RANGE; i++) {
+    const p = PREFERRED_PORT + i
+    if (await portFree(p)) return p
+  }
+  return PREFERRED_PORT // hiếm khi tới đây — trả cổng ưu tiên và để server báo lỗi thật
 }
 
 /** Hash của schema.prisma trong template — dùng làm marker phiên bản schema DB */
@@ -108,6 +175,14 @@ function startServer(dbFile) {
     app.quit()
     return false
   }
+  // Log server ra file userData/data/server.log (ghi đè mỗi phiên) — lỗi thật luôn có bằng chứng
+  srvTail = ''
+  try {
+    srvLogPath = path.join(dataDir(), 'server.log')
+    fs.writeFileSync(srvLogPath, `=== NEXUS server log — ${new Date().toISOString()} — port ${PORT} ===\n`)
+  } catch {
+    srvLogPath = null
+  }
   serverProc = spawn(process.execPath, [entry], {
     cwd: path.dirname(entry),
     windowsHide: true,
@@ -125,8 +200,8 @@ function startServer(dbFile) {
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  serverProc.stdout?.on('data', (d) => process.stdout.write('[srv] ' + d))
-  serverProc.stderr?.on('data', (d) => process.stderr.write('[srv] ' + d))
+  serverProc.stdout?.on('data', (d) => srvAppend('out', d))
+  serverProc.stderr?.on('data', (d) => srvAppend('err', d))
   serverProc.on('exit', (code) => {
     serverProc = null
     if (!quitting) {
@@ -150,10 +225,12 @@ function startServer(dbFile) {
         app.quit()
         return
       }
-      // Server chết đột tử → đóng app thay vì treo cửa sổ trắng
+      // Server chết đột tử → đóng app thay vì treo cửa sổ trắng; kèm log thật để chẩn đoán
       dialog.showErrorBox(
         'NEXUS Optimizer đã dừng',
-        `Tiến trình server thoát đột ngột (mã ${code ?? 'không rõ'}).\nHãy mở lại ứng dụng.`,
+        `Tiến trình server thoát đột ngột (mã ${code ?? 'không rõ'}).\n\n` +
+          tailOfSrvTail() +
+          `\nLog đầy đủ: ${srvLogPath ?? '(không ghi được log)'}\n\nHãy mở lại ứng dụng.`,
       )
       app.quit()
     }
@@ -161,8 +238,16 @@ function startServer(dbFile) {
   return true
 }
 
+/** Đoạn cuối output server (đã rút gọn cho dialog) */
+function tailOfSrvTail() {
+  const t = srvTail.trim()
+  if (!t) return '(server không ghi ra output nào)'
+  const lines = t.split(/\r?\n/).slice(-8).join('\n')
+  return `--- Output cuối của server ---\n${lines.slice(-1200)}\n------------------------------`
+}
+
 /** Chờ server trả 2xx/4xx từ /api/stats (4xx nghĩa là server đã lên nhưng auth lỗi — vẫn cho mở) */
-function waitReady(timeoutMs = 45000) {
+function waitReady(timeoutMs = 75000) {
   const t0 = Date.now()
   return new Promise((resolve, reject) => {
     const once = () => {
@@ -180,7 +265,7 @@ function waitReady(timeoutMs = 45000) {
     }
     const retry = () => {
       if (Date.now() - t0 > timeoutMs) return reject(new Error('server không phản hồi'))
-      setTimeout(once, 500)
+      setTimeout(once, 400)
     }
     once()
   })
@@ -227,6 +312,10 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
+    // Dọn server cũ còn treo giữ cổng (nếu có), rồi chọn cổng trống để server mới lên
+    await sweepZombieServers()
+    PORT = await pickPort()
+    BASE_URL = `http://127.0.0.1:${PORT}`
     const dbFile = ensureDatabase()
     if (!startServer(dbFile)) return
     try {
@@ -234,7 +323,10 @@ if (!gotLock) {
     } catch (e) {
       dialog.showErrorBox(
         'NEXUS Optimizer — không khởi động được',
-        `Server nội bộ không trả lời sau 45 giây.\n\n${String(e && e.message ? e.message : e)}\n\nHãy thử mở lại ứng dụng, hoặc kiểm tra cổng ${PORT} có bị chiếm không.`,
+        `Server nội bộ không trả lời sau 75 giây (cổng ${PORT}).\n\n` +
+          tailOfSrvTail() +
+          `\nLog đầy đủ: ${srvLogPath ?? '(không ghi được log)'}\n\n` +
+          `Hãy thử mở lại ứng dụng. Nếu vẫn lỗi: mở Task Manager và kết thúc mọi tiến trình "NEXUS Optimizer.exe" còn sót, rồi mở lại.`,
       )
       app.quit()
       return
