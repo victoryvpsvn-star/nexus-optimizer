@@ -133,9 +133,13 @@ func runStep(s step, revert bool) (string, bool) {
 		}
 		return "", true
 	case stepSc:
-		cfg := runSysExe("sc.exe", []string{"config", s.Name, "start=", s.Data}, s.timeout())
+		mode := s.Data
+		if !revert {
+			mode = "disabled" // apply luôn disable (DSL SC:svc|revertMode — Data là mode hoàn tác)
+		}
+		cfg := runSysExe("sc.exe", []string{"config", s.Name, "start=", mode}, s.timeout())
 		if !cfg.OK && cfg.Code != scSvcMissing {
-			return failStep(fmt.Sprintf("sc config %s start=%s", s.Name, s.Data), cfg)
+			return failStep(fmt.Sprintf("sc config %s start=%s", s.Name, mode), cfg)
 		}
 		if cfg.Code == scSvcMissing {
 			return "", true // dịch vụ không tồn tại (máy rút gọn) — coi như xong
@@ -151,6 +155,7 @@ func runStep(s step, revert bool) (string, bool) {
 		if !set.OK {
 			return failStep("powercfg setacvalueindex", set)
 		}
+		_ = runSysExe("powercfg.exe", []string{"-setdcvalueindex", powercfgGuidCurrent, s.Sub, s.Setting, s.Data}, s.timeout()) // laptop: giá trị pin (bỏ qua lỗi desktop)
 		act := runSysExe("powercfg.exe", []string{"/setactive", powercfgGuidCurrent}, s.timeout())
 		if !act.OK {
 			return failStep("powercfg setactive", act)

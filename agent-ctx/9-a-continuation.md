@@ -168,3 +168,14 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
 - Verify: go vet OK; linux build OK; exe Windows 9.16MB; smoke test: 215 tweaks, order 1..215,
   unique ids, apply trên Linux báo lỗi trung thực 3 loại (reg/PS/adminGate), selftest 2 pass +
   216 skip đúng, deps suy đúng cho từng loại step.
+
+
+## Bổ sung 10-c: 3 agent review tìm ra + đã fix 3 bug critical
+- CRITICAL: stepSc apply chạy start=<Data> ở cả 2 chiều → 31 dòng SC trong TSV không bao giờ disable.
+  Fix: runStep ép mode=disabled khi apply; Data chỉ dùng cho revert (cũng tự vá svc-ndu/svc-uhssvc no-op).
+- HIGH: stepPc chỉ setacvalueindex — thêm setdcvalueindex tolerant cho laptop.
+- MEDIUM: revert ui-hide-3d-objects/gallery tạo key rỗng → giờ reg add /v (Default) đặt lại giá trị CLSID.
+- Chưa fix (ghi lại cho đợt sau): /api/script POST tùy ý không có Origin gate (vector drive-by
+  localhost — cần middleware Origin check); system.go backup .reg ghi không atomic + nil Stat panic;
+  stepTask revert /ENABLE bật lại task user từng tắt thủ công (state loss); readBody CT gate.
+- Verify: go vet OK, go test OK, exe Windows build OK → download/Sakura-Tool-x64.exe.

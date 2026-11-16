@@ -1040,6 +1040,10 @@ func tweakActions() []TweakAction {
 		}
 		catalogVal = append(catalogVal, base...)
 		catalogVal = append(catalogVal, tables...)
+		// đánh số phẳng cuối cùng 1..N — đảm bảo unique
+		for i := range catalogVal {
+			catalogVal[i].Def.Order = i + 1
+		}
 	})
 	return catalogVal
 }
