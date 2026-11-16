@@ -1,4 +1,5 @@
-// Cat Status v2.4.0 — CHỈ báo Discord khi Sakura Tool đang mở (quảng cáo tool + icon app).
+// Cat Status v2.5.0 — CHỈ báo Discord khi Sakura Tool đang mở (quảng cáo tool + icon app).
+// v2.5.0: bấm Bật mà chưa đăng nhập → tự mở tab OAuth Discord (không cần biết phải login trước).
 // BỎ hoàn toàn dect nhạc/video (tabs classify, mediaSession, oembed...).
 // Báo qua API Discord trực tiếp (headless-sessions, OAuth đã đăng nhập) →
 // KHÔNG CẦN Discord desktop. Dect "tool đang mở" = poll beacon localhost của tool;
@@ -228,9 +229,11 @@ chrome.runtime.onMessage.addListener((msg, _s, send) => {
     try {
       if (msg.type === "login") await login();
       else if (msg.type === "start") {
+        const { auth } = await chrome.storage.local.get("auth");
         await chrome.storage.local.set({ enabled: true, startedAt: Date.now(), lastError: null });
         lastKey = "";
-        await syncSakura();
+        if (!auth) await login(); // chưa login → Bật là tự mở tab Đăng nhập Discord
+        else await syncSakura();
         ensureAlarms();
       } else if (msg.type === "stop") {
         await chrome.alarms.clear("beacon");

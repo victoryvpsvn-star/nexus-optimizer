@@ -63,6 +63,7 @@ func handlePresence(w http.ResponseWriter, r *http.Request) {
 			"enabled": en && c.Enabled, "connected": conn, "appId": appID,
 			"section": section, "note": note, "dir": presenceDirLabel(),
 			"policy": map[string]any{"enabled": c.PolicyEnabled, "port": c.PolicyPort, "updateUrl": extUpdateURL(), "source": extSourcePattern(), "extId": extCacheID},
+			"beacon": map[string]any{"port": beaconActivePort(), "lastSeenSec": beaconSeenSec()},
 		})
 		return
 	}

@@ -10,8 +10,23 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
+
+// Extension poll beacon bao nhiêu lâu một lần — tool dùng để hiển thị "extension đang sống"
+var beaconLastPoll int64
+var beaconPortActive int32
+
+func beaconSeenSec() int64 {
+	lp := atomic.LoadInt64(&beaconLastPoll)
+	if lp == 0 {
+		return -1
+	}
+	return time.Now().Unix() - lp
+}
+
+func beaconActivePort() int { return int(atomic.LoadInt32(&beaconPortActive)) }
 
 /** Chạy nền từ main: chiếm 1 cổng cố định làm beacon */
 func startBeacon() {
@@ -22,6 +37,7 @@ func startBeacon() {
 		}
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /api/presence-beacon", func(w http.ResponseWriter, r *http.Request) {
+			atomic.StoreInt64(&beaconLastPoll, time.Now().Unix()) // extension vừa hỏi → còn sống
 			_, _, _, sec, note := presenceStatus()
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -33,6 +49,7 @@ func startBeacon() {
 			})
 		})
 		srv := &http.Server{Handler: mux, ReadHeaderTimeout: 3 * time.Second}
+		atomic.StoreInt32(&beaconPortActive, int32(p))
 		go func(port int, l net.Listener, s *http.Server) {
 			log.Printf("[beacon] Sakura beacon chạy tại 127.0.0.1:%d (extension sẽ thấy tool mở)", port)
 			_ = s.Serve(l)

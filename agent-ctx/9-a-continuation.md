@@ -292,3 +292,22 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   badge FREE; Dọn dẹp có hero mascot + checkbox list + select buttons (Linux chỉ hiện target
   unsupported — Windows thật sẽ ra 11 mục có size). exe 13.8MB (nhúng ảnh), buildNumber=17 →
   banner sẽ hiện go-v18 sau dispatch = demo updater tiếp.
+
+
+## Bổ sung 10-j: v3.2.1 + ext v2.5.0 — extension cài rồi mà Discord không hiện
+- User: "cài tiện ích rồi mà sao không hiện khi dùng Sakura Tool". Flow thật: tool mở beacon
+  127.0.0.1:32123 (fallback 32124, beacon.go) → ext MV3 poll /api/presence-beacon alarm 30s →
+  app=sakura-tool → POST discord.com/api/v10/users/@me/headless-sessions (OAuth popup Đăng nhập
+  + Bật). Code đúng — vấn đề: KHÔNG có chẩn đoán bước nào gãy (login? Bật? beacon? version?),
+  update.xml hardcode "2.4.0", và download/ có 2 zip (v2.3.0 cũ KHÔNG có dect sakura → cài nhầm
+  là chết).
+- Fix ext v2.5.0: popup viết lại = 3 bước (Đăng nhập/Bật/Tool đang mở) mỗi bước ✅/❌ + version
+  dòng dưới + popup TỰ fetch beacon (không chờ alarm); Bật mà chưa có auth → tự login() OAuth;
+  manifest 2.5.0. Fix tool v3.2.1: beacon ghi lastPoll (atomic) + port active; GET /api/presence
+  trả beacon{port,lastSeenSec}; UI Tổng quan có dòng 🟢 "extension đang poll …s trước" / 🟡
+  checklist khi chưa thấy (app.js refreshBeaconStatus 5s, chỉ khi overview active);
+  extManifestVersion() đọc manifest nhúng → update.xml không bao giờ lệch version.
+- Smoke: update.xml version="2.5.0" ✓, crx 200 38KB ✓, poll 32123 → lastSeenSec 1 ✓ (lưu ý
+  curl nhầm port main server → 404 — beacon là server riêng, test đúng phải curl 32123);
+  node --check 2 js ✓. Bỏ zip cũ trong download/, chỉ còn Cat-Status-Sakura-v2.5.0.zip.
+- exe buildNumber=18 → banner sẽ hiện go-v19 (dispatch này) = chuỗi update tiếp tục.

@@ -1,17 +1,23 @@
 <!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-body{width:250px;margin:0;padding:12px;font:13px system-ui,sans-serif;background:#1e1f22;color:#f2f3f5}
-h1{font-size:14px;margin:0 0 8px}
-.row{margin:6px 0}
-button{padding:7px 9px;border:0;border-radius:6px;cursor:pointer;color:#fff;background:#5865f2;margin-right:6px}
-button.g{background:#4e5058}
-#st{color:#9fd6ff}#sk{color:#9fd6ff}
+body{width:280px;margin:0;padding:12px;font:13px system-ui,sans-serif;background:#1b1020;color:#fdeaf3}
+h1{font-size:14px;margin:0 0 2px;color:#ffb7d5}
+.sub{font-size:11px;color:#c9a0b8;margin-bottom:10px}
+.step{margin:7px 0;padding:8px 10px;border-radius:8px;background:#2a1626;border:1px solid #4a2a44;font-size:12.5px}
+.step b{color:#ffb7d5}
+.step.ok{border-color:#23a55a}.step.bad{border-color:#da373c}
+button{padding:7px 10px;border:0;border-radius:6px;cursor:pointer;color:#2a0f1e;font-weight:700;background:#ff7eb6;margin-right:6px;margin-top:9px}
+button.g{background:#4e5058;color:#fff;font-weight:400}
 #err{color:#f9a;white-space:pre-wrap;font-size:11px;min-height:12px;margin-top:8px}
+.ver{margin-top:10px;font-size:10.5px;color:#8a6b80}
 </style></head><body>
-<h1>🐱 Cat Status — Sakura Tool</h1>
-<div class="row">Discord: <span id="st">…</span></div>
-<div class="row">Sakura Tool: <span id="sk">…</span></div>
-<div class="row"><button id="login">Đăng nhập</button><button id="on" class="g">Bật</button><button id="off" class="g">Tắt</button></div>
+<h1>🌸 Cat Status — Sakura Tool</h1>
+<div class="sub">Discord hiện "🌸 Sakura Tool" khi tool đang mở</div>
+<div class="step" id="s1"><b>Bước 1 — Đăng nhập Discord:</b> <span id="st">…</span></div>
+<div class="step" id="s2"><b>Bước 2 — Bật status:</b> <span id="se">…</span></div>
+<div class="step" id="s3"><b>Bước 3 — Tool đang mở:</b> <span id="sk">…</span></div>
+<div><button id="login">Đăng nhập</button><button id="on">Bật</button><button id="off" class="g">Tắt</button></div>
 <div id="err"></div>
+<div class="ver" id="ver"></div>
 <script src="popup.js"></script>
 </body></html>

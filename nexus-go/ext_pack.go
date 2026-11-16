@@ -201,6 +201,19 @@ type gupdateAppXML struct {
 	AppID string `xml:"appid,attr"`
 }
 
+/** Version extension đọc trực tiếp từ manifest nhúng — update.xml không bao giờ lệch phiên bản */
+func extManifestVersion() string {
+	if b, err := catStatusFS.ReadFile("extension/cat-status/manifest.json"); err == nil {
+		var m struct {
+			Version string `json:"version"`
+		}
+		if json.Unmarshal(b, &m) == nil && m.Version != "" {
+			return m.Version
+		}
+	}
+	return "2.5.0"
+}
+
 func handleExtUpdateXML(w http.ResponseWriter, r *http.Request) {
 	_, id, err := packExtCRX()
 	if err != nil {
@@ -214,7 +227,7 @@ func handleExtUpdateXML(w http.ResponseWriter, r *http.Request) {
 		"  <app appid=%q>\n"+
 		"    <updatecheck codebase=%q version=%q />\n"+
 		"  </app>\n"+
-		`</gupdate>`+"\n", id, extCrxURL(), "2.4.0")
+		`</gupdate>`+"\n", id, extCrxURL(), extManifestVersion())
 }
 
 func handleExtCrx(w http.ResponseWriter, r *http.Request) {

@@ -810,3 +810,26 @@ $('relaunchAdmin').addEventListener('click', async () => {
     }
   } catch (_) {}
 })();
+
+// ---------- Beacon status: extension Cat Status có còn poll không ----------
+function refreshBeaconStatus() {
+  const sec = document.getElementById('sec-overview');
+  if (!sec || !sec.classList.contains('active')) return;
+  const el = document.getElementById('beaconStatus');
+  if (!el) return;
+  api('/api/presence').then((d) => {
+    const b = d.beacon || {};
+    if (b.lastSeenSec >= 0 && b.lastSeenSec <= 90) {
+      el.textContent = `🟢 Extension Cat Status đang hoạt động — poll beacon 127.0.0.1:${b.port} cách đây ${b.lastSeenSec}s. Đã Đăng nhập + Bật trong popup 🌸 thì Discord sẽ hiện "Sakura Tool".`;
+      el.style.color = '#6ee7a0';
+    } else if (b.lastSeenSec < 0) {
+      el.textContent = '🟡 Chưa thấy extension nào poll beacon. Checklist: (1) extension đã cài vào Chrome/Edge? (2) mở popup 🌸 → Đăng nhập → Bật chưa? (3) tool đang mở?';
+      el.style.color = '#fbbf24';
+    } else {
+      el.textContent = `🟡 Extension poll lần cuối ${b.lastSeenSec}s trước — Chrome đang ngủ hoặc extension bị tắt. Mở lại popup 🌸.`;
+      el.style.color = '#fbbf24';
+    }
+  }).catch(() => {});
+}
+setInterval(refreshBeaconStatus, 5000);
+refreshBeaconStatus();
