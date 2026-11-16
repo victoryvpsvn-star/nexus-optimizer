@@ -104,14 +104,57 @@ func tweakDeps(id string) (tools []string, needsPs bool) {
 	case "win-ram-clean", "win-ram-standby-clear", "win-ram-compression-off":
 		return nil, true
 	default:
+		// Tweak dạng bảng (tel-/sec-/appx-/svc-/perf-/upd-/game-/net-/ui-) —
+		// suy ra công cụ cần từ các step trong tableMap
+		if tt, ok := tableMap[id]; ok {
+			return deriveTableDeps(tt)
+		}
 		return []string{"reg.exe"}, false
 	}
+}
+
+/** Suy ra công cụ/tính năng cần thiết từ danh sách step của một tweak bảng */
+func deriveTableDeps(tt *tableTweak) (tools []string, needsPs bool) {
+	seen := map[string]bool{}
+	add := func(t string) {
+		if !seen[t] {
+			seen[t] = true
+			tools = append(tools, t)
+		}
+	}
+	check := func(steps []step) {
+		for _, s := range steps {
+			switch s.Kind {
+			case stepRegAdd, stepRegDel, stepRegAddVe, stepRegDelKey, stepRegAddKey:
+				add("reg.exe")
+			case stepSc:
+				add("sc.exe")
+			case stepPc:
+				add("powercfg.exe")
+			case stepTask:
+				add("schtasks.exe")
+			case stepAppx, stepPS:
+				needsPs = true
+			case stepExe:
+				if len(s.Args) > 0 {
+					add(s.Args[0])
+				} else {
+					add(s.Name)
+				}
+			}
+		}
+	}
+	check(tt.ApplySteps)
+	check(tt.RevertSteps)
+	return tools, needsPs
 }
 
 var toolLabels = map[string]string{
 	"reg.exe": "reg.exe (registry)", "powercfg.exe": "powercfg.exe (nguồn/điện)",
 	"sc.exe": "sc.exe (dịch vụ)", "ipconfig.exe": "ipconfig.exe (mạng)",
-	"bcdedit.exe": "bcdedit.exe (boot config)",
+	"bcdedit.exe": "bcdedit.exe (boot config)", "schtasks.exe": "schtasks.exe (task định kỳ)",
+	"netsh.exe": "netsh.exe (mạng)", "fsutil.exe": "fsutil.exe (NTFS)",
+	"Compact.exe": "Compact.exe (nén hệ thống)", "Dism.exe": "DISM (bảo trì hệ thống)",
 }
 
 func runCheck() []SelftestItem {

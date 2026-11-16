@@ -39,6 +39,7 @@ body {
   padding: 18px 12px;
   display: flex; flex-direction: column; gap: 6px;
   position: sticky; top: 0; height: 100vh;
+  overflow-y: auto; /* màn hình thấp: sidebar tự cuộn, không che nút */
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 14px; }
 .logo {

@@ -914,12 +914,51 @@ func findTweak(id string) *TweakAction {
 	return nil
 }
 
-// catalogCache giữ 1 instance duy nhất — các closure trong catalog không giữ state
+// catalogCache giữ 1 instance duy nhất — các closure trong catalog không giữ state.
+// Catalog tổng = 35 tweak closure gốc + các bảng dữ liệu (privacy/bloat/services/perf/gaming+net/ui),
+// sắp theo nhóm rồi đánh số thứ tự liên tục 1..N.
+var categoryOrder = []string{
+	"Hiệu năng", "Gaming", "Mạng", "Bộ nhớ", "Bảo mật & riêng tư",
+	"Dịch vụ", "Bloatware (UWP)", "Giao diện",
+}
+
+// tableMap: id -> tableTweak (dùng để suy ra công cụ cần cho selftest)
+var tableMap = map[string]*tableTweak{}
+
 var catalogOnce sync.Once
 var catalogVal []TweakAction
 
 func tweakActions() []TweakAction {
-	catalogOnce.Do(func() { catalogVal = tweakCatalog() })
+	catalogOnce.Do(func() {
+		base := tweakCatalog()
+		var tables []TweakAction
+		for _, ts := range [][]tableTweak{
+			privacyTweaks(), bloatTweaks(), servicesTweaks(),
+			perfTweaks(), gamingNetTweaks(), uiTweaks(),
+		} {
+			for i := range ts {
+				tableMap[ts[i].Def.ID] = &ts[i]
+				tables = append(tables, tableAction(ts[i]))
+			}
+		}
+		pos := 1
+		for _, cat := range categoryOrder {
+			for i := range base {
+				if base[i].Def.Category == cat {
+					base[i].Def.Order = pos
+					pos++
+				}
+			}
+			for i := range tables {
+				if tables[i].Def.Category == cat {
+					tables[i].Def.Order = pos
+					pos++
+				}
+			}
+		}
+		catalogVal = append(catalogVal, base...)
+		catalogVal = append(catalogVal, tables...)
+	})
 	return catalogVal
 }
 

@@ -128,3 +128,43 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   release tag `go-v<run_number>` khi workflow_dispatch. Bản Electron cũ vẫn giữ ở win-x64-v*.
 - Cleanup target filePattern (thumbcache) + browser cache (Default|Profile N → Cache/Code Cache/
   GPUCache) port đúng từ cleanup.ts. RAM_NOTE/gaming note giữ nguyên text.
+
+
+## Bổ sung 10-a: Go edition v2 — fit màn hình + 215 tweaks
+- User feedback: cửa sổ 1440x920 fixed → laptop màn nhỏ bị thanh tiêu đề văng khỏi màn (không bấm
+  được X, phải Task Manager). Fix: ui_windows.go thêm screenMetrics() (user32 GetSystemMetrics) +
+  fitToScreen() — cap w=min(1360, sw-24), h=min(860, sh-72), min 640x480, + SetSize sau khi tạo.
+  Sidebar overflow-y:auto.
+- Catalog mở rộng 35 → 215: tweaks_table.go (framework step + Bảo mật & riêng tư 34 + Bloatware 44)
+  và tweaks_table2.go (Dịch vụ 50 + Hiệu năng 19 + Gaming 2 + Mạng 4 + Giao diện 27). Data-driven:
+  step {reg add/del, reg key ve, sc config (+stop/start), powercfg setacvalueindex, schtasks
+  Query+Change, appx Get-AppxPackage Remove/re-register, ps, exe}. runSteps tuần tự, fail dừng
+  ngay với message trung thực; sc 1060/missing-task = bỏ qua hợp lệ; appx revert thử AllUsers rồi
+  per-user, hết package → lỗi trung thực kèm hướng dẫn cài Store.
+- Mọi key/lệnh đều thật (WinUtil style): AllowTelemetry, Siuf, SQM CEIP, AppCompat AIT, WER,
+  Tailored, AdvertisingID, ActivityFeed, WiFi Sense, OnlineSpeech, InputPersonalization,
+  DisableSearchBoxSuggestions, BingSearchEnabled, AllowCortana, DisableLocation, FindMyDevice,
+  DisableAIDataAnalysis (Recall 24H2), Clipboard history/cloud, Device Metadata, CDM 353698/
+  SilentInstalled/SoftLanding/RotatingLockSpotlight, 6 schtasks telemetry, NvTelemetryContainer,
+  NoDriveTypeAutoRun, RunAsPPL, fAllowToGetHelp, FeatureSettingsOverride (Spectre), SMB guest/
+  mrxsmb10, EnableMDNS; 44 appx (3DBuilder→Realtek); 50 dịch vụ (WSearch/Spooler/BT/biometric/
+  geo/RemoteRegistry/WerSvc/MapsBroker/RetailDemo/Phone/Tapi/WpcMon/PcaSvc/TrkWks/wisvc/Wpn/DoSvc/
+  Wdi x2/stisvc/TabSvc/SCardSvr/SCPolicy/SNMPTrap/Hyper-V x2/RemoteAccess/Wecsvc/Netlogon/WwanSvc/
+  UPnP/CDP+CDPUserSvc(reg)/DPS/EmbeddedMode/fhsvc/iphlpsvc/MSiSCSI/PNRP x3/QWAVE/WebClient/WinRM/
+  RpcLocator/Sensors/MSDTC/WorkFolders/EntAppSvc/defragsvc/SmsRouter/LanmanServer); perf (Ultimate
+  plan, USB suspend, PROCTHROTTLEMIN, Hiberboot, SvchostSplitThreshold, NtfsMemoryUsage, 8dot3,
+  fsutil lastaccess, GlobalTimerResolutionRequests, CompactOS, Reserved Storage DISM, ForegroundLock,
+  WaitToKill, bcdedit timeout, CrashDump/AutoReboot, NoAutoReboot/ExcludeWUDrivers/Store AutoDownload);
+  net (Tcpip6 DisabledComponents=32, netsh timestamps/rsc/autotune-normal); UI (classic menu CLSID
+  86ca1aa0, dark x2, TaskView, TaskbarMn, SearchboxTaskbarMode x2 key, TaskbarAl, HideFileExt,
+  ShowSeconds, Feeds ShellFeedsTaskbarViewMode, SearchSettings IsDynamicSearchBox,
+  Start_IrisRecommendations, Start_TrackDocs, Start_TrackProgs, ShowSyncProviderNotifications,
+  LaunchTo, MinAnimate, InitialKeyboardIndicators, Spotlight CloudContent policy, DisableThumbnailCache,
+  HideSCAMeetNow, ShowPeopleBand, MouseHoverTime, ẩn 3D Objects/Gallery khỏi This PC, OneDrive pin
+  CLSID 018D5C66, restart Explorer).
+- Merge: categoryOrder 8 nhóm → đánh order liên tục 1..215; tableMap id→steps để selftest suy deps
+  (deriveTableDeps: reg/sc/powercfg/schtasks/exe theo Args[0]; appx/ps → needsPs).
+- UI: filter chips sinh động đếm theo nhóm (renderTweakFilters); sidebar scroll.
+- Verify: go vet OK; linux build OK; exe Windows 9.16MB; smoke test: 215 tweaks, order 1..215,
+  unique ids, apply trên Linux báo lỗi trung thực 3 loại (reg/PS/adminGate), selftest 2 pass +
+  216 skip đúng, deps suy đúng cho từng loại step.

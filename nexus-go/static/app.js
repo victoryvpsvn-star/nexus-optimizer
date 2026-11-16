@@ -195,6 +195,7 @@ async function refreshTweaks() {
   try {
     const d = await api('/api/tweaks');
     tweaksCache = d.tweaks || [];
+    renderTweakFilters();
     renderTweaks();
   } catch (e) {
     toast('Không tải được danh sách tinh chỉnh: ' + e.message, 'err');
@@ -233,6 +234,26 @@ function renderTweaks() {
   });
   list.querySelectorAll('[data-apply]').forEach((b) => b.addEventListener('click', () => runTweaks([b.dataset.apply], 'apply')));
   list.querySelectorAll('[data-revert]').forEach((b) => b.addEventListener('click', () => runTweaks([b.dataset.revert], 'revert')));
+}
+
+/** Filter chips sinh động theo nhóm thật trong catalog + đếm số lượng từng nhóm */
+function renderTweakFilters() {
+  const counts = {};
+  tweaksCache.forEach((t) => { counts[t.category] = (counts[t.category] || 0) + 1; });
+  const cats = ['all', ...Object.keys(counts)];
+  const labels = { all: `Tất cả (${tweaksCache.length})` };
+  const wrap = $('tweakFilters');
+  wrap.innerHTML = cats.map((c) =>
+    `<button class="chip ${tweakFilter === c ? 'active' : ''}" data-cat="${esc(c)}">${esc(labels[c] || `${c} (${counts[c] || 0})`)}</button>`
+  ).join('');
+  wrap.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      wrap.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      tweakFilter = chip.dataset.cat;
+      renderTweaks();
+    });
+  });
 }
 
 document.querySelectorAll('#tweakFilters .chip').forEach((chip) => {
