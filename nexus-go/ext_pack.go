@@ -101,7 +101,7 @@ func extZip(spki []byte) ([]byte, error) {
 		return nil, err
 	}
 	man["key"] = base64.StdEncoding.EncodeToString(spki)
-	man["version"] = "2.2.1"
+	man["version"] = "2.3.0"
 	manNew, _ := json.Marshal(man)
 
 	var buf bytes.Buffer
@@ -214,7 +214,7 @@ func handleExtUpdateXML(w http.ResponseWriter, r *http.Request) {
 		"  <app appid=%q>\n"+
 		"    <updatecheck codebase=%q version=%q />\n"+
 		"  </app>\n"+
-		`</gupdate>`+"\n", id, extCrxURL(), "2.2.1")
+		`</gupdate>`+"\n", id, extCrxURL(), "2.3.0")
 }
 
 func handleExtCrx(w http.ResponseWriter, r *http.Request) {

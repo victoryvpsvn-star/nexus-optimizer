@@ -39,6 +39,7 @@ func main() {
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
 	extSetPort(ln.Addr().(*net.TCPAddr).Port) // cho CRX server + policy cài extension
+	go startBeacon() // cổng cố định để extension dect "tool đang mở"
 	go extPolicyAutoReapply()
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}

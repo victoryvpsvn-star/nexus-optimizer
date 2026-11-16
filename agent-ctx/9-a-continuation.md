@@ -195,3 +195,23 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
 - Sự cố sandbox: biset roll về 7a7a050 → recovery git reset --hard origin/main (188621e), untracked giữ.
   Bài học: session sau luôn git fetch origin trước khi sửa.
 - Verify: vet OK, full test OK, smoke /ext/* (42KB Cr24) + stub trung thực + UI OK. Commit 83d1d94.
+
+
+## Bổ sung 10-f: Cat Status v2.3.0 — bỏ dect nhạc, bỏ cần Discord desktop (feedback user)
+- User phản bác đúng: đường IPC Rich Presence cần app Discord desktop là sai hướng — extension gốc
+  đăng nhập OAuth + POST /users/@me/headless-sessions nên KHÔNG cần Discord desktop; dect nhạc của nó
+  dùng chrome.tabs + mediaSession trong trang (không liên quan Discord).
+- Theo yêu cầu: BỎ toàn bộ dect nhạc/video trong extension (classify/focusInfo/ytPlayback/oembed...).
+  Extension v2.3.0 giờ chỉ dect MỘT điều: Sakura Tool có đang mở → qua BEACON localhost.
+- beacon.go: server cố định 127.0.0.1:32123 (fallback 32124) GET /api/presence-beacon trả
+  {app:"sakura-tool", section, note, started} — section/note là mục UI tool đang xem (presenceSet nhận
+  từ JS poll section, giờ KHÔNG còn guard c.Enabled để beacon luôn cập nhật). startBeacon() chạy từ main.
+- Extension mới: poll beacon 30s (alarm 0.5min) → tool mở: set activity {name:"Sakura Tool", type:0,
+  details:"🌸 Đang tweak máy — <section>", state:"⏱ đã dùng X phút", timestamps.start} qua
+  headless-sessions; tool đóng: deleteSession nhưng giữ enabled → mở lại tự báo (kiểu PreMiD).
+  Fallback cổng beacon bận: quét tab localhost title /sakura/i. manifest: thêm host_permissions
+  http://127.0.0.1/* + localhost/*, bỏ scripting + các host nhạc. popup viết lại gọn (login/bật/tắt).
+- ext_pack version 2.2.1→2.3.0 (force_installed sẽ TỰ UPDATE extension qua policy khi restart Chrome).
+  UI presence-card: text mới khuyên dùng đường Kaspersky/extension, IPC là phụ cần Discord desktop.
+- Verify: vet OK, test OK, smoke: beacon 32123 trả JSON đúng, POST section → beacon phản ánh tức thì,
+  update.xml 2.3.0. Exe mới + download/Cat-Status-Sakura-v2.3.0.zip.

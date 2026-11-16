@@ -240,3 +240,9 @@ func trunc(s string, n int) string {
 	}
 	return string(r[:n-1]) + "…"
 }
+
+func presenceStarted() int64 {
+	presenceMtx.Lock()
+	defer presenceMtx.Unlock()
+	return presenceSt.start.Unix()
+}

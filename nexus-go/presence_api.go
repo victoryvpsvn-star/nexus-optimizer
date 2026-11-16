@@ -95,9 +95,7 @@ func handlePresence(w http.ResponseWriter, r *http.Request) {
 		_ = presenceCfgSave(c)
 		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": presenceSetEnabled(false, "")})
 	case "section":
-		if c.Enabled {
-			presenceSet(req.Section, req.Note)
-		}
+		presenceSet(req.Section, req.Note) // luôn nhận — beacon trả section cho extension
 		writeJSON(w, http.StatusOK, map[string]any{"success": true})
 	case "install-policy":
 		msg, err := extPolicyInstall()

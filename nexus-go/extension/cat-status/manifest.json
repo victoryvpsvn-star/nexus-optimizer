@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Cat Status",
-  "version": "2.2.0",
-  "description": "Discord status kiểu PreMiD: chỉ hiện khi đang nghe nhạc (YouTube /watch, YouTube Music, Spotify...)",
+  "name": "Cat Status — Sakura Tool",
+  "version": "2.3.0",
+  "description": "Báo Discord khi Sakura Tool đang mở (kiểu PreMiD). Không cần Discord desktop — đã bỏ dect nhạc.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwuyKKnhvXMlmrqPNqE8JZuu97w0HC8M3a8dweWxlI29CnpEaLp5I4qrSvmNEFQRjQM7KbtZO0kiKhUvoRXwa0RTJPpMxlPTU/hOIPrYB6C54Fpglw0+MkJgIE9uipvvJbDoyFx0u1pjjWnucNqunPd4cqWwIrRcNmTcM3oIuSScBPs4brX3cSOvUZ0Oj/wFvqbVPFcLFanE4XsZI8IVYaHOE+ITdqhRTL81j2d2McVYdEkgnvxdGnPZI3Cv2b9MQKhbgDaYC9Mp1kDP2fXJYklIqk2ka53gYnCSq+rBAxxztIdWu4zBOHeum8Lo9ijWy1wRmvboa+dpvCja5Cl8fEQIDAQAB",
   "minimum_chrome_version": "120",
   "icons": {
@@ -20,22 +20,12 @@
   "permissions": [
     "tabs",
     "storage",
-    "alarms",
-    "scripting"
+    "alarms"
   ],
   "host_permissions": [
     "https://discord.com/*",
-    "https://www.youtube.com/*",
-    "https://music.youtube.com/*",
-    "https://open.spotify.com/*",
-    "https://soundcloud.com/*",
-    "https://zingmp3.vn/*",
-    "https://www.nhaccuatui.com/*",
-    "https://music.apple.com/*",
-    "https://www.deezer.com/*",
-    "https://listen.tidal.com/*",
-    "https://*.bandcamp.com/*",
-    "https://music.amazon.com/*"
+    "http://127.0.0.1/*",
+    "http://localhost/*"
   ],
   "commands": {
     "toggle": {

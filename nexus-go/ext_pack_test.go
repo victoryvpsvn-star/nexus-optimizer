@@ -153,7 +153,7 @@ func TestCRX3PackAndSelfVerify(t *testing.T) {
 	if man["key"] != base64.StdEncoding.EncodeToString(spki) {
 		t.Fatal("manifest key ≠ khoá ký CRX")
 	}
-	if man["version"] != "2.2.1" {
+	if man["version"] != "2.3.0" {
 		t.Fatalf("version = %v ≠ 2.2.1", man["version"])
 	}
 	// gọi lần 2 phải ra cache giống hệt
