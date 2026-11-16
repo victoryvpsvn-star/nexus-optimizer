@@ -116,6 +116,10 @@
         <button class="btn" id="tweaksSelNone">Bỏ chọn</button>
         <span id="tweaksBusy" class="muted"></span>
       </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <input type="text" id="tweakSearch" class="input grow" placeholder="🔍 Tìm trong 1000 tinh chỉnh (tên / mô tả / id)…">
+        <span id="tweakCount" class="muted" style="font-size:12.5px;white-space:nowrap"></span>
+      </div>
       <div class="filters" id="tweakFilters"><span class="muted">Đang tải nhóm…</span></div>
       <div id="tweakList"></div>
     </section>
@@ -220,16 +224,6 @@
       </div>
     </section>
   
-<div id="presence-card" style="margin:18px 0;padding:16px;border:1px solid rgba(255,143,181,.35);border-radius:14px;background:rgba(255,143,181,.06)">
-  <h3 style="margin:0 0 8px">💬 Discord Status (kiểu PreMiD)</h3>
-  <p style="margin:0 0 8px;font-size:13px">Chỉ qua extension Cat Status — <b>KHÔNG cần app Discord desktop</b> (đường IPC đã bị cắt hẳn khỏi tool). Cài: bấm "🛡️ Cài kiểu Kaspersky" bên dưới → <b>restart Chrome</b> → mở popup 🐱 extension → <b>Đăng nhập</b> → <b>Bật</b>. Tool mở = Discord hiện "🌸 Sakura Tool" + nút tải; tool đóng = status tự mất.</p>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <button id="presenceInstall" class="btn">📦 Tự cài đặt extension Cat Status</button>
-    <button id="kasperskyInstall" class="btn">🛡️ Cài kiểu Kaspersky (ẩn source)</button>
-    <button id="kasperskyRemove" class="btn">🗑️ Gỡ policy</button>
-  </div>
-  <pre id="presenceMsg" style="white-space:pre-wrap;font-size:12px;color:#cbb;margin-top:10px"></pre>
-  <div id="beaconStatus" style="font-size:12.5px;margin-top:8px;color:#c9a0b8">Đang kiểm tra extension…</div>
 </div>
 
 </main>

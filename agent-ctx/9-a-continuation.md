@@ -327,3 +327,22 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
 - Smoke: update.xml version="2.5.1" ✓ health 3.2.1 ✓ beacon ✓ (lưu ý: không smoke được exe
   Windows trên Linux — smoke bằng binary Linux cùng code). exe download buildNumber=19 → banner
   go-v20. "Đang chờ" trong ảnh = Discord idle, không phải bug.
+
+
+## Bổ sung 10-l: v3.3.0 — BỎ SẠCH extension + TOOL 1000 TINH CHỈNH (yêu cầu user "bỏ mẹ extension đi tập trung tool")
+- BỎ extension: xóa beacon.go/presence_api.go/presence_install.go/ext_pack.go/ext_pack_test.go/
+  ext_policy_windows.go/ext_policy_other.go/discord_rpc.go/extension/ + routes /api/presence,/ext/*
+  + card UI Discord + app.js presence wiring + zip Cat-Status trong download/. Discord status
+  CHÍNH THỨC BIẾN MẤT khỏi tool — user dùng extension cũ vẫn chạy nhưng không còn support.
+- 1000 tweaks THẬT (380 cũ + 620 mới): hệ TSV data/*.tsv (id~~name~~cat~~desc~~risk~~admin~~rec~~
+  apply~~revert, DSL RA/RD/RV/RK/DK/SC/PC/TK/AX/EX/PX) + tweaks_split.go splitCompound() tách
+  row compound (≥2 RA + RD đối xứng) thành per-value row tự động (Go tables + TSV data đều split).
+  Pool mới: twk_a-f.py (services~120 thực, tasks~57, UWP~60, registry privacy/UI/security,
+  MMCSS Tasks, ASR 10 GUID, Edge/Chrome/Firefox policies, DISM optional features, power GUID,
+  hardening WDigest/LSA/VBS...). scripts/gen_pool.py dedupe chéo (id/SC/TK/AX/RA(key,val) vs
+  Go const + granular TSV). Tổng khít 1000 qua trim API. KHÔNG bịa key — cái nào không chắc thì bỏ.
+- BỎ ";" trong PX script (parseSpec tách ';'!) — PX đa statement = nhiều bước PX:...;PX:...
+- UI 1000 mục: search box debounce 250ms, render cap 150 + nút "Hiện thêm", selAll theo filter,
+  runTweaks chunk 100/lô (server limit 200), progress "1–100/1000".
+- Cảnh báo: DO NOT trust PowerShell multi-";" trong TSV PX. curl beacon test → dùng đúng cổng beacon
+  (beacon đã XÓA). Verify: API 1000, dup 0, high-risk 37, rec 189, node --check OK.

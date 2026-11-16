@@ -19,6 +19,9 @@ const SECTION_META = {
 let tweaksCache = [];
 let tweakFilter = 'all';
 let selectedTweaks = new Set();
+let tweakSearch = '';
+let tweakLimit = 150;
+const TWEAK_PAGE = 150;
 let statsTimer = null;
 
 // ---------- helpers ----------
@@ -288,9 +291,24 @@ async function refreshTweaks() {
   }
 }
 
+function filteredTweaks() {
+  const q = tweakSearch.trim().toLowerCase();
+  return tweaksCache.filter((t) => (tweakFilter === 'all' || t.category === tweakFilter)
+    && (!q || t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.id.toLowerCase().includes(q)));
+}
+
 function renderTweaks() {
   const list = $('tweakList');
-  const items = tweaksCache.filter((t) => tweakFilter === 'all' || t.category === tweakFilter);
+  const all = filteredTweaks();
+  const items = all.slice(0, tweakLimit);
+  const cnt = $('tweakCount');
+  if (cnt) {
+    const sel = [...selectedTweaks].length;
+    cnt.textContent = `Hiển thị ${items.length}/${all.length}${tweakSearch ? ' (lọc "' + tweakSearch + '")' : ''}${sel ? ' · ' + sel + ' đã chọn' : ''}`;
+  }
+  const more = all.length > items.length
+    ? `<div style="text-align:center;margin:14px 0"><button class="btn" id="tweakMore">⬇️ Hiện thêm ${Math.min(TWEAK_PAGE, all.length - items.length)} mục (còn ${all.length - items.length})</button></div>`
+    : '';
   list.innerHTML = items.map((t) => `
     <div class="tweak" data-id="${esc(t.id)}">
       <div class="tweak-head">
@@ -320,6 +338,8 @@ function renderTweaks() {
   });
   list.querySelectorAll('[data-apply]').forEach((b) => b.addEventListener('click', () => runTweaks([b.dataset.apply], 'apply')));
   list.querySelectorAll('[data-revert]').forEach((b) => b.addEventListener('click', () => runTweaks([b.dataset.revert], 'revert')));
+  const mb = document.getElementById('tweakMore');
+  if (mb) mb.addEventListener('click', () => { tweakLimit += TWEAK_PAGE; renderTweaks(); });
 }
 
 /** Filter chips sinh động theo nhóm thật trong catalog + đếm số lượng từng nhóm */
@@ -337,6 +357,7 @@ function renderTweakFilters() {
       wrap.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       tweakFilter = chip.dataset.cat;
+      tweakLimit = TWEAK_PAGE;
       renderTweaks();
     });
   });
@@ -353,16 +374,23 @@ document.querySelectorAll('#tweakFilters .chip').forEach((chip) => {
 
 async function runTweaks(ids, action) {
   if (!ids.length) return toast('Chưa chọn mục nào', 'err');
-  setBusy('tweaksBusy', `Đang ${action === 'apply' ? 'áp dụng' : 'hoàn tác'} ${ids.length} mục…`);
+  const verb = action === 'apply' ? 'áp dụng' : 'hoàn tác';
+  let done = 0, fails = 0;
   try {
-    const r = await api('/api/tweaks', { method: 'POST', body: { ids, action } });
-    const fails = (r.results || []).filter((x) => !x.success);
-    const failsMsg = fails.length ? ` — ${fails.length} mục lỗi (xem chi tiết trong danh sách)` : '';
-    toast(`${action === 'apply' ? 'Áp dụng' : 'Hoàn tác'} xong${failsMsg}`, fails.length ? 'err' : 'ok');
+    // chia lô 100 mục/request — server nhận tối đa 200
+    for (let i = 0; i < ids.length; i += 100) {
+      const batch = ids.slice(i, i + 100);
+      setBusy('tweaksBusy', `Đang ${verb} ${done + 1}–${done + batch.length}/${ids.length}…`);
+      const r = await api('/api/tweaks', { method: 'POST', body: { ids: batch, action } });
+      fails += (r.results || []).filter((x) => !x.success).length;
+      done += batch.length;
+    }
+    toast(`${verb.charAt(0).toUpperCase() + verb.slice(1)} xong ${done} mục${fails ? ` — ${fails} lỗi (xem trong danh sách)` : ''}`, fails ? 'err' : 'ok');
     selectedTweaks.clear();
     refreshTweaks();
   } catch (e) {
     toast('Chạy tinh chỉnh lỗi: ' + e.message, 'err');
+    refreshTweaks();
   } finally {
     setBusy('tweaksBusy', '');
   }
@@ -370,7 +398,7 @@ async function runTweaks(ids, action) {
 $('tweaksApplySel').addEventListener('click', () => runTweaks([...selectedTweaks], 'apply'));
 $('tweaksRevertSel').addEventListener('click', () => runTweaks([...selectedTweaks], 'revert'));
 $('tweaksSelAll').addEventListener('click', () => {
-  tweaksCache.forEach((t) => selectedTweaks.add(t.id));
+  filteredTweaks().forEach((t) => selectedTweaks.add(t.id));
   renderTweaks();
 });
 $('tweaksSelNone').addEventListener('click', () => {
@@ -750,48 +778,6 @@ $('relaunchAdmin').addEventListener('click', async () => {
   });
 })();
 
-// ---- Discord Status wiring (CHỈ extension — đường IPC Discord desktop đã bị loại bỏ) ----
-(async function () {
-  const msg = document.getElementById('presenceMsg');
-  if (!msg) return;
-  const P = '/api/presence';
-  document.getElementById('kasperskyInstall').addEventListener('click', async () => {
-    msg.textContent = 'Đang ghi policy Chrome/Edge (kiểu Kaspersky — CRX tự ký, cài im lặng)…';
-    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'install-policy' }) }).then((x) => x.json());
-    msg.textContent = r.success ? (r.message + '\nExtension ID: ' + (r.extId || '?') + '\n→ Restart Chrome để extension tự cập nhật bản mới.') : ('Lỗi: ' + (r.error || r.message));
-  });
-  document.getElementById('kasperskyRemove').addEventListener('click', async () => {
-    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'remove-policy' }) }).then((x) => x.json());
-    msg.textContent = r.success ? r.message : ('Lỗi: ' + (r.error || r.message));
-  });
-  document.getElementById('presenceInstall').addEventListener('click', async () => {
-    msg.textContent = 'Đang bung extension…';
-    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'install-extension' }) }).then((x) => x.json());
-    msg.textContent = r.message || (r.success ? 'Xong: ' + r.path : 'Lỗi');
-  });
-  // Tracker section cho beacon (extension đọc qua /api/presence-beacon mỗi 30s)
-  let cur = '';
-  const secs = () => Array.from(document.querySelectorAll('main section, section[id]')).find((s) => s.offsetParent && !s.hidden && s.id);
-  const ping = () => { const s = secs(); if (s && s.id !== cur) { cur = s.id; fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'section', section: s.id }) }).catch(() => {}); } };
-  setInterval(ping, 12000);
-  document.addEventListener('click', (e) => { setTimeout(ping, 120); });
-  ping();
-  // Note khi chạy hành động (áp tweak/cleanup/gaming/selftest)
-  const _f = window.fetch;
-  window.fetch = async function (u, o) {
-    const r = await _f.apply(this, arguments);
-    try {
-      if (typeof u === 'string' && o && o.method === 'POST' && /\/api\/(tweaks|cleanup|gaming|selftest)/.test(u)) {
-        const name = { tweaks: 'Tweaks', cleanup: 'Dọn rác', gaming: 'Gaming', selftest: 'Selftest' }[u.match(/api\/([a-z]+)/)[1]];
-        fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'section', section: name, note: 'vừa chạy hành động' }) }).catch(() => {});
-      }
-    } catch (_) {}
-    return r;
-  };
-})();
 
 
 // ===== Tự cập nhật: banner khi có bản release mới hơn bản đang chạy =====
@@ -811,25 +797,13 @@ $('relaunchAdmin').addEventListener('click', async () => {
   } catch (_) {}
 })();
 
-// ---------- Beacon status: extension Cat Status có còn poll không ----------
-function refreshBeaconStatus() {
-  const sec = document.getElementById('sec-overview');
-  if (!sec || !sec.classList.contains('active')) return;
-  const el = document.getElementById('beaconStatus');
-  if (!el) return;
-  api('/api/presence').then((d) => {
-    const b = d.beacon || {};
-    if (b.lastSeenSec >= 0 && b.lastSeenSec <= 90) {
-      el.textContent = `🟢 Extension Cat Status đang hoạt động — poll beacon 127.0.0.1:${b.port} cách đây ${b.lastSeenSec}s. Đã Đăng nhập + Bật trong popup 🌸 thì Discord sẽ hiện "Sakura Tool".`;
-      el.style.color = '#6ee7a0';
-    } else if (b.lastSeenSec < 0) {
-      el.textContent = '🟡 Chưa thấy extension nào poll beacon. Checklist: (1) extension đã cài vào Chrome/Edge? (2) mở popup 🌸 → Đăng nhập → Bật chưa? (3) tool đang mở?';
-      el.style.color = '#fbbf24';
-    } else {
-      el.textContent = `🟡 Extension poll lần cuối ${b.lastSeenSec}s trước — Chrome đang ngủ hoặc extension bị tắt. Mở lại popup 🌸.`;
-      el.style.color = '#fbbf24';
-    }
-  }).catch(() => {});
-}
-setInterval(refreshBeaconStatus, 5000);
-refreshBeaconStatus();
+// ---------- Tìm kiếm 1000 tinh chỉnh (debounce 250ms) ----------
+(() => {
+  const inp = document.getElementById('tweakSearch');
+  if (!inp) return;
+  let tmr = null;
+  inp.addEventListener('input', () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(() => { tweakSearch = inp.value; tweakLimit = TWEAK_PAGE; renderTweaks(); }, 250);
+  });
+})();

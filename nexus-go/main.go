@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const AppVersion = "3.2.1"
+const AppVersion = "3.3.0"
 
 // buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
 var buildNumber = "0"
@@ -44,9 +44,6 @@ func main() {
 		log.Fatalf("Không mở được cổng HTTP: %v", err)
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
-	extSetPort(ln.Addr().(*net.TCPAddr).Port) // cho CRX server + policy cài extension
-	go startBeacon() // cổng cố định để extension dect "tool đang mở"
-	go extPolicyAutoReapply()
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

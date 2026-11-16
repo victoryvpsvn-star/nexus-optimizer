@@ -42,12 +42,8 @@ func readBody(w http.ResponseWriter, r *http.Request, v any) bool {
 func buildMux() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/presence", handlePresence)
-	mux.HandleFunc("POST /api/presence", handlePresence)
 	mux.HandleFunc("GET /api/update", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, updateCheck(false)) })
 	mux.HandleFunc("POST /api/update", handleUpdatePost)
-	mux.HandleFunc("GET /ext/update.xml", handleExtUpdateXML)
-	mux.HandleFunc("GET /ext/cat-status.crx", handleExtCrx)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": true, "version": AppVersion, "platform": runtime.GOOS})
 	})
@@ -73,8 +69,8 @@ func buildMux() http.Handler {
 			writeErr(w, 400, "Yêu cầu không hợp lệ (cần ids[], action)")
 			return
 		}
-		if len(body.IDs) > 50 {
-			writeErr(w, 400, "Tối đa 50 tinh chỉnh mỗi lần chạy")
+		if len(body.IDs) > 200 {
+			writeErr(w, 400, "Tối đa 200 tinh chỉnh mỗi lần chạy")
 			return
 		}
 		results := make([]TweakRunResult, 0, len(body.IDs))

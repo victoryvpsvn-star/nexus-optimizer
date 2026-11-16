@@ -998,10 +998,11 @@ func tweakActions() []TweakAction {
 	catalogOnce.Do(func() {
 		base := tweakCatalog()
 		var tables []TweakAction
-		for _, ts := range [][]tableTweak{
+		for _, ts0 := range [][]tableTweak{
 			privacyTweaks(), bloatTweaks(), servicesTweaks(),
 			perfTweaks(), gamingNetTweaks(), uiTweaks(),
 		} {
+			ts := splitCompound(ts0)
 			for i := range ts {
 				tableMap[ts[i].Def.ID] = &ts[i]
 				tables = append(tables, tableAction(ts[i]))
@@ -1009,6 +1010,7 @@ func tweakActions() []TweakAction {
 		}
 		rows, n, skipped := dataTweaks()
 		dataLoadReport = fmt.Sprintf("nạp %d dòng TSV, bỏ qua %d dòng lỗi", n, len(skipped))
+		rows = splitCompound(rows)
 		for i := range rows {
 			tableMap[rows[i].Def.ID] = &rows[i]
 			tables = append(tables, tableAction(rows[i]))

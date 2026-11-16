@@ -1,0 +1,176 @@
+# Sakura Tool v3.3.0 — 175 tinh chỉnh gen (định dạng: id~~name~~category~~desc~~risk~~admin~~rec~~apply~~revert)
+svc2-ajrouter~~Tắt dịch vụ AJRouter~~Dịch vụ~~AllJoyn Router — tắt nếu không dùng thiết bị IoT AllJoyn~~low~~1~~0~~SC:AJRouter|disabled~~SC:AJRouter|demand
+svc2-alg~~Tắt dịch vụ ALG~~Dịch vụ~~Application Layer Gateway — FTP/tracker qua firewall, hầu như không dùng~~low~~1~~0~~SC:ALG|disabled~~SC:ALG|demand
+svc2-appmgmt~~Tắt dịch vụ AppMgmt~~Dịch vụ~~Application Management — cài app theo policy doanh nghiệp (máy cá nhân không cần)~~low~~1~~0~~SC:AppMgmt|disabled~~SC:AppMgmt|demand
+svc2-appreadiness~~Tắt dịch vụ AppReadiness~~Dịch vụ~~App Readiness — chuẩn bị app Store lúc đăng nhập OEM~~low~~1~~0~~SC:AppReadiness|disabled~~SC:AppReadiness|demand
+svc2-assignedaccessmanagersvc~~Tắt dịch vụ AssignedAccessManagerSvc~~Dịch vụ~~Assigned Access Manager — kiosk single-app, PC thường không dùng~~low~~1~~0~~SC:AssignedAccessManagerSvc|disabled~~SC:AssignedAccessManagerSvc|demand
+svc2-bdesvc~~Tắt dịch vụ BDESVC~~Dịch vụ~~BitLocker Drive Encryption Service — chỉ cần khi dùng BitLocker~~low~~1~~0~~SC:BDESVC|disabled~~SC:BDESVC|demand
+svc2-camsvc~~Tắt dịch vụ camsvc~~Dịch vụ~~Capability Access Manager — quản lý quyền camera/mic; tắt = app không xin quyền~~low~~1~~0~~SC:camsvc|disabled~~SC:camsvc|demand
+svc2-captureservice~~Tắt dịch vụ CaptureService~~Dịch vụ~~Windows Capture Service — API chụp màn hình app (Win+Shift+S của app)~~low~~1~~0~~SC:CaptureService|disabled~~SC:CaptureService|demand
+svc2-certpropsvc~~Tắt dịch vụ CertPropSvc~~Dịch vụ~~Certificate Propagation — tự cài chứng thư từ thẻ thông minh~~low~~1~~0~~SC:CertPropSvc|disabled~~SC:CertPropSvc|demand
+svc2-clipsvc~~Tắt dịch vụ ClipSVC~~Dịch vụ~~Client License Service — giấy phép Store; CẢNH BÁO: app Store có thể không mở~~low~~1~~0~~SC:ClipSVC|disabled~~SC:ClipSVC|demand
+svc2-comsysapp~~Tắt dịch vụ COMSysApp~~Dịch vụ~~COM+ System Application — COM+ legacy, không app nào dùng~~low~~1~~0~~SC:COMSysApp|disabled~~SC:COMSysApp|demand
+svc2-cscservice~~Tắt dịch vụ CscService~~Dịch vụ~~Offline Files — đồng bộ file mạng offline (máy cá nhân không cần)~~low~~1~~0~~SC:CscService|disabled~~SC:CscService|demand
+svc2-dcpsvc~~Tắt dịch vụ DcpSvc~~Dịch vụ~~Data Collection & Publishing — gom dữ liệu liên hệ/ngôn ngữ cho app OEM~~low~~1~~0~~SC:DcpSvc|disabled~~SC:DcpSvc|demand
+svc2-devquerybroker~~Tắt dịch vụ DevQueryBroker~~Dịch vụ~~Dev Query Broker — đón thiết bị mới vào app foreground~~low~~1~~0~~SC:DevQueryBroker|disabled~~SC:DevQueryBroker|demand
+svc2-dialogblockingservice~~Tắt dịch vụ DialogBlockingService~~Dịch vụ~~Dialog Blocking — chặn dialog khi app hiện đại mở (hầu như vô dụng)~~low~~1~~0~~SC:DialogBlockingService|disabled~~SC:DialogBlockingService|demand
+svc2-dispbrokerdesktopsvc~~Tắt dịch vụ DispBrokerDesktopSvc~~Dịch vụ~~Display Broker — tự đổi display mode theo scenario~~low~~1~~0~~SC:DispBrokerDesktopSvc|disabled~~SC:DispBrokerDesktopSvc|demand
+svc2-displayenhancementservice~~Tắt dịch vụ DisplayEnhancementService~~Dịch vụ~~Display Enhancement — tự chỉnh độ sáng theo nội dung; laptop mất auto-brightness~~low~~1~~0~~SC:DisplayEnhancementService|disabled~~SC:DisplayEnhancementService|demand
+svc2-eaphost~~Tắt dịch vụ Eaphost~~Dịch vụ~~Extensible Authentication Protocol — chỉ cần cho Wi-Fi 802.1X doanh nghiệp~~low~~1~~0~~SC:Eaphost|disabled~~SC:Eaphost|demand
+svc2-efs~~Tắt dịch vụ EFS~~Dịch vụ~~Encrypted File System — CẢNH BÁO: mất mã hóa file NTFS EFS~~low~~1~~0~~SC:EFS|disabled~~SC:EFS|demand
+svc2-fontcache3.0.0.0~~Tắt dịch vụ FontCache3.0.0.0~~Dịch vụ~~Windows Presentation Foundation Font Cache — cache font WPF cũ~~low~~1~~0~~SC:FontCache3.0.0.0|disabled~~SC:FontCache3.0.0.0|demand
+svc2-frameservermonitor~~Tắt dịch vụ FrameServerMonitor~~Dịch vụ~~Frame Server Monitor — giám sát chia sẻ camera~~low~~1~~0~~SC:FrameServerMonitor|disabled~~SC:FrameServerMonitor|demand
+svc2-fdphost~~Tắt dịch vụ fdPHost~~Dịch vụ~~Function Discovery Provider Host — khám phá thiết bị qua SSDP/WS-Discovery~~low~~1~~0~~SC:fdPHost|disabled~~SC:fdPHost|demand
+svc2-fdrespub~~Tắt dịch vụ fdResPub~~Dịch vụ~~Function Discovery Resource Publication — xuất máy trong mạng khám phá~~low~~1~~0~~SC:fdResPub|disabled~~SC:fdResPub|demand
+svc2-gupdate~~Tắt dịch vụ gupdate~~Dịch vụ~~Google Update Service (gupdate) — cập nhật Chrome nền; không dùng Chrome thì tắt~~low~~1~~0~~SC:gupdate|disabled~~SC:gupdate|demand
+svc2-gupdatem~~Tắt dịch vụ gupdatem~~Dịch vụ~~Google Update Service (gupdatem) — cập nhật Chrome khi đăng nhập~~low~~1~~0~~SC:gupdatem|disabled~~SC:gupdatem|demand
+svc2-lltdio~~Tắt dịch vụ lltdio~~Dịch vụ~~Link-Layer Topology Discovery — bản đồ mạng trong Explorer~~low~~1~~0~~SC:lltdio|disabled~~SC:lltdio|demand
+svc2-lmhosts~~Tắt dịch vụ lmhosts~~Dịch vụ~~TCP/IP NetBIOS Helper — tên NetBIOS legacy (SMB hiện đại dùng DNS)~~low~~1~~0~~SC:lmhosts|disabled~~SC:lmhosts|demand
+svc2-lxssmanager~~Tắt dịch vụ LxssManager~~Dịch vụ~~WSL Manager — CẢNH BÁO: mất Windows Subsystem for Linux~~low~~1~~0~~SC:LxssManager|disabled~~SC:LxssManager|demand
+svc2-msiserver~~Tắt dịch vụ msiserver~~Dịch vụ~~Windows Installer — CẢNH BÁO: không cài/gỡ được app .msi; tắt chỉ khi đã cài đủ~~low~~1~~0~~SC:msiserver|disabled~~SC:msiserver|demand
+svc2-ncbservice~~Tắt dịch vụ NcbService~~Dịch vụ~~Network Connection Broker — broker app Store kết nối mạng~~low~~1~~0~~SC:NcbService|disabled~~SC:NcbService|demand
+svc2-nettcpportsharing~~Tắt dịch vụ NetTcpPortSharing~~Dịch vụ~~Net.TCP Port Sharing — chia sẻ cổng cho dịch vụ WCF .NET~~low~~1~~0~~SC:NetTcpPortSharing|disabled~~SC:NetTcpPortSharing|disabled
+svc2-perceptionsimulation~~Tắt dịch vụ perceptionsimulation~~Dịch vụ~~Reality/Perception Simulation — giả lập thiết bị VR đầu vào~~low~~1~~0~~SC:perceptionsimulation|disabled~~SC:perceptionsimulation|demand
+svc2-policyagent~~Tắt dịch vụ policyAgent~~Dịch vụ~~IPsec Policy Agent — IPsec/IKE VPN doanh nghiệp~~low~~1~~0~~SC:policyAgent|disabled~~SC:policyAgent|demand
+svc2-rasman~~Tắt dịch vụ RasMan~~Dịch vụ~~Remote Access Connection Manager — CẢNH BÁO: mất VPN dial-in (PPTP/L2TP/SSTP)~~low~~1~~0~~SC:RasMan|disabled~~SC:RasMan|demand
+svc2-seclogon~~Tắt dịch vụ seclogon~~Dịch vụ~~Secondary Logon — CẢNH BÁO: mất 'Run as different user'~~low~~1~~0~~SC:seclogon|disabled~~SC:seclogon|demand
+svc2-sensordataservice~~Tắt dịch vụ SensorDataService~~Dịch vụ~~Sensor Data Service — dữ liệu cảm biến vật lý (độ nghiêng...)~~low~~1~~0~~SC:SensorDataService|disabled~~SC:SensorDataService|demand
+svc2-shpamsvc~~Tắt dịch vụ shpamsvc~~Dịch vụ~~Shared PC Account Manager — kiosk/shared PC trường học~~low~~1~~0~~SC:shpamsvc|disabled~~SC:shpamsvc|disabled
+svc2-shellhwdetection~~Tắt dịch vụ ShellHWDetection~~Dịch vụ~~Shell Hardware Detection — AutoPlay thiết bị mới cắm vào~~medium~~1~~0~~SC:ShellHWDetection|disabled~~SC:ShellHWDetection|auto
+svc2-sstpsvc~~Tắt dịch vụ SstpSvc~~Dịch vụ~~Secure Socket Tunneling Protocol — VPN SSTP~~low~~1~~0~~SC:SstpSvc|disabled~~SC:SstpSvc|demand
+svc2-storsvc~~Tắt dịch vụ storsvc~~Dịch vụ~~Storage Service — quản lý đĩa/storage policy; CẢNH BÁO: Disk Management có thể lỗi~~low~~1~~0~~SC:storsvc|disabled~~SC:storsvc|demand
+svc2-swprv~~Tắt dịch vụ swprv~~Dịch vụ~~Microsoft Software Shadow Copy Provider — VSS snapshot phần mềm~~low~~1~~0~~SC:swprv|disabled~~SC:swprv|demand
+svc2-tieringengineservice~~Tắt dịch vụ TieringEngineService~~Dịch vụ~~Storage Tiers Management — xếp tầng SSD/HDD storage space~~low~~1~~0~~SC:TieringEngineService|disabled~~SC:TieringEngineService|demand
+svc2-tokenbroker~~Tắt dịch vụ TokenBroker~~Dịch vụ~~Web Account Manager (TokenBroker) — CẢNH BÁO: đăng nhập tài khoản Microsoft web/app có thể lỗi~~low~~1~~0~~SC:TokenBroker|disabled~~SC:TokenBroker|demand
+svc2-ualsvc~~Tắt dịch vụ UALSVC~~Dịch vụ~~User Access Logging — ghi lại client truy cập (máy chủ mới cần)~~low~~1~~0~~SC:UALSVC|disabled~~SC:UALSVC|demand
+svc2-usosvc~~Tắt dịch vụ UsoSvc~~Dịch vụ~~Update Session Orchestrator — CẢNH BÁO: Windows Update không chạy khi tắt~~medium~~1~~0~~SC:UsoSvc|disabled~~SC:UsoSvc|auto
+svc2-vss~~Tắt dịch vụ VSS~~Dịch vụ~~Volume Shadow Copy — CẢNH BÁO: mất System Restore/restore point~~low~~1~~0~~SC:VSS|disabled~~SC:VSS|demand
+svc2-w32time~~Tắt dịch vụ W32Time~~Dịch vụ~~Windows Time — đồng bộ giờ NTP; tắt = đồng hồ lệch dần~~low~~1~~0~~SC:W32Time|disabled~~SC:W32Time|demand
+svc2-wacompen~~Tắt dịch vụ WacomPen~~Dịch vụ~~Wacom Pen Router — bút Wacom~~low~~1~~0~~SC:WacomPen|disabled~~SC:WacomPen|demand
+svc2-wcmsvc~~Tắt dịch vụ Wcmsvc~~Dịch vụ~~Windows Connection Manager — CẢNH BÁO: tự kết nối Wi-Fi/network có thể lỗi~~medium~~1~~0~~SC:Wcmsvc|disabled~~SC:Wcmsvc|auto
+svc2-wfdsconsvc~~Tắt dịch vụ wfdsconsvc~~Dịch vụ~~Windows Connect Now — Wi-Fi Direct/WPS cấu hình nhanh~~low~~1~~0~~SC:wfdsconsvc|disabled~~SC:wfdsconsvc|demand
+svc2-wlidsvc~~Tắt dịch vụ wlidsvc~~Dịch vụ~~Microsoft Account Sign-in Assistant — CẢNH BÁO: mất đăng nhập MS account (dùng local account thì OK)~~low~~1~~0~~SC:wlidsvc|disabled~~SC:wlidsvc|demand
+svc2-wlpasvc~~Tắt dịch vụ wlpasvc~~Dịch vụ~~Local Profile Assistant — roaming WPA3 Enterprise~~low~~1~~0~~SC:wlpasvc|disabled~~SC:wlpasvc|demand
+svc2-wmiapsrv~~Tắt dịch vụ wmiApSrv~~Dịch vụ~~WMI Performance Adapter — hiệu năng WMI cho app đặc biệt~~low~~1~~0~~SC:wmiApSrv|disabled~~SC:wmiApSrv|demand
+svc2-wmpnetworksvc~~Tắt dịch vụ WMPNetworkSvc~~Dịch vụ~~Windows Media Player Network Sharing — chia sẻ media DLNA~~low~~1~~0~~SC:WMPNetworkSvc|disabled~~SC:WMPNetworkSvc|demand
+svc2-wpdbusenum~~Tắt dịch vụ WPDBusEnum~~Dịch vụ~~Portable Device Enumerator — MTP/PTP (điện thoại cắm USB vẫn dùng driver riêng)~~low~~1~~0~~SC:WPDBusEnum|disabled~~SC:WPDBusEnum|demand
+svc2-wuauserv~~Tắt dịch vụ wuauserv~~Dịch vụ~~Windows Update — CẢNH BÁO: không cập nhật được; bật lại trước khi cần patch bảo mật~~medium~~1~~0~~SC:wuauserv|disabled~~SC:wuauserv|auto
+svc2-wudfsvc~~Tắt dịch vụ WudfSvc~~Dịch vụ~~Usermode Driver Framework — CẢNH BÁO: một số driver USB/BT lỗi khi tắt~~low~~1~~0~~SC:WudfSvc|disabled~~SC:WudfSvc|demand
+svc2-xblauthmanager~~Tắt dịch vụ XblAuthManager~~Dịch vụ~~Xbox Live Auth Manager — xác thực Xbox; không chơi game Xbox = tắt~~low~~1~~0~~SC:XblAuthManager|disabled~~SC:XblAuthManager|demand
+svc2-xblgamesave~~Tắt dịch vụ XblGameSave~~Dịch vụ~~Xbox Live Game Save — lưu game Xbox vào cloud~~low~~1~~0~~SC:XblGameSave|disabled~~SC:XblGameSave|demand
+svc2-xboxgipsvc~~Tắt dịch vụ XboxGipSvc~~Dịch vụ~~Xbox Accessory Management — tay cầm Xbox phụ kiện~~low~~1~~0~~SC:XboxGipSvc|disabled~~SC:XboxGipSvc|demand
+svc2-xboxnetapisvc~~Tắt dịch vụ XboxNetApiSvc~~Dịch vụ~~Xbox Live Networking — NAT/multiplayer Xbox~~low~~1~~0~~SC:XboxNetApiSvc|disabled~~SC:XboxNetApiSvc|demand
+task2-application-experience-microsoft-compatibility-appraiser~~Tắt task định kỳ: Microsoft Compatibility Appraiser~~Task định kỳ~~Gom dữ liệu app cài trên máy gửi Microsoft — task telemetry nặng nhất (chạy CPU cao)~~low~~1~~1~~TK:\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser~~TK:\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser
+task2-application-experience-programdataupdater~~Tắt task định kỳ: ProgramDataUpdater~~Task định kỳ~~Thu thập program telemetry vào database AppCompat~~low~~1~~1~~TK:\Microsoft\Windows\Application Experience\ProgramDataUpdater~~TK:\Microsoft\Windows\Application Experience\ProgramDataUpdater
+task2-application-experience-sdbinstmergedbtask~~Tắt task định kỳ: SdbinstMergeDbTask~~Task định kỳ~~Merge database shim tương thích~~low~~1~~0~~TK:\Microsoft\Windows\Application Experience\SdbinstMergeDbTask~~TK:\Microsoft\Windows\Application Experience\SdbinstMergeDbTask
+task2-autochk-proxy~~Tắt task định kỳ: Proxy~~Task định kỳ~~Báo cáo dữ liệu chkdsk tự động (CEIP)~~low~~1~~1~~TK:\Microsoft\Windows\Autochk\Proxy~~TK:\Microsoft\Windows\Autochk\Proxy
+task2-customer-experience-improvement-program-consolidator~~Tắt task định kỳ: Consolidator~~Task định kỳ~~CEIP — gom telemetry trải nghiệm gửi Microsoft~~low~~1~~1~~TK:\Microsoft\Windows\Customer Experience Improvement Program\Consolidator~~TK:\Microsoft\Windows\Customer Experience Improvement Program\Consolidator
+task2-customer-experience-improvement-program-usbceip~~Tắt task định kỳ: UsbCeip~~Task định kỳ~~CEIP USB — telemetry thiết bị USB~~low~~1~~1~~TK:\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip~~TK:\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip
+task2-diskdiagnostic-microsoft-windows-diskdiagnosticdatacollector~~Tắt task định kỳ: Microsoft-Windows-DiskDiagnosticDataCollector~~Task định kỳ~~Chẩn đoán ổ đĩa gửi Microsoft (CEIP)~~low~~1~~1~~TK:\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector~~TK:\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector
+task2-feedback-siuf-dmclientonscenariodownload~~Tắt task định kỳ: DmClientOnScenarioDownload~~Task định kỳ~~Tải feedback scenarios về Microsoft~~low~~1~~1~~TK:\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload~~TK:\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload
+task2-languagecomponentsinstaller-installationworkload~~Tắt task định kỳ: InstallationWorkload~~Task định kỳ~~Cài ngôn ngữ phụ trong nền~~low~~1~~0~~TK:\Microsoft\Windows\LanguageComponentsInstaller\InstallationWorkload~~TK:\Microsoft\Windows\LanguageComponentsInstaller\InstallationWorkload
+task2-languagecomponentsinstaller-reconfigurelanguages~~Tắt task định kỳ: ReconfigureLanguages~~Task định kỳ~~Cấu hình lại bộ ngôn ngữ tự động~~low~~1~~0~~TK:\Microsoft\Windows\LanguageComponentsInstaller\ReconfigureLanguages~~TK:\Microsoft\Windows\LanguageComponentsInstaller\ReconfigureLanguages
+task2-retaildemo-cleanupofflinecontent~~Tắt task định kỳ: CleanupOfflineContent~~Task định kỳ~~Dọn nội dung chế độ Retail Demo (máy trưng bày)~~low~~1~~0~~TK:\Microsoft\Windows\RetailDemo\CleanupOfflineContent~~TK:\Microsoft\Windows\RetailDemo\CleanupOfflineContent
+task2-servicing-startcomponentcleanup~~Tắt task định kỳ: StartComponentCleanup~~Task định kỳ~~Dọn component store tự động — tắt để kiểm soát việc dọn bằng tay~~medium~~1~~0~~TK:\Microsoft\Windows\Servicing\StartComponentCleanup~~TK:\Microsoft\Windows\Servicing\StartComponentCleanup
+task2-time-synchronization-synchronizetime~~Tắt task định kỳ: SynchronizeTime~~Task định kỳ~~Đồng bộ giờ NTP — CẢNH BÁO: đồng hồ có thể lệch nếu không có nguồn sync khác~~medium~~1~~0~~TK:\Microsoft\Windows\Time Synchronization\SynchronizeTime~~TK:\Microsoft\Windows\Time Synchronization\SynchronizeTime
+task2-tpm-tpm-maintenance~~Tắt task định kỳ: Tpm-Maintenance~~Task định kỳ~~Bảo trì TPM định kỳ~~low~~1~~0~~TK:\Microsoft\Windows\TPM\Tpm-Maintenance~~TK:\Microsoft\Windows\TPM\Tpm-Maintenance
+task2-windows-filtering-platform-bfeonservicestarttypechange~~Tắt task định kỳ: BfeOnServiceStartTypeChange~~Task định kỳ~~Đổi kiểu start BFE theo firewall policy~~low~~1~~0~~TK:\Microsoft\Windows\Windows Filtering Platform\BfeOnServiceStartTypeChange~~TK:\Microsoft\Windows\Windows Filtering Platform\BfeOnServiceStartTypeChange
+task2-windows-media-sharing-updatelibrary~~Tắt task định kỳ: UpdateLibrary~~Task định kỳ~~Cập nhật thư viện media chia sẻ DLNA~~low~~1~~0~~TK:\Microsoft\Windows\Windows Media Sharing\UpdateLibrary~~TK:\Microsoft\Windows\Windows Media Sharing\UpdateLibrary
+task2-windowscolorsystem-calibration-loader~~Tắt task định kỳ: Calibration Loader~~Task định kỳ~~Nạp color profile màn hình khi đăng nhập — CẢNH BÁO: mất màu ICC custom~~medium~~1~~0~~TK:\Microsoft\Windows\WindowsColorSystem\Calibration Loader~~TK:\Microsoft\Windows\WindowsColorSystem\Calibration Loader
+task2-windowsupdate-scheduled-start~~Tắt task định kỳ: Scheduled Start~~Task định kỳ~~Khởi động Windows Update theo lịch~~medium~~1~~1~~TK:\Microsoft\Windows\WindowsUpdate\Scheduled Start~~TK:\Microsoft\Windows\WindowsUpdate\Scheduled Start
+task2-windowsupdate-sih~~Tắt task định kỳ: sih~~Task định kỳ~~Silent installer host (SIH) — cài âm thầm thứ từ Microsoft~~low~~1~~1~~TK:\Microsoft\Windows\WindowsUpdate\sih~~TK:\Microsoft\Windows\WindowsUpdate\sih
+task2-windowsupdate-sihboot~~Tắt task định kỳ: sihboot~~Task định kỳ~~SIH khi boot — cài âm thầm~~low~~1~~1~~TK:\Microsoft\Windows\WindowsUpdate\sihboot~~TK:\Microsoft\Windows\WindowsUpdate\sihboot
+task2-xblgamesave-xblgamesavetask~~Tắt task định kỳ: XblGameSaveTask~~Task định kỳ~~XblGameSave task — telemetry game save Xbox~~low~~1~~0~~TK:\Microsoft\Windows\XblGameSave\XblGameSaveTask~~TK:\Microsoft\Windows\XblGameSave\XblGameSaveTask
+task2-xblgamesave-xblgamesavetasklogon~~Tắt task định kỳ: XblGameSaveTaskLogon~~Task định kỳ~~XblGameSave khi đăng nhập~~low~~1~~0~~TK:\Microsoft\Windows\XblGameSave\XblGameSaveTaskLogon~~TK:\Microsoft\Windows\XblGameSave\XblGameSaveTaskLogon
+task2-chkdsk-proactivescan~~Tắt task định kỳ: ProactiveScan~~Task định kỳ~~Quét ổ proactive nền (tốn I/O)~~low~~1~~0~~TK:\Microsoft\Windows\Chkdsk\ProactiveScan~~TK:\Microsoft\Windows\Chkdsk\ProactiveScan
+task2-chkdsk-scheduled~~Tắt task định kỳ: Scheduled~~Task định kỳ~~chkdsk lên lịch boot~~low~~1~~0~~TK:\Microsoft\Windows\Chkdsk\Scheduled~~TK:\Microsoft\Windows\Chkdsk\Scheduled
+task2-installservice-scanforupdates~~Tắt task định kỳ: ScanForUpdates~~Task định kỳ~~Store quét cập nhật app nền~~low~~1~~0~~TK:\Microsoft\Windows\InstallService\ScanForUpdates~~TK:\Microsoft\Windows\InstallService\ScanForUpdates
+task2-installservice-scanforupdatesasuser~~Tắt task định kỳ: ScanForUpdatesAsUser~~Task định kỳ~~Store quét cập nhật theo user~~low~~1~~0~~TK:\Microsoft\Windows\InstallService\ScanForUpdatesAsUser~~TK:\Microsoft\Windows\InstallService\ScanForUpdatesAsUser
+task2-updateorchestrator-reboot~~Tắt task định kỳ: Reboot~~Task định kỳ~~Tự restart máy sau update — tắt để kiểm soát reboot tay~~medium~~1~~1~~TK:\Microsoft\Windows\UpdateOrchestrator\Reboot~~TK:\Microsoft\Windows\UpdateOrchestrator\Reboot
+task2-microsoftedgeupdatetaskmachinecore~~Tắt task định kỳ: MicrosoftEdgeUpdateTaskMachineCore~~Task định kỳ~~Edge Update core — cập nhật Edge nền~~low~~1~~1~~TK:\Microsoft\Windows\MicrosoftEdgeUpdateTaskMachineCore~~TK:\Microsoft\Windows\MicrosoftEdgeUpdateTaskMachineCore
+task2-microsoftedgeupdatetaskmachineua~~Tắt task định kỳ: MicrosoftEdgeUpdateTaskMachineUA~~Task định kỳ~~Edge Update on-demand~~low~~1~~1~~TK:\Microsoft\Windows\MicrosoftEdgeUpdateTaskMachineUA~~TK:\Microsoft\Windows\MicrosoftEdgeUpdateTaskMachineUA
+task2-googleupdatetaskmachinecore~~Tắt task định kỳ: GoogleUpdateTaskMachineCore~~Task định kỳ~~Google Update core — cập nhật Chrome nền~~low~~1~~1~~TK:\Microsoft\Windows\GoogleUpdateTaskMachineCore~~TK:\Microsoft\Windows\GoogleUpdateTaskMachineCore
+task2-googleupdatetaskmachineua~~Tắt task định kỳ: GoogleUpdateTaskMachineUA~~Task định kỳ~~Google Update on-demand~~low~~1~~1~~TK:\Microsoft\Windows\GoogleUpdateTaskMachineUA~~TK:\Microsoft\Windows\GoogleUpdateTaskMachineUA
+uwp2-microsoft-3dbuilder~~Gỡ app UWP: 3DBuilder~~Bloatware (UWP)~~3D Builder — app dựng 3D hàn lâm~~low~~1~~0~~AX:Microsoft.3DBuilder~~AX:Microsoft.3DBuilder
+uwp2-microsoft-microsoft3dviewer~~Gỡ app UWP: Microsoft3DViewer~~Bloatware (UWP)~~3D Viewer — xem file 3D~~low~~1~~0~~AX:Microsoft.Microsoft3DViewer~~AX:Microsoft.Microsoft3DViewer
+uwp2-microsoft-bingfinance~~Gỡ app UWP: BingFinance~~Bloatware (UWP)~~Money (Bing Finance) — tin tức tài chính Bing~~low~~1~~0~~AX:Microsoft.BingFinance~~AX:Microsoft.BingFinance
+uwp2-microsoft-bingnews~~Gỡ app UWP: BingNews~~Bloatware (UWP)~~News (Bing News) — tin tức Bing~~low~~1~~0~~AX:Microsoft.BingNews~~AX:Microsoft.BingNews
+uwp2-microsoft-bingsearch~~Gỡ app UWP: BingSearch~~Bloatware (UWP)~~Bing Search app — tìm Bing riêng biệt~~low~~1~~0~~AX:Microsoft.BingSearch~~AX:Microsoft.BingSearch
+uwp2-microsoft-bingweather~~Gỡ app UWP: BingWeather~~Bloatware (UWP)~~Weather (Bing Weather) — thời tiết Bing~~low~~1~~0~~AX:Microsoft.BingWeather~~AX:Microsoft.BingWeather
+uwp2-microsoft-news~~Gỡ app UWP: News~~Bloatware (UWP)~~Microsoft Start News — tin tức bắt buộc mở~~low~~1~~0~~AX:Microsoft.News~~AX:Microsoft.News
+uwp2-microsoft-gethelp~~Gỡ app UWP: GetHelp~~Bloatware (UWP)~~Get Help — hỗ trợ Microsoft (mở chat remote support)~~low~~1~~0~~AX:Microsoft.GetHelp~~AX:Microsoft.GetHelp
+uwp2-microsoft-getstarted~~Gỡ app UWP: Getstarted~~Bloatware (UWP)~~Tips — gợi ý lăng xê Windows~~low~~1~~0~~AX:Microsoft.Getstarted~~AX:Microsoft.Getstarted
+uwp2-microsoft-microsoftofficehub~~Gỡ app UWP: MicrosoftOfficeHub~~Bloatware (UWP)~~Microsoft 365 Hub (Office) — quảng cáo Office~~low~~1~~0~~AX:Microsoft.MicrosoftOfficeHub~~AX:Microsoft.MicrosoftOfficeHub
+uwp2-microsoft-microsoftsolitairecollection~~Gỡ app UWP: MicrosoftSolitaireCollection~~Bloatware (UWP)~~Microsoft Solitaire Collection — game bài solitaire~~low~~1~~0~~AX:Microsoft.MicrosoftSolitaireCollection~~AX:Microsoft.MicrosoftSolitaireCollection
+uwp2-microsoft-mixedreality-portal~~Gỡ app UWP: Portal~~Bloatware (UWP)~~Mixed Reality Portal — VR headset~~low~~1~~0~~AX:Microsoft.MixedReality.Portal~~AX:Microsoft.MixedReality.Portal
+uwp2-microsoft-office-onenote~~Gỡ app UWP: OneNote~~Bloatware (UWP)~~OneNote for Windows — nếu không dùng OneNote~~low~~1~~0~~AX:Microsoft.Office.OneNote~~AX:Microsoft.Office.OneNote
+uwp2-microsoft-oneconnect~~Gỡ app UWP: OneConnect~~Bloatware (UWP)~~OneConnect — gói di động/eSIM~~low~~1~~0~~AX:Microsoft.OneConnect~~AX:Microsoft.OneConnect
+uwp2-microsoft-people~~Gỡ app UWP: People~~Bloatware (UWP)~~People — sổ liên lạc Windows~~low~~1~~0~~AX:Microsoft.People~~AX:Microsoft.People
+uwp2-microsoft-skypeapp~~Gỡ app UWP: SkypeApp~~Bloatware (UWP)~~Skype — nếu không dùng Skype~~low~~1~~0~~AX:Microsoft.SkypeApp~~AX:Microsoft.SkypeApp
+uwp2-microsoft-todos~~Gỡ app UWP: Todos~~Bloatware (UWP)~~Microsoft To Do — việc cần làm~~low~~1~~0~~AX:Microsoft.Todos~~AX:Microsoft.Todos
+uwp2-microsoft-whiteboard~~Gỡ app UWP: Whiteboard~~Bloatware (UWP)~~Whiteboard — bảng vẽ cộng tác~~low~~1~~0~~AX:Microsoft.Whiteboard~~AX:Microsoft.Whiteboard
+uwp2-microsoft-windowsfeedbackhub~~Gỡ app UWP: WindowsFeedbackHub~~Bloatware (UWP)~~Feedback Hub — gửi feedback cho Microsoft~~low~~1~~0~~AX:Microsoft.WindowsFeedbackHub~~AX:Microsoft.WindowsFeedbackHub
+uwp2-microsoft-windowsmaps~~Gỡ app UWP: WindowsMaps~~Bloatware (UWP)~~Maps — bản đồ Windows~~low~~1~~0~~AX:Microsoft.WindowsMaps~~AX:Microsoft.WindowsMaps
+uwp2-microsoft-yourphone~~Gỡ app UWP: YourPhone~~Bloatware (UWP)~~Phone Link — CẢNH BÁO: mất kết nối điện thoại Android/iPhone~~medium~~1~~0~~AX:Microsoft.YourPhone~~AX:Microsoft.YourPhone
+uwp2-microsoft-zunemusic~~Gỡ app UWP: ZuneMusic~~Bloatware (UWP)~~Media Player/Groove Music — nhạc Microsoft~~low~~1~~0~~AX:Microsoft.ZuneMusic~~AX:Microsoft.ZuneMusic
+uwp2-microsoft-zunevideo~~Gỡ app UWP: ZuneVideo~~Bloatware (UWP)~~Film & TV — phim Microsoft~~low~~1~~0~~AX:Microsoft.ZuneVideo~~AX:Microsoft.ZuneVideo
+uwp2-microsoft-powerautomatedesktop~~Gỡ app UWP: PowerAutomateDesktop~~Bloatware (UWP)~~Power Automate Desktop — tự động hóa quy trình~~low~~1~~0~~AX:Microsoft.PowerAutomateDesktop~~AX:Microsoft.PowerAutomateDesktop
+uwp2-microsoftteams~~Gỡ app UWP: MicrosoftTeams~~Bloatware (UWP)~~Microsoft Teams Personal — chat cá nhân (icon Teams trong taskbar)~~low~~1~~0~~AX:MicrosoftTeams~~AX:MicrosoftTeams
+uwp2-microsoft-549981c3f77f5~~Gỡ app UWP: 549981C3F77F5~~Bloatware (UWP)~~Cortana app — trợ lý giọng nói~~low~~1~~0~~AX:Microsoft.549981C3F77F5~~AX:Microsoft.549981C3F77F5
+uwp2-microsoft-copilot~~Gỡ app UWP: Copilot~~Bloatware (UWP)~~Microsoft Copilot app — AI chat riêng~~low~~1~~0~~AX:Microsoft.Copilot~~AX:Microsoft.Copilot
+uwp2-microsoft-outlookforwindows~~Gỡ app UWP: OutlookForWindows~~Bloatware (UWP)~~New Outlook — CẢNH BÁO: app Mail/Calendar mới~~medium~~1~~0~~AX:Microsoft.OutlookForWindows~~AX:Microsoft.OutlookForWindows
+uwp2-microsoftcorporationii-microsoftfamily~~Gỡ app UWP: MicrosoftFamily~~Bloatware (UWP)~~Microsoft Family Safety — quản lý gia đình~~low~~1~~0~~AX:MicrosoftCorporationII.MicrosoftFamily~~AX:MicrosoftCorporationII.MicrosoftFamily
+uwp2-microsoftcorporationii-quickassist~~Gỡ app UWP: QuickAssist~~Bloatware (UWP)~~Quick Assist — remote hỗ trợ; CẢNH BÁO: mất remote hỗ trợ qua Quick Assist~~medium~~1~~0~~AX:MicrosoftCorporationII.QuickAssist~~AX:MicrosoftCorporationII.QuickAssist
+uwp2-microsoft-windowscommunicationsapps~~Gỡ app UWP: windowscommunicationsapps~~Bloatware (UWP)~~Mail and Calendar — CẢNH BÁO: mất Mail/Calendar cổ điển~~medium~~1~~0~~AX:microsoft.windowscommunicationsapps~~AX:microsoft.windowscommunicationsapps
+uwp2-microsoft-advertising-xaml~~Gỡ app UWP: Xaml~~Bloatware (UWP)~~Microsoft Advertising XAML — lib quảng cáo cho app Store~~low~~1~~0~~AX:Microsoft.Advertising.Xaml~~AX:Microsoft.Advertising.Xaml
+uwp2-microsoft-windowscamera~~Gỡ app UWP: WindowsCamera~~Bloatware (UWP)~~Camera — app camera Windows; CẢNH BÁO: mất app chụp webcam~~medium~~1~~0~~AX:Microsoft.WindowsCamera~~AX:Microsoft.WindowsCamera
+uwp2-microsoft-windowsalarms~~Gỡ app UWP: WindowsAlarms~~Bloatware (UWP)~~Alarms & Clock — đồng hồ báo thức Windows~~low~~1~~0~~AX:Microsoft.WindowsAlarms~~AX:Microsoft.WindowsAlarms
+uwp2-microsoft-windows-devhome~~Gỡ app UWP: DevHome~~Bloatware (UWP)~~Dev Home — dashboard dev của Microsoft~~low~~1~~0~~AX:Microsoft.Windows.DevHome~~AX:Microsoft.Windows.DevHome
+uwp2-microsoft-widgetsplatformruntime~~Gỡ app UWP: WidgetsPlatformRuntime~~Bloatware (UWP)~~Widgets Platform Runtime — nền tảng Widgets~~low~~1~~0~~AX:Microsoft.WidgetsPlatformRuntime~~AX:Microsoft.WidgetsPlatformRuntime
+uwp2-microsoftwindows-client-webexperience~~Gỡ app UWP: WebExperience~~Bloatware (UWP)~~Web Experience Pack — engine Widgets/tin tức Win11~~low~~1~~0~~AX:MicrosoftWindows.Client.WebExperience~~AX:MicrosoftWindows.Client.WebExperience
+uwp2-microsoft-gamingapp~~Gỡ app UWP: GamingApp~~Bloatware (UWP)~~Xbox Console Companion (Gaming app)~~low~~1~~0~~AX:Microsoft.GamingApp~~AX:Microsoft.GamingApp
+uwp2-microsoft-xboxidentityprovider~~Gỡ app UWP: XboxIdentityProvider~~Bloatware (UWP)~~Xbox Identity Provider — CẢNH BÁO: game Xbox/Game Pass không login được~~medium~~1~~0~~AX:Microsoft.XboxIdentityProvider~~AX:Microsoft.XboxIdentityProvider
+uwp2-microsoft-xbox-tcui~~Gỡ app UWP: TCUI~~Bloatware (UWP)~~Xbox TCUI — UI overlay Xbox trong game~~low~~1~~0~~AX:Microsoft.Xbox.TCUI~~AX:Microsoft.Xbox.TCUI
+uwp2-microsoft-xboxspeechtotextoverlay~~Gỡ app UWP: XboxSpeechToTextOverlay~~Bloatware (UWP)~~Xbox Speech to Text Overlay — phụ đề giọng nói game~~low~~1~~0~~AX:Microsoft.XboxSpeechToTextOverlay~~AX:Microsoft.XboxSpeechToTextOverlay
+uwp2-microsoft-xboxgameoverlay~~Gỡ app UWP: XboxGameOverlay~~Bloatware (UWP)~~Xbox Game Overlay — overlay game Xbox~~low~~1~~0~~AX:Microsoft.XboxGameOverlay~~AX:Microsoft.XboxGameOverlay
+svc2b-appidsvc~~Tắt dịch vụ AppIDSvc~~Dịch vụ~~Application Identity — AppLocker/SmartScreen AppID; tắt = mất AppLocker~~low~~1~~0~~SC:AppIDSvc|disabled~~SC:AppIDSvc|demand
+svc2b-axinstsv~~Tắt dịch vụ AxInstSV~~Dịch vụ~~ActiveX Installer Service — cài ActiveX doanh nghiệp~~low~~1~~0~~SC:AxInstSV|disabled~~SC:AxInstSV|demand
+svc2b-bits~~Tắt dịch vụ BITS~~Dịch vụ~~Background Intelligent Transfer — tải nền Windows Update/Store; CẢNH BÁO: update/app tải chậm qua app riêng~~medium~~1~~0~~SC:BITS|disabled~~SC:BITS|delayed-auto
+svc2b-dssvc~~Tắt dịch vụ DsSvc~~Dịch vụ~~Data Sharing Service — chia sẻ dữ liệu giữa process~~low~~1~~0~~SC:DsSvc|disabled~~SC:DsSvc|demand
+svc2b-ehrecvr~~Tắt dịch vụ ehRecvr~~Dịch vụ~~Media Center Receiver — Windows Media Center legacy~~low~~1~~0~~SC:ehRecvr|disabled~~SC:ehRecvr|demand
+svc2b-ehsched~~Tắt dịch vụ ehSched~~Dịch vụ~~Media Center Scheduler — legacy~~low~~1~~0~~SC:ehSched|disabled~~SC:ehSched|demand
+svc2b-hidserv~~Tắt dịch vụ hidserv~~Dịch vụ~~Human Interface Device Service — phím tắt nút đặc biệt bàn phím/đèn LED; tắt có thể mất hotkey phần cứng~~low~~1~~0~~SC:hidserv|disabled~~SC:hidserv|demand
+svc2b-hkmsvc~~Tắt dịch vụ hkmsvc~~Dịch vụ~~Health Key and Certificate Management — quản lý chứng thư health~~low~~1~~0~~SC:hkmsvc|disabled~~SC:hkmsvc|demand
+svc2b-ntlmssp~~Tắt dịch vụ NtLmSsp~~Dịch vụ~~NTLM Security Support Provider — NTLM legacy auth~~low~~1~~0~~SC:NtLmSsp|disabled~~SC:NtLmSsp|demand
+svc2b-sgrmbroker~~Tắt dịch vụ SgrmBroker~~Dịch vụ~~System Guard Runtime Monitor Broker — giám sát firmware/TPM; tắt mất SGRM telemetry bảo vệ~~medium~~1~~0~~SC:SgrmBroker|disabled~~SC:SgrmBroker|auto
+svc2b-tbs~~Tắt dịch vụ TBS~~Dịch vụ~~TPM Base Services — CẢNH BÁO: mất BitLocker/Windows Hello dựa TPM~~low~~1~~0~~SC:TBS|disabled~~SC:TBS|demand
+svc2b-trustedinstaller~~Tắt dịch vụ TrustedInstaller~~Dịch vụ~~Windows Modules Installer — CẢNH BÁO: không cài được Windows Update/component~~low~~1~~0~~SC:TrustedInstaller|disabled~~SC:TrustedInstaller|demand
+svc2b-vmicshutdown~~Tắt dịch vụ vmicshutdown~~Dịch vụ~~Hyper-V Guest Shutdown~~low~~1~~0~~SC:vmicshutdown|disabled~~SC:vmicshutdown|demand
+svc2b-vmictimesync~~Tắt dịch vụ vmictimesync~~Dịch vụ~~Hyper-V Time Synchronization~~low~~1~~0~~SC:vmictimesync|disabled~~SC:vmictimesync|demand
+svc2b-vmicvss~~Tắt dịch vụ vmicvss~~Dịch vụ~~Hyper-V Volume Shadow Copy Requestor~~low~~1~~0~~SC:vmicvss|disabled~~SC:vmicvss|demand
+task2b-updateorchestrator-schedule-scan~~Tắt task định kỳ: Schedule Scan~~Task định kỳ~~Lịch quét Windows Update nền~~medium~~1~~0~~TK:\Microsoft\Windows\UpdateOrchestrator\Schedule Scan~~TK:\Microsoft\Windows\UpdateOrchestrator\Schedule Scan
+task2b-updateorchestrator-uso_uxbroker~~Tắt task định kỳ: USO_UxBroker~~Task định kỳ~~USO UI broker — giao diện update tự bật~~low~~1~~0~~TK:\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker~~TK:\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker
+task2b-shell-familysafetyupload~~Tắt task định kỳ: FamilySafetyUpload~~Task định kỳ~~Family Safety upload~~low~~1~~0~~TK:\Microsoft\Windows\Shell\FamilySafetyUpload~~TK:\Microsoft\Windows\Shell\FamilySafetyUpload
+task2b-systemrestore-sr~~Tắt task định kỳ: SR~~Task định kỳ~~System Restore tạo restore point định kỳ — CẢNH BÁO: mất khả năng khôi phục tự động~~medium~~1~~0~~TK:\Microsoft\Windows\SystemRestore\SR~~TK:\Microsoft\Windows\SystemRestore\SR
+task2b-search-gatherlogs~~Tắt task định kỳ: GatherLogs~~Task định kỳ~~Indexer GatherLogs — log indexing nền~~low~~1~~0~~TK:\Microsoft\Windows\Search\GatherLogs~~TK:\Microsoft\Windows\Search\GatherLogs
+task2b-offline-files-background-synchronization~~Tắt task định kỳ: Background Synchronization~~Task định kỳ~~Offline Files sync nền~~low~~1~~0~~TK:\Microsoft\Windows\Offline Files\Background Synchronization~~TK:\Microsoft\Windows\Offline Files\Background Synchronization
+task2b-offline-files-logon-synchronization~~Tắt task định kỳ: Logon Synchronization~~Task định kỳ~~Offline Files sync khi đăng nhập~~low~~1~~0~~TK:\Microsoft\Windows\Offline Files\Logon Synchronization~~TK:\Microsoft\Windows\Offline Files\Logon Synchronization
+task2b-textservicesframework-msctfmonitor~~Tắt task định kỳ: MsCtfMonitor~~Task định kỳ~~CTF monitor — CẢNH BÁO: gõ tiếng Việt/IME có thể lỗi~~medium~~1~~0~~TK:\Microsoft\Windows\TextServicesFramework\MsCtfMonitor~~TK:\Microsoft\Windows\TextServicesFramework\MsCtfMonitor
+task2b-windowsupdate-automatic-app-update~~Tắt task định kỳ: Automatic App Update~~Task định kỳ~~Tự cập nhật app Store nền~~low~~1~~0~~TK:\Microsoft\Windows\WindowsUpdate\Automatic App Update~~TK:\Microsoft\Windows\WindowsUpdate\Automatic App Update
+task2b-remoteapp-and-desktop-connections-update~~Tắt task định kỳ: RemoteApp and Desktop Connections Update~~Task định kỳ~~RemoteApp & Desktop Connections update (RD Web)~~low~~1~~0~~TK:\Microsoft\Windows\RemoteApp and Desktop Connections Update~~TK:\Microsoft\Windows\RemoteApp and Desktop Connections Update
+svc2c-bthhfsrv~~Tắt dịch vụ BthHFSrv~~Dịch vụ~~Bluetooth Hands-Free Service — tai nghe BT dùng mic HFP~~low~~1~~0~~SC:BthHFSrv|disabled~~SC:BthHFSrv|demand
+svc2c-kdssvc~~Tắt dịch vụ KdsSvc~~Dịch vụ~~Group Key Distribution — mật khẩu nhóm Active Directory~~low~~1~~0~~SC:KdsSvc|disabled~~SC:KdsSvc|demand
+svc2c-rmsvc~~Tắt dịch vụ RmSvc~~Dịch vụ~~Radio Management — quản lý Wi-Fi/Bluetooth radio; CẢNH BÁO: mất toggle airplane/wifi~~medium~~1~~0~~SC:RmSvc|disabled~~SC:RmSvc|demand
+svc2c-ikeext~~Tắt dịch vụ Ikeext~~Dịch vụ~~IKE and AuthIP IPsec Keying — module đàm phán IPsec~~low~~1~~0~~SC:Ikeext|disabled~~SC:Ikeext|demand
+svc2c-mslldp~~Tắt dịch vụ mslldp~~Dịch vụ~~MSLLDP — Link Layer Discovery Protocol Microsoft~~low~~1~~0~~SC:mslldp|disabled~~SC:mslldp|demand
+svc2c-deviceassociationservice~~Tắt dịch vụ DeviceAssociationService~~Dịch vụ~~Device Association Service — pair thiết bị (BT/DLNA); tắt mất pairing~~low~~1~~0~~SC:DeviceAssociationService|disabled~~SC:DeviceAssociationService|demand
+svc2c-deviceinstall~~Tắt dịch vụ DeviceInstall~~Dịch vụ~~Device Install Service — cài driver thiết bị mới; CẢNH BÁO: cắm thiết bị mới không cài được~~medium~~1~~0~~SC:DeviceInstall|disabled~~SC:DeviceInstall|demand
+svc2c-ipxlatcfgsvc~~Tắt dịch vụ IpxlatCfgSvc~~Dịch vụ~~IP Translation Configuration — IPv4/IPv6 translation (464XLAT)~~low~~1~~0~~SC:IpxlatCfgSvc|disabled~~SC:IpxlatCfgSvc|demand
+uwp2b-microsoft-windowscalculator~~Gỡ app UWP: WindowsCalculator~~Bloatware (UWP)~~Calculator — máy tính; CHỈ gỡ nếu không dùng~~medium~~1~~0~~AX:Microsoft.WindowsCalculator~~AX:Microsoft.WindowsCalculator
+uwp2b-microsoft-paint~~Gỡ app UWP: Paint~~Bloatware (UWP)~~Paint — CHỈ gỡ nếu không dùng Paint~~medium~~1~~0~~AX:Microsoft.Paint~~AX:Microsoft.Paint
+uwp2b-microsoft-windows-photos~~Gỡ app UWP: Photos~~Bloatware (UWP)~~Photos — CHỈ gỡ nếu dùng app xem ảnh khác~~medium~~1~~0~~AX:Microsoft.Windows.Photos~~AX:Microsoft.Windows.Photos
+uwp2b-microsoft-windowsnotepad~~Gỡ app UWP: WindowsNotepad~~Bloatware (UWP)~~Notepad (Store) — CHỈ gỡ nếu không dùng~~medium~~1~~0~~AX:Microsoft.WindowsNotepad~~AX:Microsoft.WindowsNotepad
+uwp2b-microsoft-microsoftstickynotes~~Gỡ app UWP: MicrosoftStickyNotes~~Bloatware (UWP)~~Sticky Notes — CHỈ gỡ nếu không dùng ghi chú dán~~medium~~1~~0~~AX:Microsoft.MicrosoftStickyNotes~~AX:Microsoft.MicrosoftStickyNotes
+uwp2b-microsoft-windowsterminal~~Gỡ app UWP: WindowsTerminal~~Bloatware (UWP)~~Windows Terminal — CHỈ gỡ nếu không dùng terminal mới~~medium~~1~~0~~AX:Microsoft.WindowsTerminal~~AX:Microsoft.WindowsTerminal
+uwp2b-microsoft-screensketch~~Gỡ app UWP: ScreenSketch~~Bloatware (UWP)~~Snip & Sketch — CHỈ gỡ nếu chụp màn hình bằng tool khác~~medium~~1~~0~~AX:Microsoft.ScreenSketch~~AX:Microsoft.ScreenSketch
+uwp2b-microsoft-messaging~~Gỡ app UWP: Messaging~~Bloatware (UWP)~~Messaging — SMS/chat qua SIM~~medium~~1~~0~~AX:Microsoft.Messaging~~AX:Microsoft.Messaging
