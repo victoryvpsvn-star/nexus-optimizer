@@ -179,3 +179,19 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   localhost — cần middleware Origin check); system.go backup .reg ghi không atomic + nil Stat panic;
   stepTask revert /ENABLE bật lại task user từng tắt thủ công (state loss); readBody CT gate.
 - Verify: go vet OK, go test OK, exe Windows build OK → download/Sakura-Tool-x64.exe.
+
+
+## Bổ sung 10-e: Cài extension kiểu Kaspersky (ẩn source, auto-install qua policy)
+- ext_pack.go: packer CRX3 tự ký (RSA-2048, khoá lưu ext-key.pem trong data dir; manifest key ghi đè =
+  khoá ký → ID ổn định SHA256(SPKI)[:16] alphabet a-p; version 2.2.1). Format đối chiếu TRỰC TIẾP
+  Chromium 120 crx_verifier.cc (gitiles): chữ ký = "CRX3 SignedData" || LE32(len(shd)) || shd || [zip]
+  (header KHÔNG nằm trong chữ ký). ext_pack_test.go parse protobuf + verify chữ ký/ID/zip PASS.
+- ext_policy_windows.go: HKCU\SOFTWARE\Policies\Google\Chrome + Microsoft\Edge: ExtensionSettings[id]
+  = force_installed + update_url http://127.0.0.1:<port>/ext/update.xml; ExtensionInstallSources["1"]=
+  http://127.0.0.1:<port>/ext/*; extPolicyAutoReapply() nền sau start tự ghi lại khi đổi cổng.
+  ext_policy_other.go = stub trung thực Linux. Routes GET /ext/update.xml + /ext/cat-status.crx.
+- API POST /api/presence install-policy/remove-policy; UI nút "🛡️ Cài kiểu Kaspersky (ẩn source)" + "🗑️ Gỡ policy".
+- Trung thực: lần đầu cần tool chạy khi restart Chrome; extension hiện "Được quản trị"; gỡ = Gỡ policy.
+- Sự cố sandbox: biset roll về 7a7a050 → recovery git reset --hard origin/main (188621e), untracked giữ.
+  Bài học: session sau luôn git fetch origin trước khi sửa.
+- Verify: vet OK, full test OK, smoke /ext/* (42KB Cr24) + stub trung thực + UI OK. Commit 83d1d94.
