@@ -1,5 +1,8 @@
-// Cat Status v2.5.0 — CHỈ báo Discord khi Sakura Tool đang mở (quảng cáo tool + icon app).
-// v2.5.0: bấm Bật mà chưa đăng nhập → tự mở tab OAuth Discord (không cần biết phải login trước).
+// Cat Status v2.5.1 — CHỈ báo Discord khi Sakura Tool đang mở (quảng cáo tool + icon app).
+// v2.5.0: bấm Bật mà chưa đăng nhập → tự mở tab OAuth Discord.
+// v2.5.1: timestamps.headless-sessions là MILI-GIÂY (giây bị Discord đọc là 1970 → đếm 57 năm);
+// icon dùng asset key 'sakura' (upload 1 lần trong Developer Portal) — mp:external chỉ chạy với
+// Spotify nên trước đây hiện dấu ?. Chưa có asset → fallback tự gỡ, status vẫn đẹp.
 // BỎ hoàn toàn dect nhạc/video (tabs classify, mediaSession, oembed...).
 // Báo qua API Discord trực tiếp (headless-sessions, OAuth đã đăng nhập) →
 // KHÔNG CẦN Discord desktop. Dect "tool đang mở" = poll beacon localhost của tool;
@@ -9,9 +12,7 @@ const API = "https://discord.com/api/v10";
 const SCOPES = "openid sdk.social_layer_presence";
 const BEACON_PORTS = [32123, 32124];
 const REPO_URL = "https://github.com/victoryvpsvn-star/nexus-optimizer";
-const LOGO_URL = "https://raw.githubusercontent.com/victoryvpsvn-star/nexus-optimizer/main/nexus-go/static/img/sakura-logo.png";
 
-const b64urlStr = (s) => btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 // Đăng activity an toàn: Discord đôi khi chối assets/buttons với app chưa verify → lùi từng bước
 async function postActivitySafe(act) {
@@ -195,12 +196,12 @@ async function syncSakura() {
       platform: "desktop",
       details: "🌸 Tối ưu PC — dọn rác, tăng FPS, sửa lỗi Windows",
       state: "Miễn phí · Làm sạch máy chỉ trong 1 nút bấm",
-      assets: {
-        large_image: `mp:external/${b64urlStr(LOGO_URL)}`,
-        large_text: "Sakura Tool",
-      },
+      // Asset key 'sakura' upload trong Developer Portal → icon hiển thị; chưa có thì
+      // postActivitySafe tự retry không assets (hết dấu ? chấm to đùng)
+      assets: { large_image: "sakura", large_text: "Sakura Tool" },
       buttons: [{ label: "⬇️ Tải Sakura Tool", url: REPO_URL }],
-      timestamps: { start: info.started },
+      // REST headless-sessions dùng ms (khác RPC IPC dùng giây) — nắn đơn vị + sanity check
+      timestamps: { start: info.started > 1e12 ? info.started : info.started * 1000 },
     });
   } catch (e) {
     lastKey = "";

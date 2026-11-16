@@ -311,3 +311,19 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   curl nhầm port main server → 404 — beacon là server riêng, test đúng phải curl 32123);
   node --check 2 js ✓. Bỏ zip cũ trong download/, chỉ còn Cat-Status-Sakura-v2.5.0.zip.
 - exe buildNumber=18 → banner sẽ hiện go-v19 (dispatch này) = chuỗi update tiếp tục.
+
+
+## Bổ sung 10-k: ext v2.5.1 — 2 bug từ ảnh Discord của user (dấu ? + đếm 57 năm)
+- Ảnh user gửi: activity "Sakura Tool" hiện icon DẤU HỎI CHẤM + elapsed "498076:12:26" (~57 năm).
+- Bug 1 icon: trick `mp:external/<b64url>` CHỈ hỗ trợ Spotify; app thường → Discord không resolve
+  → dấu ?. App 1563917712227442731 còn `icon: null` (kiểm tra GET /applications/{id}/rpc) → không
+  có gì fallback. Fix: large_image dùng asset key **"sakura"** (user upload 1 lần trong Developer
+  Portal → Rich Presence → Assets); chưa có asset → postActivitySafe tự retry không assets (đẹp).
+  Không sửa được từ code — asset là tài nguyên portal của app owner. Logo: static/img/sakura-logo.png.
+- Bug 2 timestamp: tính chính xác từ elapsed 1,793,074,346s → start bị Discord hiểu ≈ 21/01/1970 ⇔
+  **REST headless-sessions dùng MILI-GIÂY** (giống gateway), khác RPC IPC (giây). Fix:
+  `timestamps.start = started*1000` (kèm sanity check >1e12).
+- Dọn chết: bỏ LOGO_URL + b64urlStr (không còn mp:external). v251_patch.py.
+- Smoke: update.xml version="2.5.1" ✓ health 3.2.1 ✓ beacon ✓ (lưu ý: không smoke được exe
+  Windows trên Linux — smoke bằng binary Linux cùng code). exe download buildNumber=19 → banner
+  go-v20. "Đang chờ" trong ảnh = Discord idle, không phải bug.
