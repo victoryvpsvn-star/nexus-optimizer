@@ -689,6 +689,17 @@ $('relaunchAdmin').addEventListener('click', async () => {
     msg.textContent = r.message || '';
     render(await get());
   });
+  document.getElementById('kasperskyInstall').addEventListener('click', async () => {
+    msg.textContent = 'Đang ghi policy Chrome/Edge (kiểu Kaspersky — CRX tự ký, cài im lặng)…';
+    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'install-policy' }) }).then((x) => x.json());
+    msg.textContent = r.success ? (r.message + '\nExtension ID: ' + (r.extId || '?')) : ('Lỗi: ' + (r.error || r.message));
+  });
+  document.getElementById('kasperskyRemove').addEventListener('click', async () => {
+    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remove-policy' }) }).then((x) => x.json());
+    msg.textContent = r.success ? r.message : ('Lỗi: ' + (r.error || r.message));
+  });
   document.getElementById('presenceInstall').addEventListener('click', async () => {
     msg.textContent = 'Đang bung extension…';
     const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },

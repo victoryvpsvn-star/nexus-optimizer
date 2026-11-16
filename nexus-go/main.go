@@ -38,6 +38,8 @@ func main() {
 		log.Fatalf("Không mở được cổng HTTP: %v", err)
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
+	extSetPort(ln.Addr().(*net.TCPAddr).Port) // cho CRX server + policy cài extension
+	go extPolicyAutoReapply()
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

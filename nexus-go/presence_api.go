@@ -11,8 +11,10 @@ import (
 )
 
 type presenceCfg struct {
-	Enabled bool   `json:"enabled"`
-	AppID   string `json:"appId"`
+	Enabled      bool   `json:"enabled"`
+	AppID        string `json:"appId"`
+	PolicyEnabled bool  `json:"policyEnabled"`
+	PolicyPort   int    `json:"policyPort"`
 }
 
 var pcfgMtx sync.Mutex
@@ -59,6 +61,7 @@ func handlePresence(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"enabled": en && c.Enabled, "connected": conn, "appId": appID,
 			"section": section, "note": note, "dir": presenceDirLabel(),
+			"policy": map[string]any{"enabled": c.PolicyEnabled, "port": c.PolicyPort, "updateUrl": extUpdateURL(), "source": extSourcePattern(), "extId": extCacheID},
 		})
 		return
 	}
@@ -96,6 +99,12 @@ func handlePresence(w http.ResponseWriter, r *http.Request) {
 			presenceSet(req.Section, req.Note)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	case "install-policy":
+		msg, err := extPolicyInstall()
+		writeJSON(w, http.StatusOK, map[string]any{"success": err == nil, "message": msg, "error": errStr(err), "extId": extCacheID})
+	case "remove-policy":
+		msg, err := extPolicyRemove()
+		writeJSON(w, http.StatusOK, map[string]any{"success": err == nil, "message": msg, "error": errStr(err)})
 	case "install-extension":
 		path, guide := presenceInstallExtension()
 		writeJSON(w, http.StatusOK, map[string]any{"success": path != "", "path": path, "message": guide})
@@ -111,4 +120,11 @@ func pfWriteFile(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func errStr(e error) string {
+	if e == nil {
+		return ""
+	}
+	return e.Error()
 }
