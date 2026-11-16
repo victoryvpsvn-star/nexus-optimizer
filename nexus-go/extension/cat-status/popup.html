@@ -1,0 +1,40 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+body{width:340px;margin:0;padding:12px;font:13px system-ui,sans-serif;background:#1e1f22;color:#f2f3f5}
+h1{font-size:15px;margin:0 0 6px}label{display:block;margin:7px 0 2px;font-size:11px;color:#b5bac1}
+input,select{width:100%;box-sizing:border-box;padding:6px;border-radius:6px;border:0;background:#383a40;color:#fff}
+button{padding:7px 9px;border:0;border-radius:6px;cursor:pointer;color:#fff;background:#5865f2}
+button.g{background:#4e5058}button.r{background:#da373c}.row{display:flex;gap:6px;margin-top:8px}.row>*{flex:1}
+#msg{margin-top:8px;font-size:12px;min-height:14px;word-break:break-word}h2{font-size:12px;margin:12px 0 0;color:#949ba4}
+code{font-size:10px;word-break:break-all;display:block;background:#111214;padding:4px;border-radius:4px}
+</style></head><body>
+<h1>🐱 Cat Status</h1><div id="who" style="font-size:12px;color:#b5bac1">Chưa đăng nhập</div>
+<button id="login" style="width:100%;margin-top:6px">Đăng nhập Discord</button>
+<label>Đang chỉnh status nào</label>
+<select id="editing"><option value="music">🎧 Khi nghe nhạc</option><option value="video">📺 Khi xem video</option></select>
+<label><input type="checkbox" id="hide" style="width:auto"> Ẩn status hẳn khi ở chế độ này</label>
+<h2>TỰ PHÁT HIỆN (không phát gì thì không hiện status)</h2>
+<label><input type="checkbox" id="rVideo" style="width:auto"> Xem video (Netflix, Twitch, TikTok, YouTube Live...)</label>
+<label><input type="checkbox" id="rMedia" style="width:auto"> Hiện tên bài/video, kênh và ảnh bìa. Bạn bè sẽ thấy bạn nghe/xem gì</label>
+<label><input type="checkbox" id="rMusic" style="width:auto"> Nghe nhạc (YouTube /watch, YouTube Music, Spotify, SoundCloud, Apple Music, Deezer...)</label>
+
+<h2>MẪU CÓ SẴN</h2>
+<select id="preset"></select>
+<div class="row"><input id="presetName" placeholder="Tên mẫu mới"><button id="savePreset" class="g">Lưu mẫu</button><button id="delPreset" class="r">Xóa</button></div>
+<h2>NỘI DUNG</h2>
+<label>Kiểu hoạt động</label>
+<select id="type"><option value="0">Đang chơi</option><option value="2">Đang nghe</option><option value="3">Đang xem</option><option value="5">Đang thi đấu</option></select>
+<label>Tên</label><input id="name"><label>Dòng 1</label><input id="details"><label>Dòng 2</label><input id="state">
+<label>Đồng hồ</label>
+<select id="timer"><option value="auto">Discord tự đếm</option><option value="since">Đếm từ lúc bấm Bật</option></select>
+<h2>ẢNH (tên asset hoặc link ảnh)</h2>
+<label>Ảnh lớn</label><input id="image"><label>Chữ khi rê vào ảnh lớn</label><input id="imageText">
+<label>Ảnh nhỏ (tùy chọn)</label><input id="smallImage"><label>Chữ ảnh nhỏ</label><input id="smallText">
+<h2>NÚT BẤM (tối đa 2, link phải bắt đầu bằng https://)</h2>
+<input id="b1l" placeholder="Nút 1: chữ"><input id="b1u" placeholder="Nút 1: link" style="margin-top:4px">
+<input id="b2l" placeholder="Nút 2: chữ" style="margin-top:6px"><input id="b2u" placeholder="Nút 2: link" style="margin-top:4px">
+<div class="row"><button id="resetAll" class="g">Khôi phục mặc định</button></div>
+<div class="row"><button id="start">Bật status</button><button id="stop" class="g">Tắt</button></div>
+<div id="msg"></div>
+<label>Redirect URL</label><code id="redir"></code>
+<script src="popup.js"></script></body></html>

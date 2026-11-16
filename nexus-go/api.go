@@ -42,6 +42,8 @@ func readBody(w http.ResponseWriter, r *http.Request, v any) bool {
 func buildMux() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /api/presence", handlePresence)
+	mux.HandleFunc("POST /api/presence", handlePresence)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": true, "version": AppVersion, "platform": runtime.GOOS})
 	})

@@ -663,3 +663,55 @@ $('relaunchAdmin').addEventListener('click', async () => {
     } catch (e) { msg.textContent = '❌ ' + e.message; }
   });
 })();
+
+// ---- Discord Presence wiring ----
+(async function () {
+  const dot = document.getElementById('presenceDot');
+  const stEl = document.getElementById('presenceState');
+  const msg = document.getElementById('presenceMsg');
+  const appId = document.getElementById('presenceAppId');
+  if (!dot) return;
+  const P = '/api/presence';
+  const get = () => fetch(P).then((r) => r.json()).catch(() => null);
+  const render = (d) => {
+    if (!d) return;
+    dot.style.background = d.connected ? '#23a55a' : (d.enabled ? '#e0a030' : '#666');
+    stEl.textContent = d.enabled ? (d.connected ? 'Đã kết nối Discord — đang báo "' + (d.section || 'Tweaks') + '"' : 'Bật rồi — chờ Discord desktop mở') : 'Đang tắt';
+    if (appId && d.appId) appId.value = d.appId;
+  };
+  render(await get());
+  setInterval(async () => render(await get()), 15000);
+  document.getElementById('presenceToggle').addEventListener('click', async () => {
+    const d = await get();
+    const on = !(d && d.enabled);
+    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: on ? 'enable' : 'disable', appId: appId.value.trim() }) }).then((x) => x.json());
+    msg.textContent = r.message || '';
+    render(await get());
+  });
+  document.getElementById('presenceInstall').addEventListener('click', async () => {
+    msg.textContent = 'Đang bung extension…';
+    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'install-extension' }) }).then((x) => x.json());
+    msg.textContent = r.message || (r.success ? 'Xong: ' + r.path : 'Lỗi');
+  });
+  // Chuyển status liên tục: báo section đang xem mỗi khi đổi (poll 12s + khi bấm nav)
+  let cur = '';
+  const secs = () => Array.from(document.querySelectorAll('main section, section[id]')).find((s) => s.offsetParent && !s.hidden && s.id);
+  const ping = () => { const s = secs(); if (s && s.id !== cur) { cur = s.id; fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'section', section: s.id }) }).catch(() => {}); } };
+  setInterval(ping, 12000);
+  document.addEventListener('click', (e) => { setTimeout(ping, 120); });
+  ping();
+  // Note khi chạy hành động (áp tweak/cleanup/gaming/selftest)
+  const _f = window.fetch;
+  window.fetch = async function (u, o) {
+    const r = await _f.apply(this, arguments);
+    try {
+      if (typeof u === 'string' && o && o.method === 'POST' && /\/api\/(tweaks|cleanup|gaming|selftest)/.test(u)) {
+        const name = { tweaks: 'Tweaks', cleanup: 'Dọn rác', gaming: 'Gaming', selftest: 'Selftest' }[u.match(/api\/([a-z]+)/)[1]];
+        fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'section', section: name, note: 'vừa chạy hành động' }) }).catch(() => {});
+      }
+    } catch (_) {}
+    return r;
+  };
+})();
