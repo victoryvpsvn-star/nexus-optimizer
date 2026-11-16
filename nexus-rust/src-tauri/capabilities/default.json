@@ -1,0 +1,9 @@
+{
+  "identifier": "default",
+  "windows": [
+    "sakura"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

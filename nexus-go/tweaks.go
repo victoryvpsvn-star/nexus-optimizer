@@ -915,11 +915,76 @@ func findTweak(id string) *TweakAction {
 }
 
 // catalogCache giữ 1 instance duy nhất — các closure trong catalog không giữ state.
-// Catalog tổng = 35 tweak closure gốc + các bảng dữ liệu (privacy/bloat/services/perf/gaming+net/ui),
-// sắp theo nhóm rồi đánh số thứ tự liên tục 1..N.
+// Catalog tổng = tweak closure gốc + bảng Go + file data/*.tsv (granular), remap nhóm chi tiết rồi đánh số 1..N.
 var categoryOrder = []string{
-	"Hiệu năng", "Gaming", "Mạng", "Bộ nhớ", "Bảo mật & riêng tư",
-	"Dịch vụ", "Bloatware (UWP)", "Giao diện",
+	"CPU", "GPU", "RAM", "Ổ đĩa & File system", "Chuột", "Bàn phím", "Âm thanh", "Màn hình",
+	"Mạng", "Wi-Fi & Bluetooth", "Nguồn & Điện", "Boot & Khởi động", "Kernel & Hệ thống",
+	"Cập nhật Windows", "Defender & Bảo mật", "Telemetry & Riêng tư", "Bloatware (UWP)",
+	"Dịch vụ", "Task định kỳ", "Giao diện & Taskbar", "Explorer & File", "Edge & Trình duyệt",
+	"OneDrive & Cloud", "Gaming & Xbox", "Remote & Chia sẻ", "In ấn & Thiết bị", "Hạ tầng",
+}
+
+// remapCategory: gán lại nhóm chi tiết cho từng tweak (thay nhóm chung cũ)
+func remapCategory(id string) string {
+	switch id {
+	case "win-sysresp", "win-cpu-priority", "win-cpu-core-parking-off", "perf-cpu-min-100", "pwr-cpmin-100":
+		return "CPU"
+	case "win-gpu-hwsch", "win-gpu-tdr-off":
+		return "GPU"
+	case "win-ram-clean", "win-ram-standby-clear", "win-ram-compression-off", "win-sysmain-off", "perf-svchost-split":
+		return "RAM"
+	case "perf-ntfs-memory-2", "perf-8dot3-off", "perf-lastaccess-off", "perf-compact-os", "perf-reserved-storage-off":
+		return "Ổ đĩa & File system"
+	case "win-mouse-accurate", "ui-hover-time":
+		return "Chuột"
+	case "win-keyboard-fast", "win-keyboard-access", "ui-numlock-boot":
+		return "Bàn phím"
+	case "win-visualfx", "win-transparency":
+		return "Màn hình"
+	case "svc-bluetooth-off", "tel-wifi-sense-off", "game-wlan-max-perf":
+		return "Wi-Fi & Bluetooth"
+	case "win-power-high", "win-hibernation-off", "perf-usb-suspend-off", "perf-ultimate-power":
+		return "Nguồn & Điện"
+	case "win-startup-delay", "perf-fast-startup-off", "perf-boot-menu-3s":
+		return "Boot & Khởi động"
+	case "win-cpu-dynamic-tick-off", "perf-timer-resolution", "perf-foreground-lock",
+		"perf-kill-timeouts", "perf-crashdump-off", "perf-autoreboot-off":
+		return "Kernel & Hệ thống"
+	case "upd-no-reboot", "upd-driver-off", "upd-store-auto-off":
+		return "Cập nhật Windows"
+	case "win-smb1-off", "sec-autorun-off", "sec-lsa-ppl-on", "sec-remote-assistance-off",
+		"sec-spectre-mitigations-off", "sec-smb-guest-auth-off", "sec-smb1-client-off", "svc-remote-registry-off":
+		return "Defender & Bảo mật"
+	case "win-diagtrack-off", "win-tips-off", "win-copilot-off":
+		return "Telemetry & Riêng tư"
+	case "win-background-apps":
+		return "Bloatware (UWP)"
+	case "svc-spooler-off", "svc-fax-off", "svc-wia-off", "svc-tablet-off", "tel-device-metadata-off":
+		return "In ấn & Thiết bị"
+	case "svc-server-off", "svc-remote-access-off", "svc-winrm-off":
+		return "Remote & Chia sẻ"
+	case "win-widgets-off", "win-menu-delay":
+		return "Giao diện & Taskbar"
+	case "win-game-dvr", "win-gamemode", "win-fse", "win-mmcss", "win-xbox-services-off":
+		return "Gaming & Xbox"
+	case "net-mdns-off":
+		return "Mạng"
+	}
+	switch {
+	case strings.HasPrefix(id, "tel-"), strings.HasPrefix(id, "sec-"):
+		return "Telemetry & Riêng tư"
+	case strings.HasPrefix(id, "appx-"):
+		return "Bloatware (UWP)"
+	case strings.HasPrefix(id, "svc-"):
+		return "Dịch vụ"
+	case strings.HasPrefix(id, "net-"):
+		return "Mạng"
+	case strings.HasPrefix(id, "game-"):
+		return "Gaming & Xbox"
+	case strings.HasPrefix(id, "ui-"):
+		return "Giao diện & Taskbar"
+	}
+	return ""
 }
 
 // tableMap: id -> tableTweak (dùng để suy ra công cụ cần cho selftest)
@@ -927,6 +992,7 @@ var tableMap = map[string]*tableTweak{}
 
 var catalogOnce sync.Once
 var catalogVal []TweakAction
+var dataLoadReport = "chưa nạp"
 
 func tweakActions() []TweakAction {
 	catalogOnce.Do(func() {
@@ -939,6 +1005,22 @@ func tweakActions() []TweakAction {
 			for i := range ts {
 				tableMap[ts[i].Def.ID] = &ts[i]
 				tables = append(tables, tableAction(ts[i]))
+			}
+		}
+		rows, n, skipped := dataTweaks()
+		dataLoadReport = fmt.Sprintf("nạp %d dòng TSV, bỏ qua %d dòng lỗi", n, len(skipped))
+		for i := range rows {
+			tableMap[rows[i].Def.ID] = &rows[i]
+			tables = append(tables, tableAction(rows[i]))
+		}
+		for i := range base {
+			if nc := remapCategory(base[i].Def.ID); nc != "" {
+				base[i].Def.Category = nc
+			}
+		}
+		for i := range tables {
+			if nc := remapCategory(tables[i].Def.ID); nc != "" {
+				tables[i].Def.Category = nc
 			}
 		}
 		pos := 1

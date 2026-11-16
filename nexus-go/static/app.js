@@ -1,4 +1,4 @@
-/* NEXUS Optimizer — Go edition, app.js (vanilla, gọi cùng JSON API như bản cũ) */
+/* Sakura Tool — Go edition, app.js (vanilla, gọi cùng JSON API như bản cũ) */
 'use strict';
 
 const $ = (id) => document.getElementById(id);
@@ -610,7 +610,7 @@ $('settingsSave').addEventListener('click', async () => {
 });
 
 $('relaunchAdmin').addEventListener('click', async () => {
-  if (!confirm('Mở lại NEXUS Optimizer với quyền Administrator (UAC sẽ hiện)?')) return;
+  if (!confirm('Mở lại Sakura Tool với quyền Administrator (UAC sẽ hiện)?')) return;
   try {
     const r = await api('/api/system', { method: 'POST', body: { action: 'relaunch-admin' } });
     toast(r.message || 'Đã yêu cầu nâng quyền', 'ok');
@@ -637,4 +637,29 @@ $('relaunchAdmin').addEventListener('click', async () => {
   } catch (e) {
     toast('Không kết nối được app: ' + e.message, 'err');
   }
+})();
+
+// ---- Sakura welcome (lần đầu mở tool) ----
+(function () {
+  const ov = document.getElementById('welcomeOverlay');
+  if (!ov || localStorage.getItem('sakura_welcome_seen') === '1') return;
+  ov.style.display = 'flex';
+  fetch('/api/health').then((r) => r.json()).then((d) => {
+    const v = document.getElementById('welcomeVer');
+    if (v && d.version) v.textContent = d.version;
+  }).catch(() => {});
+  const agree = document.getElementById('welcomeAgree');
+  const start = document.getElementById('welcomeStart');
+  agree.addEventListener('change', () => { start.disabled = !agree.checked; });
+  start.addEventListener('click', () => { localStorage.setItem('sakura_welcome_seen', '1'); ov.style.display = 'none'; });
+  document.getElementById('welcomeRestore').addEventListener('click', async () => {
+    const msg = document.getElementById('welcomeRestoreMsg');
+    msg.textContent = 'Đang tạo điểm khôi phục (có thể mất ~1 phút)…';
+    try {
+      const r = await fetch('/api/tweaks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['sys-restore-point'], action: 'apply' }) }).then((x) => x.json());
+      const res = (r.results && r.results[0]) || {};
+      msg.textContent = res.success ? '✅ ' + res.message : '❌ ' + res.message;
+    } catch (e) { msg.textContent = '❌ ' + e.message; }
+  });
 })();

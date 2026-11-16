@@ -1,4 +1,4 @@
-// NEXUS Optimizer — bản Go (single-file exe, không Electron, không server con)
+// Sakura Tool — bản Go (single-file exe, không Electron, không server con)
 // Kiến trúc: 1 tiến trình duy nhất — HTTP server lắng nghe 127.0.0.1:<cổng ngẫu nhiên trống>,
 // UI nhúng trong exe, mở cửa sổ WebView2 (Windows) hoặc trình duyệt mặc định (fallback).
 // Không còn cổng cố định 32123 → không còn lỗi kẹt cổng / tiến trình zombie giữ cổng.
@@ -45,7 +45,7 @@ func main() {
 			log.Fatalf("HTTP server dừng: %v", err)
 		}
 	}()
-	log.Printf("NEXUS Optimizer %s (%s/%s) — %s — dữ liệu: %s", AppVersion, runtime.GOOS, runtime.GOARCH, baseURL, dataDir())
+	log.Printf("Sakura Tool %s (%s/%s) — %s — dữ liệu: %s", AppVersion, runtime.GOOS, runtime.GOARCH, baseURL, dataDir())
 
 	// Mở UI: cửa sổ WebView2 trên Windows (không có runtime WebView2 → tự fallback trình duyệt);
 	// --web hoặc không phải Windows → mở trình duyệt mặc định.
@@ -61,7 +61,7 @@ func main() {
 	}
 }
 
-/** Thư mục dữ liệu: %APPDATA%/NEXUS Optimizer (Windows) hoặc NEXUS_DATA_DIR/XDG (khác) */
+/** Thư mục dữ liệu: %APPDATA%/Sakura Tool (Windows) hoặc NEXUS_DATA_DIR/XDG (khác) */
 func dataDir() string {
 	if v := os.Getenv("NEXUS_DATA_DIR"); v != "" {
 		_ = os.MkdirAll(v, 0o755)
@@ -69,7 +69,7 @@ func dataDir() string {
 	}
 	if runtime.GOOS == "windows" {
 		if ad := os.Getenv("APPDATA"); ad != "" {
-			p := filepath.Join(ad, "NEXUS Optimizer")
+			p := filepath.Join(ad, "Sakura Tool")
 			_ = os.MkdirAll(p, 0o755)
 			return p
 		}

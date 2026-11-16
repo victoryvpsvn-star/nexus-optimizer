@@ -58,7 +58,7 @@ func runWebView(baseURL string) bool {
 			Debug:     false,
 			AutoFocus: true,
 			WindowOptions: webview2.WindowOptions{
-				Title:  "NEXUS Optimizer " + AppVersion,
+				Title:  "Sakura Tool " + AppVersion,
 				Width:  uint(w),
 				Height: uint(h),
 				Center: true,
@@ -70,7 +70,7 @@ func runWebView(baseURL string) bool {
 			return
 		}
 		defer wv.Destroy()
-		wv.SetTitle("NEXUS Optimizer " + AppVersion)
+		wv.SetTitle("Sakura Tool " + AppVersion)
 		// Chốt lại kích thước sau khi window đã tạo (phòng DPI/màn hình khác mặc định)
 		wv.SetSize(w, h, webview2.HintNone)
 		wv.Navigate(baseURL)
