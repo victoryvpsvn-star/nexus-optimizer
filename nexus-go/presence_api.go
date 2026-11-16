@@ -1,5 +1,6 @@
-// presence_api.go — GET/POST /api/presence: bật/tắt Discord Rich Presence,
-// đổi Application ID, tracker section (chuyển status liên tục), cài extension.
+// presence_api.go — GET/POST /api/presence: trạng thái (GET), tracker section cho beacon
+// (extension đọc qua /api/presence-beacon), cài extension/policy. Đường IPC Discord desktop
+// đã bị loại bỏ — enable/disable chỉ trả thông điệp hướng dẫn dùng extension.
 package main
 
 import (
@@ -79,21 +80,12 @@ func handlePresence(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "body JSON sai"})
 		return
 	}
-	c := presenceCfgLoad()
 	switch req.Action {
 	case "enable":
-		if req.AppID != "" {
-			c.AppID = req.AppID
-		}
-		c.Enabled = true
-		_ = presenceCfgSave(c)
-		msg := presenceSetEnabled(true, c.AppID)
-		_, conn, _, _, _ := presenceStatus()
-		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": msg, "connected": conn})
+		// Đường IPC Discord desktop đã bị LOẠI BỎ khỏi tool — status chỉ qua extension.
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Đã bỏ đường Discord desktop. Discord status giờ do extension Cat Status đảm nhiệm: bấm '🛡️ Cài kiểu Kaspersky' → restart Chrome → mở popup extension → Đăng nhập → Bật."})
 	case "disable":
-		c.Enabled = false
-		_ = presenceCfgSave(c)
-		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": presenceSetEnabled(false, "")})
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Đường Discord desktop đã bị loại bỏ khỏi tool — không còn gì để tắt."})
 	case "section":
 		presenceSet(req.Section, req.Note) // luôn nhận — beacon trả section cho extension
 		writeJSON(w, http.StatusOK, map[string]any{"success": true})

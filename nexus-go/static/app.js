@@ -664,36 +664,16 @@ $('relaunchAdmin').addEventListener('click', async () => {
   });
 })();
 
-// ---- Discord Presence wiring ----
+// ---- Discord Status wiring (CHỈ extension — đường IPC Discord desktop đã bị loại bỏ) ----
 (async function () {
-  const dot = document.getElementById('presenceDot');
-  const stEl = document.getElementById('presenceState');
   const msg = document.getElementById('presenceMsg');
-  const appId = document.getElementById('presenceAppId');
-  if (!dot) return;
+  if (!msg) return;
   const P = '/api/presence';
-  const get = () => fetch(P).then((r) => r.json()).catch(() => null);
-  const render = (d) => {
-    if (!d) return;
-    dot.style.background = d.connected ? '#23a55a' : (d.enabled ? '#e0a030' : '#666');
-    stEl.textContent = d.enabled ? (d.connected ? 'Đã kết nối Discord — đang báo "' + (d.section || 'Tweaks') + '"' : 'Bật rồi — chờ Discord desktop mở') : 'Đang tắt';
-    if (appId && d.appId) appId.value = d.appId;
-  };
-  render(await get());
-  setInterval(async () => render(await get()), 15000);
-  document.getElementById('presenceToggle').addEventListener('click', async () => {
-    const d = await get();
-    const on = !(d && d.enabled);
-    const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: on ? 'enable' : 'disable', appId: appId.value.trim() }) }).then((x) => x.json());
-    msg.textContent = r.message || '';
-    render(await get());
-  });
   document.getElementById('kasperskyInstall').addEventListener('click', async () => {
     msg.textContent = 'Đang ghi policy Chrome/Edge (kiểu Kaspersky — CRX tự ký, cài im lặng)…';
     const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'install-policy' }) }).then((x) => x.json());
-    msg.textContent = r.success ? (r.message + '\nExtension ID: ' + (r.extId || '?')) : ('Lỗi: ' + (r.error || r.message));
+    msg.textContent = r.success ? (r.message + '\nExtension ID: ' + (r.extId || '?') + '\n→ Restart Chrome để extension tự cập nhật bản mới.') : ('Lỗi: ' + (r.error || r.message));
   });
   document.getElementById('kasperskyRemove').addEventListener('click', async () => {
     const r = await fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -706,7 +686,7 @@ $('relaunchAdmin').addEventListener('click', async () => {
       body: JSON.stringify({ action: 'install-extension' }) }).then((x) => x.json());
     msg.textContent = r.message || (r.success ? 'Xong: ' + r.path : 'Lỗi');
   });
-  // Chuyển status liên tục: báo section đang xem mỗi khi đổi (poll 12s + khi bấm nav)
+  // Tracker section cho beacon (extension đọc qua /api/presence-beacon mỗi 30s)
   let cur = '';
   const secs = () => Array.from(document.querySelectorAll('main section, section[id]')).find((s) => s.offsetParent && !s.hidden && s.id);
   const ping = () => { const s = secs(); if (s && s.id !== cur) { cur = s.id; fetch(P, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'section', section: s.id }) }).catch(() => {}); } };

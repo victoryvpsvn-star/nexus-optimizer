@@ -239,3 +239,23 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   lỗi trung thực ✓; beacon OK; UI banner ✓; exe + Cat-Status-Sakura-v2.4.0.zip trong download/.
 - LƯU Ý CHỜ USER QUYẾT: repo private → updater/nút tải Discord chỉ chạy khi repo Public hoặc user
   đặt gh-token.txt. KHÔNG tự đổi visibility (hành động công khai).
+
+
+## Bổ sung 10-h: v3.1.1 — CẮT HẲN đường IPC Discord desktop (feedback "vẫn báo kia")
+- User vẫn thấy status cũ "đang tweak" — đó là đường IPC Rich Presence (cần Discord desktop) còn
+  bật trong Settings của exe cũ, đè/nằm cạnh status extension v2.4.0. Theo câu hỏi user "(là dùng
+  discord desktop mà ??)" → loại bỏ hoàn toàn đường IPC khỏi tool:
+  * discord_rpc.go rút còn STATE cho beacon (presenceSt/section/note/start; presenceSet,
+    presenceStatus luôn enabled=false,connected=false; presenceStarted; trunc) — xóa toàn bộ
+    dial/handshake/frame/loop/push. presenceSetEnabled/presenceEnsure/presenceEnabled đã xóa.
+  * presence_api.go: enable/disable chỉ trả message hướng dẫn extension (không còn lưu Enabled);
+    bỏ c không dùng ở POST (GET vẫn dùng). app.js: bỏ wiring dot/state/appId/toggle, giữ
+    kaspersky/presenceInstall + section ping cho beacon. index.html: card chỉ còn 3 nút cài.
+- Fix cú pkill -f giết shell: neo "^/tmp/nexus-go-test" (đã ghi ở 10-g, dùng nhất quán).
+- REPO ĐÃ PUBLIC (PATCH /repos private:false bằng PAT — user chấp thuận "tôi cho chuyển repo public").
+  Anonymous /releases/latest hoạt động → updater không cần token. (Sandbox thấy latest go-v12 vì
+  cache egress; máy user sẽ thấy đúng go-vN mới nhất.)
+- Exe trong download/ build với -X main.buildNumber=16 → banner sẽ hiện "go-v17" ngay khi CI
+  dispatch bản v3.1.1 → user bấm Cài ngay = demo updater thật. Sau đó mọi bản tự cập nhật tiếp.
+- Verify: vet/test OK; smoke: GET presence enabled/connected=false ✓; POST enable message đúng ✓;
+  section→beacon ✓; UI không còn presenceToggle ✓; exe mới trong download/.
