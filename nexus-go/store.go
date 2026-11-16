@@ -13,11 +13,11 @@ import (
 )
 
 type UISettings struct {
-	Accent      string `json:"accent"`
-	Background  string `json:"background"`
-	CustomBgURL string `json:"customBgUrl"`
+	Accent      string  `json:"accent"`
+	Background  string  `json:"background"`
+	CustomBgURL string  `json:"customBgUrl"`
 	Radius      float64 `json:"radius"`
-	Petals      bool   `json:"petals"`
+	Petals      bool    `json:"petals"`
 }
 
 func defaultUISettings() UISettings {
@@ -31,13 +31,13 @@ type TweakState struct {
 }
 
 type CleanupLogEntry struct {
-	ID        int       `json:"id"`
-	Kind      string    `json:"kind"`
-	Target    string    `json:"target"`
-	FreedBytes int64    `json:"freedBytes"`
-	Success   bool      `json:"success"`
-	Message   string    `json:"message,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID         int       `json:"id"`
+	Kind       string    `json:"kind"`
+	Target     string    `json:"target"`
+	FreedBytes int64     `json:"freedBytes"`
+	Success    bool      `json:"success"`
+	Message    string    `json:"message,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 type GamingEffect struct {
@@ -56,18 +56,19 @@ type ScriptRecord struct {
 }
 
 type storeData struct {
-	Settings    UISettings            `json:"settings"`
-	WebhookURL  string                `json:"webhookUrl"`
-	Gaming      struct {
+	Settings   UISettings `json:"settings"`
+	WebhookURL string     `json:"webhookUrl"`
+	Gaming     struct {
 		Enabled   bool           `json:"enabled"`
 		EnabledAt *time.Time     `json:"enabledAt,omitempty"`
 		Effects   []GamingEffect `json:"effects"`
 	} `json:"gaming"`
-	TweakStates map[string]TweakState `json:"tweakStates"`
-	CleanupLogs []CleanupLogEntry     `json:"cleanupLogs"`
-	NextLogID   int                   `json:"nextLogId"`
-	NextScriptID int                  `json:"nextScriptId"`
-	Scripts     []ScriptRecord        `json:"scripts"`
+	TweakStates       map[string]TweakState `json:"tweakStates"`
+	CleanupLogs       []CleanupLogEntry     `json:"cleanupLogs"`
+	CleanupTotalFreed int64                 `json:"cleanupTotalFreed"`
+	NextLogID         int                   `json:"nextLogId"`
+	NextScriptID      int                   `json:"nextScriptId"`
+	Scripts           []ScriptRecord        `json:"scripts"`
 }
 
 type Store struct {
@@ -226,9 +227,19 @@ func (s *Store) PutTweakState(id string, st TweakState) {
 }
 
 // AddCleanupLog thêm log + giữ tối đa 100 mục gần nhất (giống take:15 DB cũ nhưng dư dả hơn)
+/** Tổng dung lượng đã giải phóng từ trước tới nay (persistent, autosave) */
+func (s *Store) CleanupTotalFreed() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.CleanupTotalFreed
+}
+
 func (s *Store) AddCleanupLog(kind, target string, freed int64, success bool, msg string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if success && freed > 0 {
+		s.data.CleanupTotalFreed += freed
+	}
 	s.data.NextLogID++
 	s.data.CleanupLogs = append(s.data.CleanupLogs, CleanupLogEntry{
 		ID: s.data.NextLogID, Kind: kind, Target: target, FreedBytes: freed,

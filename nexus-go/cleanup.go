@@ -31,9 +31,11 @@ type CleanupTargetInfo struct {
 }
 
 type CleanupScanResponse struct {
-	Targets []CleanupTargetInfo `json:"targets"`
-	Logs    []CleanupLogEntry   `json:"logs"`
-	RamNote string              `json:"ramNote"`
+	Targets           []CleanupTargetInfo `json:"targets"`
+	Logs              []CleanupLogEntry   `json:"logs"`
+	RamNote           string              `json:"ramNote"`
+	TotalFreedAllTime int64               `json:"totalFreedAllTime"` // tổng đã giải phóng từ trước tới nay
+	LastRan           string              `json:"lastRan,omitempty"` // ISO time lần dọn gần nhất
 }
 
 type CleanupRunResponse struct {
@@ -146,7 +148,17 @@ func dirSize(path string, only *regexp.Regexp) int64 {
 }
 
 func scanTargets() CleanupScanResponse {
-	res := CleanupScanResponse{Targets: []CleanupTargetInfo{}, Logs: appState.GetCleanupLogs()}
+	logs := appState.GetCleanupLogs()
+	res := CleanupScanResponse{
+		Targets:           []CleanupTargetInfo{},
+		Logs:              logs,
+		TotalFreedAllTime: appState.CleanupTotalFreed(),
+	}
+	for _, l := range logs {
+		if res.LastRan == "" || l.CreatedAt.Format(time.RFC3339) > res.LastRan {
+			res.LastRan = l.CreatedAt.Format(time.RFC3339)
+		}
+	}
 	if !runtimeIsWindows {
 		res.RamNote = ramNoteOther
 		res.Targets = append(res.Targets, CleanupTargetInfo{
@@ -302,15 +314,27 @@ func humanBytes(b int64) string {
 	}
 }
 
-/** POST /api/cleanup {action: disk|ram|all} — 'all' chạy song song như bản cũ */
-func runCleanup(action string) CleanupRunResponse {
+/** POST /api/cleanup {action: disk|ram|all, targets?: [id,...]} — targets rỗng = dọn hết;
+ * có targets thì chỉ dọn đúng các mục user tick chọn trên UI */
+func runCleanup(action string, ids []string) CleanupRunResponse {
 	out := CleanupRunResponse{Results: []CleanupResult{}}
+	sel := map[string]bool{}
+	for _, id := range ids {
+		sel[id] = true
+	}
 	doneDisk := make(chan []CleanupResult, 1)
 	go func() {
 		var rs []CleanupResult
 		if runtimeIsWindows {
 			for _, t := range cleanupTargetsWin() {
+				if len(sel) > 0 && !sel[t.ID] {
+					continue
+				}
 				rs = append(rs, cleanTargetWin(t))
+			}
+			if len(sel) > 0 && len(rs) == 0 {
+				rs = append(rs, CleanupResult{ID: "none", Name: "Mục đã chọn", Kind: "disk", Success: false,
+					Message: "Không có mục nào khớp lựa chọn — hãy tick ít nhất 1 mục"})
 			}
 		} else {
 			rs = append(rs, CleanupResult{ID: "unsupported", Name: "Disk", Kind: "disk", Success: false,

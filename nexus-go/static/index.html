@@ -9,13 +9,14 @@
 </head>
 <body>
 <div id="updateBanner" style="display:none;position:sticky;top:0;z-index:999;background:#ffb3c9;color:#3a1030;padding:10px 16px;border-radius:10px;margin:10px 14px;font-weight:600;font-size:14px"></div>
+<div class="petals" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 <div class="layout">
   <aside class="sidebar">
     <div class="brand">
-      <div class="logo">⚡</div>
+      <div class="logo"><img src="/img/sakura-logo.png" alt="Sakura" width="28" height="28"></div>
       <div>
         <div class="brand-name">Sakura Tool</div>
-        <div class="brand-sub" id="brandVersion">Go edition</div>
+        <div class="brand-sub" id="brandVersion">100% FREE • Go edition</div>
       </div>
     </div>
     <nav id="nav">
@@ -40,18 +41,26 @@
         <h1 id="sectionTitle">Tổng quan</h1>
         <p id="sectionSub" class="section-sub">Giám sát CPU, RAM, Disk realtime</p>
       </div>
-      <div class="badges" id="topBadges"></div>
+      <div class="badges-wrap"><span class="badge free">🌸 100% FREE — không Plus, không khóa tính năng</span><div class="badges" id="topBadges"></div></div>
     </header>
 
     <div id="toast-wrap"></div>
 
     <section id="sec-overview" class="section active">
+      <div class="hero" style="background-image:url('/img/sakura-hero.jpg')">
+        <div class="hero-overlay">
+          <div class="hero-title">🌸 Sakura Tool</div>
+          <div class="hero-sub">Bộ tối ưu PC của bạn — mọi tính năng đều <b>MIỄN PHÍ 100%</b>, không Plus, không quảng cáo, không khóa gì cả.</div>
+        </div>
+      </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-label">CPU</div><div class="stat-value" id="ovCpu">–</div><div class="stat-desc" id="ovCpuDesc">—</div><div class="bar"><div class="bar-fill" id="ovCpuBar"></div></div></div>
         <div class="stat-card"><div class="stat-label">RAM</div><div class="stat-value" id="ovMem">–</div><div class="stat-desc" id="ovMemDesc">—</div><div class="bar"><div class="bar-fill warn" id="ovMemBar"></div></div></div>
         <div class="stat-card"><div class="stat-label">Ổ đĩa</div><div class="stat-value" id="ovDisk">–</div><div class="stat-desc" id="ovDiskDesc">—</div><div class="bar"><div class="bar-fill ok" id="ovDiskBar"></div></div></div>
         <div class="stat-card"><div class="stat-label">Mạng</div><div class="stat-value" id="ovNet">–</div><div class="stat-desc" id="ovNetDesc">↓ / ↑ KB/s</div></div>
+        <div class="stat-card"><div class="stat-label">Đã giải phóng</div><div class="stat-value" id="ovFreed">–</div><div class="stat-desc" id="ovFreedDesc">tổng dung lượng tool đã dọn giúp bạn</div></div>
       </div>
+      <div class="card"><h3>CPU 60 giây qua</h3><canvas id="cpuChart" width="1080" height="140" style="width:100%;height:140px"></canvas></div>
       <div class="card-row">
         <div class="card"><h3>Ổ đĩa chi tiết</h3><table id="ovDisks"><thead><tr><th>Ổ</th><th>Tổng</th><th>Đã dùng</th><th>Còn lại</th><th>%</th></tr></thead><tbody></tbody></table></div>
         <div class="card"><h3>Hệ thống</h3><div id="ovSys" class="kv"></div></div>
@@ -59,19 +68,36 @@
     </section>
 
     <section id="sec-cleanup" class="section">
+      <div class="hero clean-hero" style="background-image:url('/img/sakura-gaming.jpg')">
+        <div class="hero-overlay row-between">
+          <div>
+            <div class="hero-title">🧹 Dọn dẹp thông minh</div>
+            <div class="hero-sub">Tick chọn mục bạn muốn dọn — chỉ dọn <b>ĐÚNG</b> những gì bạn chọn, xem dung lượng từng mục trước khi dọn.</div>
+          </div>
+          <img src="/img/sakura-mascot.png" alt="Sakura mascot" class="hero-mascot">
+        </div>
+      </div>
       <div class="actions-row">
-        <button class="btn primary" id="cleanupDisk">🧹 Dọn Disk</button>
-        <button class="btn primary" id="cleanupRam">⚡ Dọn RAM</button>
-        <button class="btn" id="cleanupAll">🚀 Dọn tất cả</button>
+        <button class="btn" id="cleanupSelectAll">✅ Chọn tất cả</button>
+        <button class="btn" id="cleanupSelectNone">⬜ Bỏ chọn hết</button>
+        <button class="btn primary big" id="cleanupSelected">🧹 Dọn các mục đã chọn</button>
+        <button class="btn" id="cleanupRam">⚡ Dọn RAM ngay</button>
         <span id="cleanupBusy" class="muted"></span>
       </div>
+      <p class="muted sel-info" id="cleanupSelInfo">Đã chọn 0 mục</p>
       <p class="muted" id="cleanupRamNote"></p>
-      <div class="card"><h3>Mục tiêu dọn dẹp</h3><table id="cleanupTargets"><thead><tr><th>Mục tiêu</th><th>Đường dẫn</th><th>Dung lượng</th><th>Ghi chú</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><h3>Mục tiêu dọn dẹp — chọn mục muốn dọn</h3><div id="cleanupList" class="clean-list"></div></div>
       <div class="card"><h3>Lịch sử dọn dẹp</h3><table id="cleanupLogs"><thead><tr><th>Thời gian</th><th>Loại</th><th>Mục tiêu</th><th>Giải phóng</th><th>Kết quả</th></tr></thead><tbody></tbody></table></div>
       <div class="card" id="cleanupResultsCard" style="display:none"><h3>Kết quả lần chạy gần nhất</h3><div id="cleanupResults"></div></div>
     </section>
 
     <section id="sec-gaming" class="section">
+      <div class="hero gaming-hero" style="background-image:url('/img/sakura-gaming.jpg')">
+        <div class="hero-overlay">
+          <div class="hero-title">🎮 Gaming Mode</div>
+          <div class="hero-sub">Một nút bấm — máy chiến hết công suất. Miễn phí như mọi thứ khác trong tool.</div>
+        </div>
+      </div>
       <div class="card">
         <div class="row-between">
           <div><h3>Gaming Mode</h3><p class="muted" id="gamingNote">—</p></div>

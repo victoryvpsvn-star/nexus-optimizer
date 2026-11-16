@@ -259,3 +259,36 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   dispatch bản v3.1.1 → user bấm Cài ngay = demo updater thật. Sau đó mọi bản tự cập nhật tiếp.
 - Verify: vet/test OK; smoke: GET presence enabled/connected=false ✓; POST enable message đúng ✓;
   section→beacon ✓; UI không còn presenceToggle ✓; exe mới trong download/.
+
+
+## Bổ sung 10-i: v3.2.0 — Theme Sakura AI + cleanup chọn mục + dashboard live (benchmark tool EXM)
+- User gửi 5 ảnh tool EXM (đối thủ): sidebar sidebar dark + Game Mode có vòng "✦ Plus" khóa cho
+  free user; Advanced Timer Resolution có nút Upgrade; Debloat System Cleaner là list mục có SIZE
+  + checkbox + Select all + Start cleaning; Home có CPU graph live + Quickstart. Yêu cầu: mọi thứ
+  100% FREE (không Plus), cleanup chọn được mục muốn dọn, dashboard tự update, theme Sakura chuẩn
+  với ảnh từ z-ai image.
+- z-ai image CLI: API thật chỉ nhận size bội của 32 trong 512-2880 & ≤2^22px (SKILL.md sai:
+  1440x720 và 1024x1024 đều bị 400 code 1214); chạy song song bị 429. Chạy TUẦN TỰ + size
+  1344x768/1152x864 OK. 4 ảnh: sakura-hero.jpg (cây anh đào đêm), sakura-bg2.jpg (nền petals),
+  sakura-gaming.jpg (battle station pink RGB), sakura-mascot.png (cô gái manga cầm chổi).
+  Nén PIL q78-85 → tổng ~550KB. Static NHÚNG qua go:embed trong api.go → sửa static phải REBUILD
+  exe (server test cũ serve HTML cũ — mất 1 vòng debug vì tưởng browser cache).
+- UI: theme css viết lại toàn bộ (plum #150a14 + pink #ff7eb6, glass cards, petal CSS animation
+  8 cánh hoa, glow nav/badge), badge FREE gradient phát sáng topbar + brand-sub "100% FREE • vN".
+  Hero banners cho Tổng quan/Dọn dẹp/Gaming (mascot trong clean-hero). Stat card "Đã giải phóng"
+  (tổng tích lũy persistent) + canvas CPU chart 60s (pushCpu/drawCpuChart, gradient fill hồng).
+- Cleanup chọn mục: runCleanup(action, ids []string) lọc theo targets; POST body {action,targets};
+  UI clean-list label+checkbox kèm size từng mục + tag "🔑 cần Admin" cho mục admin; Chọn tất cả/
+  Bỏ chọn hết; updateSelInfo tính ~dung lượng sẽ dọn; sau khi dọn xong refreshFreedStats +
+  refreshStats → dashboard cập nhật NGAY. scanTargets trả thêm totalFreedAllTime (Store field
+  cleanupTotalFreed persistent) + lastRan.
+- BUG CẮT TRONG SMOKE (sẽ lại như bài học no-responding): patch python chèn CleanupTotalFreed vào
+  AddCleanupLog nhưng để nguyên cặp s.mu.Lock()/defer Unlock() cũ NGAY SAU cặp mới → tự deadlock
+  non-reentrant mutex → POST /api/cleanup treo vĩnh viễn. Stack dump SIGQUIT chỉ thẳng
+  store.go:243 sync.(*Mutex).Lock. Đã bỏ cặp thừa. Bài học: patch chèn code vào hàm có lock
+  phải đọc lại toàn thân hàm sau patch.
+- Verify: vet/test OK; smoke POST targets 1 mục/mục lạ/all đều phản hồi tức thì ✓; 5 ảnh serve
+  200 ✓; UI markers ✓; screenshot agent-browser: Tổng quan có hero sakura + chart CPU hồng +
+  badge FREE; Dọn dẹp có hero mascot + checkbox list + select buttons (Linux chỉ hiện target
+  unsupported — Windows thật sẽ ra 11 mục có size). exe 13.8MB (nhúng ảnh), buildNumber=17 →
+  banner sẽ hiện go-v18 sau dispatch = demo updater tiếp.

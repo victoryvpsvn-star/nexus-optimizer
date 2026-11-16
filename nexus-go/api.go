@@ -94,7 +94,8 @@ func buildMux() http.Handler {
 	})
 	mux.HandleFunc("POST /api/cleanup", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Action string `json:"action"`
+			Action  string   `json:"action"`
+			Targets []string `json:"targets"`
 		}
 		if !readBody(w, r, &body) {
 			return
@@ -103,7 +104,7 @@ func buildMux() http.Handler {
 			writeErr(w, 400, "Hành động không hợp lệ — chỉ nhận \"disk\", \"ram\" hoặc \"all\".")
 			return
 		}
-		writeJSON(w, 200, runCleanup(body.Action))
+		writeJSON(w, 200, runCleanup(body.Action, body.Targets))
 	})
 
 	// ---------- Gaming ----------

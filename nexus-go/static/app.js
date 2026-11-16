@@ -74,6 +74,7 @@ function showSection(name) {
   statsTimer = null;
   if (name === 'overview') {
     refreshStats();
+    refreshFreedStats();
     statsTimer = setInterval(refreshStats, 3000);
   } else if (name === 'cleanup') refreshCleanup();
   else if (name === 'gaming') refreshGaming();
@@ -114,22 +115,69 @@ async function refreshStats() {
       <div><b>Nền tảng</b> ${esc(s.platform)}</div>
       <div><b>Uptime</b> ${Math.floor(s.uptimeSec / 3600)}h ${Math.floor((s.uptimeSec % 3600) / 60)}m</div>
       <div><b>Số tiến trình</b> ${s.processCount}</div>`;
+    pushCpu(s.cpu.usage);
   } catch (e) {
     console.error('stats', e);
   }
 }
 
-// ---------- Cleanup ----------
+// ---------- CPU sparkline + thống kê đã giải phóng ----------
+const cpuHist = [];
+function pushCpu(v) {
+  cpuHist.push(v);
+  if (cpuHist.length > 60) cpuHist.shift();
+  drawCpuChart();
+}
+function drawCpuChart() {
+  const cv = $('cpuChart');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,126,182,.14)';
+  ctx.lineWidth = 1;
+  [25, 50, 75].forEach((g) => {
+    const y = H - 10 - (g / 100) * (H - 20);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  });
+  if (cpuHist.length < 2) return;
+  const pt = (i) => [(i / (cpuHist.length - 1)) * (W - 4) + 2, H - 10 - (Math.min(100, cpuHist[i]) / 100) * (H - 20)];
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(255,126,182,.45)');
+  grad.addColorStop(1, 'rgba(255,126,182,0)');
+  ctx.beginPath();
+  ctx.moveTo(...pt(0));
+  for (let i = 1; i < cpuHist.length; i++) ctx.lineTo(...pt(i));
+  const [lx, ly] = pt(cpuHist.length - 1);
+  ctx.lineTo(lx, H); ctx.lineTo(2, H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(...pt(0));
+  for (let i = 1; i < cpuHist.length; i++) ctx.lineTo(...pt(i));
+  ctx.strokeStyle = '#ff7eb6'; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fillStyle = '#ffb7d5'; ctx.fill();
+}
+async function refreshFreedStats() {
+  try {
+    const d = await api('/api/cleanup');
+    const el = $('ovFreed');
+    if (!el) return;
+    el.textContent = fmtBytes(d.totalFreedAllTime || 0);
+    $('ovFreedDesc').textContent = d.lastRan
+      ? ('Dọn gần nhất: ' + new Date(d.lastRan).toLocaleString('vi-VN'))
+      : 'Chưa dọn lần nào — vào tab Dọn dẹp 🌸';
+  } catch (_) {}
+}
+
+let cleanupSel = new Set();
+let cleanupTargetsCache = [];
+
 async function refreshCleanup() {
   try {
     const d = await api('/api/cleanup');
+    cleanupTargetsCache = d.targets || [];
     $('cleanupRamNote').textContent = d.ramNote || '';
-    const tbody = $('cleanupTargets').querySelector('tbody');
-    tbody.innerHTML = (d.targets || []).map((t) => {
-      const size = t.special ? '—' : fmtBytes(t.sizeBytes);
-      const can = t.canClean ? '' : ' ⚠️';
-      return `<tr><td>${esc(t.name)}${can}</td><td class="muted">${esc(t.path || '')}</td><td class="num">${size}</td><td class="muted">${esc(t.note || '')}</td></tr>`;
-    }).join('');
+    renderCleanupList();
     const logs = $('cleanupLogs').querySelector('tbody');
     logs.innerHTML = (d.logs || []).slice(0, 15).map((l) =>
       `<tr><td class="muted">${new Date(l.createdAt).toLocaleString('vi-VN')}</td><td>${esc(l.kind)}</td><td>${esc(l.target)}</td><td class="num">${l.freedBytes > 0 ? fmtBytes(l.freedBytes) : '—'}</td><td class="${l.success ? 'st-ok' : 'st-fail'}">${l.success ? '✅' : '❌'} ${esc(l.message || '')}</td></tr>`
@@ -139,24 +187,62 @@ async function refreshCleanup() {
   }
 }
 
-async function runCleanup(action, busyId) {
+function renderCleanupList() {
+  const wrap = $('cleanupList');
+  if (!wrap) return;
+  wrap.innerHTML = cleanupTargetsCache.map((t) => {
+    const dis = !t.canClean;
+    const size = t.sizeBytes > 0 ? fmtBytes(t.sizeBytes) : (dis ? '⚠️ cần Admin' : '—');
+    return `<label class="clean-row${cleanupSel.has(t.id) ? ' selected' : ''}${dis ? ' disabled' : ''}">
+      <input type="checkbox" class="clean-check" data-id="${t.id}" ${cleanupSel.has(t.id) ? 'checked' : ''} ${dis ? 'disabled' : ''}>
+      <div class="clean-info">
+        <div class="clean-name">${esc(t.name)}${t.admin ? ' <span class="tag">🔑 cần Admin</span>' : ''}</div>
+        <div class="clean-path muted">${esc(t.path || '')}${t.note ? ' — ' + esc(t.note) : ''}</div>
+      </div>
+      <div class="clean-size num">${size}</div>
+    </label>`;
+  }).join('') || '<div class="muted">Không có mục tiêu nào</div>';
+  wrap.querySelectorAll('.clean-check').forEach((c) => c.addEventListener('change', () => {
+    if (c.checked) cleanupSel.add(c.dataset.id); else cleanupSel.delete(c.dataset.id);
+    c.closest('.clean-row').classList.toggle('selected', c.checked);
+    updateSelInfo();
+  }));
+  updateSelInfo();
+}
+
+function updateSelInfo() {
+  let n = 0, sz = 0;
+  cleanupTargetsCache.forEach((t) => { if (cleanupSel.has(t.id)) { n++; sz += t.sizeBytes || 0; } });
+  $('cleanupSelInfo').textContent = `Đã chọn ${n} mục — dung lượng có thể giải phóng ~${fmtBytes(sz)}`;
+}
+
+async function runCleanup(action, busyId, targets) {
   setBusy(busyId, 'Đang chạy…');
   try {
-    const r = await api('/api/cleanup', { method: 'POST', body: { action } });
+    const r = await api('/api/cleanup', { method: 'POST', body: { action, targets } });
     const lines = (r.results || []).map((x) => `${x.success ? '✅' : '❌'} ${x.name}: ${x.message}`);
     $('cleanupResultsCard').style.display = '';
     $('cleanupResults').innerHTML = lines.map((l) => `<div class="muted">${esc(l)}</div>`).join('');
     toast(`Dọn xong — disk giải phóng ${fmtBytes(r.totalFreedDisk || 0)}, RAM ${fmtBytes(r.totalFreedRam || 0)}`, r.totalFreedDisk + r.totalFreedRam > 0 ? 'ok' : '');
     refreshCleanup();
+    refreshFreedStats();
+    refreshStats();
   } catch (e) {
     toast('Dọn dẹp lỗi: ' + e.message, 'err');
   } finally {
     setBusy(busyId, '');
   }
 }
-$('cleanupDisk').addEventListener('click', () => runCleanup('disk', 'cleanupBusy'));
+$('cleanupSelectAll').addEventListener('click', () => {
+  cleanupTargetsCache.forEach((t) => { if (t.canClean) cleanupSel.add(t.id); });
+  renderCleanupList();
+});
+$('cleanupSelectNone').addEventListener('click', () => { cleanupSel.clear(); renderCleanupList(); });
+$('cleanupSelected').addEventListener('click', () => {
+  if (cleanupSel.size === 0) { toast('Hãy tick chọn ít nhất một mục muốn dọn 🌸', 'err'); return; }
+  runCleanup('disk', 'cleanupBusy', Array.from(cleanupSel));
+});
 $('cleanupRam').addEventListener('click', () => runCleanup('ram', 'cleanupBusy'));
-$('cleanupAll').addEventListener('click', () => runCleanup('all', 'cleanupBusy'));
 
 // ---------- Gaming ----------
 async function refreshGaming() {
@@ -623,7 +709,7 @@ $('relaunchAdmin').addEventListener('click', async () => {
 (async function boot() {
   try {
     const h = await api('/api/health');
-    $('brandVersion').textContent = `Go edition v${h.version}`;
+    $('brandVersion').textContent = `100% FREE • v${h.version}`;
     $('setVersion').textContent = 'v' + h.version;
     const sys = await api('/api/system');
     const badges = [];
