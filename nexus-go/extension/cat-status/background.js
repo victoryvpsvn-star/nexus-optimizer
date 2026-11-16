@@ -1,4 +1,4 @@
-// Cat Status v2.3.0 — CHỈ báo Discord khi Sakura Tool đang mở.
+// Cat Status v2.4.0 — CHỈ báo Discord khi Sakura Tool đang mở (quảng cáo tool + icon app).
 // BỎ hoàn toàn dect nhạc/video (tabs classify, mediaSession, oembed...).
 // Báo qua API Discord trực tiếp (headless-sessions, OAuth đã đăng nhập) →
 // KHÔNG CẦN Discord desktop. Dect "tool đang mở" = poll beacon localhost của tool;
@@ -7,6 +7,20 @@ const CLIENT_ID = "1563917712227442731";
 const API = "https://discord.com/api/v10";
 const SCOPES = "openid sdk.social_layer_presence";
 const BEACON_PORTS = [32123, 32124];
+const REPO_URL = "https://github.com/victoryvpsvn-star/nexus-optimizer";
+const LOGO_URL = "https://raw.githubusercontent.com/victoryvpsvn-star/nexus-optimizer/main/nexus-go/static/img/sakura-logo.png";
+
+const b64urlStr = (s) => btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+// Đăng activity an toàn: Discord đôi khi chối assets/buttons với app chưa verify → lùi từng bước
+async function postActivitySafe(act) {
+  try { return await postActivity(act); }
+  catch (_e1) {
+    const a2 = { ...act }; delete a2.assets;
+    try { return await postActivity(a2); }
+    catch (_e2) { const a3 = { ...a2 }; delete a3.buttons; return await postActivity(a3); }
+  }
+}
 
 const b64url = (buf) =>
   btoa(String.fromCharCode(...new Uint8Array(buf)))
@@ -168,20 +182,23 @@ async function syncSakura() {
     return;
   }
   await chrome.storage.local.set({ sakura: true, lastError: null });
-  const mins = Math.max(0, Math.floor(Date.now() / 1000) - info.started) / 60 | 0;
-  const details = ("🌸 Đang tweak máy" + (info.section ? " — " + info.section : "")).slice(0, 128);
-  const state = (info.note || `⏱ đã dùng ${mins} phút`).slice(0, 128);
-  const key = `${details}|${state}|${info.started}`;
-  if (key === lastKey) return; // không đổi → không spam API Discord
+  // Quảng cáo tool thôi (theo yêu cầu): text tĩnh + icon app + nút tải — không còn "đang tweak"/section/phút
+  const key = `${info.started}`;
+  if (key === lastKey) return; // đăng 1 lần mỗi phiên mở tool
   lastKey = key;
   try {
-    await postActivity({
+    await postActivitySafe({
       application_id: CLIENT_ID,
       name: "Sakura Tool",
       type: 0,
       platform: "desktop",
-      details,
-      state,
+      details: "🌸 Tối ưu PC — dọn rác, tăng FPS, sửa lỗi Windows",
+      state: "Miễn phí · Làm sạch máy chỉ trong 1 nút bấm",
+      assets: {
+        large_image: `mp:external/${b64urlStr(LOGO_URL)}`,
+        large_text: "Sakura Tool",
+      },
+      buttons: [{ label: "⬇️ Tải Sakura Tool", url: REPO_URL }],
       timestamps: { start: info.started },
     });
   } catch (e) {

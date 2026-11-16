@@ -8,6 +8,7 @@ package main
 import (
 	"log"
 	"os/exec"
+	"runtime"
 	"syscall"
 
 	"github.com/jchv/go-webview2"
@@ -54,6 +55,10 @@ func runWebView(baseURL string) bool {
 	// Thử tạo webview — thiếu WebView2 Runtime (Win10/11 cũ chưa cập nhật) sẽ trả nil → fallback
 	done := make(chan bool, 1)
 	go func() {
+		// FIX "No Responding": HWND phải được tạo VÀ bơm message trên CÙNG MỘT thread OS.
+		// go-webview2 không tự LockOSThread — scheduler dời goroutine sang thread khác là
+		// GetMessage bơm nhầm queue → cửa sổ treo trắng kiểu "Not Responding" ngẫu nhiên.
+		runtime.LockOSThread()
 		wv := webview2.NewWithOptions(webview2.WebViewOptions{
 			Debug:     false,
 			AutoFocus: true,

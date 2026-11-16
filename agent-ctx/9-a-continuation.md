@@ -215,3 +215,27 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   UI presence-card: text mới khuyên dùng đường Kaspersky/extension, IPC là phụ cần Discord desktop.
 - Verify: vet OK, test OK, smoke: beacon 32123 trả JSON đúng, POST section → beacon phản ánh tức thì,
   update.xml 2.3.0. Exe mới + download/Cat-Status-Sakura-v2.3.0.zip.
+
+
+## Bổ sung 10-g: v3.1.0 — fix No Responding + updater tự cập nhật + Discord quảng cáo/icon
+- FIX "No Responding" (bấm xong/ẩn/làm gì đó cửa sổ treo): NGUYÊN NHÂN THẬT từ ui_windows.go —
+  goroutine WebView2 không runtime.LockOSThread; go-webview2 (56598839c808) không tự ghim thread,
+  CreateWindowExW + GetMessage phải cùng thread OS → scheduler dời goroutine là pump sai queue →
+  window ghost "Not Responding" ngẫu nhiên. Đã ghim LockOSThread đầu goroutine trong runWebView.
+- Updater (updater.go): updateCheck qua redirect /releases/latest (không rate-limit) → fallback REST API;
+  Token TÙY CHỌN từ <data>/gh-token.txt (repo đang PRIVATE → không token thì báo trung thực kèm hướng
+  dẫn); updateApply tải releases/latest/download/NEXUS-Optimizer-Go-x64.exe (>5MB check) → rename
+  exe→.old → .new→exe → Start tiến trình mới → os.Exit(0) sau 600ms. main dọn *.old lúc khởi động.
+  Routes GET/POST /api/update; POST apply trả UI trước rồi chạy nền 1.5s. Banner sticky #updateBanner
+  + app.js fetch. buildNumber ghim ldflags -X main.buildNumber=${{ github.run_number }} trong CI —
+  bản go-v15 trở đi updater so đúng số; build tay (0) không tự nhắc. AppVersion 2.0.0→3.1.0.
+- Extension v2.4.0: BỎ text "đang tweak máy"/section/phút theo yêu cầu user → quảng cáo tĩnh
+  ("🌸 Tối ưu PC — dọn rác, tăng FPS..." / "Miễn phí · Làm sạch máy chỉ trong 1 nút bấm") + assets
+  mp:external/<b64url logo raw.githubusercontent> + buttons "⬇️ Tải Sakura Tool"; postActivitySafe
+  lùi assets→buttons→bare nếu Discord chối. Đăng 1 lần mỗi phiên tool (key=started).
+- Bài học tooling: pkill -f nexus-go-test giết CẢ shell đang chạy (cmdline bash -c chứa chuỗi đó) —
+  luôn pkill -f "^/tmp/nexus-go-test" neo đầu dòng. Output bash bị cắt giữa chừng 2 lần vì lý do này.
+- Verify: vet OK, test OK (goTagNum), smoke /api/update: có token → go-v14/num 14 ✓, không token →
+  lỗi trung thực ✓; beacon OK; UI banner ✓; exe + Cat-Status-Sakura-v2.4.0.zip trong download/.
+- LƯU Ý CHỜ USER QUYẾT: repo private → updater/nút tải Discord chỉ chạy khi repo Public hoặc user
+  đặt gh-token.txt. KHÔNG tự đổi visibility (hành động công khai).

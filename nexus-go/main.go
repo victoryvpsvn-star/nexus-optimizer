@@ -16,7 +16,10 @@ import (
 	"time"
 )
 
-const AppVersion = "2.0.0"
+const AppVersion = "3.1.0"
+
+// buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
+var buildNumber = "0"
 
 var appState *Store
 
@@ -25,6 +28,9 @@ func main() {
 	port := flag.Int("port", 0, "Cổng HTTP cụ thể (mặc định: chọn cổng trống ngẫu nhiên)")
 	flag.Parse()
 
+	if p, e := os.Executable(); e == nil {
+		_ = os.Remove(p + ".old") // dọn bản cũ còn sót sau khi tự cập nhật
+	}
 	appState = NewStore(dataDir())
 	if err := appState.Load(); err != nil {
 		log.Printf("[store] đọc config lỗi (dùng mặc định): %v", err)

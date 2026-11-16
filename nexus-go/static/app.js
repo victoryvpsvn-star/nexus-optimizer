@@ -726,3 +726,21 @@ $('relaunchAdmin').addEventListener('click', async () => {
     return r;
   };
 })();
+
+
+// ===== Tự cập nhật: banner khi có bản release mới hơn bản đang chạy =====
+(async () => {
+  const bar = document.getElementById('updateBanner');
+  if (!bar) return;
+  try {
+    const u = await fetch('/api/update').then((r) => r.json());
+    if (u.available) {
+      bar.style.display = 'block';
+      bar.innerHTML = `🆕 Có bản mới <b>${u.latest}</b> — <button id="updGo" style="cursor:pointer;border:0;border-radius:6px;padding:4px 10px;font-weight:700;background:#a4133c;color:#fff">Cài ngay & tự mở lại</button>`;
+      document.getElementById('updGo').onclick = async () => {
+        await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'apply' }) });
+        bar.innerHTML = '⬇️ Đang tải bản mới… tool sẽ <b>tự đóng và tự mở lại</b> (tối đa ~1 phút). Nếu 2 phút không thấy mở lại, hãy mở tool tay.';
+      };
+    }
+  } catch (_) {}
+})();

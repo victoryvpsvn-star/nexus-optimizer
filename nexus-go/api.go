@@ -44,6 +44,8 @@ func buildMux() http.Handler {
 
 	mux.HandleFunc("GET /api/presence", handlePresence)
 	mux.HandleFunc("POST /api/presence", handlePresence)
+	mux.HandleFunc("GET /api/update", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, updateCheck(false)) })
+	mux.HandleFunc("POST /api/update", handleUpdatePost)
 	mux.HandleFunc("GET /ext/update.xml", handleExtUpdateXML)
 	mux.HandleFunc("GET /ext/cat-status.crx", handleExtCrx)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {

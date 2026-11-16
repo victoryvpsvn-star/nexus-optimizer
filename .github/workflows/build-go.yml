@@ -38,7 +38,7 @@ jobs:
 
       - name: Build Windows x64 exe (GUI, không cửa sổ console)
         working-directory: nexus-go
-        run: GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui" -o release/NEXUS-Optimizer-Go-x64.exe .
+        run: GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui -X main.buildNumber=${{ github.run_number }}" -o release/NEXUS-Optimizer-Go-x64.exe .
 
       - name: Liệt kê kết quả
         run: ls -la nexus-go/release/
