@@ -113,7 +113,18 @@ try {
   });
 
   await page.waitForSelector('#perfCard', { timeout: 15000 });
-  ok('UI mở được, card Hiệu năng hiển thị');
+  // Card Hiệu năng nằm trong tab Tinh chỉnh — UI mặc định mở tab Tổng quan → chuyển tab trước
+  await page.evaluate(() => {
+    const nav = document.querySelector('.nav-item[data-section="tweaks"]');
+    if (nav) nav.click();
+    const card = document.getElementById('perfCard');
+    if (card) card.scrollIntoView({ block: 'center' });
+  });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('perfCard');
+    return el && el.offsetParent !== null; // đang hiển thị thật (không bị ẩn bởi tab)
+  }, { timeout: 10000 });
+  ok('UI mở được, tab Tinh chỉnh + card Hiệu năng hiển thị');
 
   // ---- Bước 2: FPS baseline (mặc định 60) ----
   const base = await runBench(page, '00-baseline-60fps.png');
