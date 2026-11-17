@@ -52,6 +52,9 @@ func buildMux() http.Handler {
 		writeJSON(w, 200, map[string]any{"ok": true, "version": AppVersion, "platform": runtime.GOOS})
 	})
 
+	// ---------- Hiệu năng (v3.5.0): timer resolution / ép xung / FPS ----------
+	registerPerfRoutes(mux)
+
 	// ---------- Stats ----------
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, getStats())

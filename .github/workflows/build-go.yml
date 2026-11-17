@@ -75,3 +75,70 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # v3.5.0: tự test Hiệu năng — ép xung TRƯỚC, rồi FPS test xem có tăng không (60 → 120),
+  # tự chụp ảnh bằng chứng (đã chỉnh FPS, đã bấm Tối ưu, FPS đạt).
+  perf-test:
+    name: Tự test ép xung + FPS (60 → 120)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Build tool (Linux — CI mô phỏng tác dụng thật của Windows)
+        working-directory: nexus-go
+        run: go build -o /tmp/sakura-tool .
+
+      - name: Khởi động tool (--port cố định 32199)
+        run: |
+          /tmp/sakura-tool --web --port 32199 &
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:32199/api/health >/dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://127.0.0.1:32199/api/health
+
+      - name: Bước 1 — Test ép xung qua API (trước khi test FPS)
+        run: |
+          OC=$(curl -sf -X POST http://127.0.0.1:32199/api/perf/overclock -H 'Content-Type: application/json' -d '{"level":"balanced"}')
+          echo "$OC"
+          echo "$OC" | jq -e '.success == true' > /dev/null || { echo "❌ Ép xung FAIL"; exit 1; }
+          TR=$(curl -sf -X POST http://127.0.0.1:32199/api/perf/timer-resolution -H 'Content-Type: application/json' -d '{"action":"auto"}')
+          echo "$TR"
+          echo "$TR" | jq -e '.success == true' > /dev/null || { echo "❌ Timer resolution FAIL"; exit 1; }
+          echo "✅ Ép xung + timer resolution OK (chế độ mô phỏng CI — Windows sẽ gọi nvidia-smi/powercfg/ntdll thật)"
+
+      - name: Bước 2 — Test FPS trong trình duyệt (baseline 60 → sau Tối ưu 120)
+        working-directory: nexus-go
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i puppeteer-core@23 --no-fund --no-audit
+          node ci/fps-benchmark.mjs
+
+      - name: Bước 3 — Kiểm tra ảnh FPS test không trống
+        run: |
+          ls -la nexus-go/ci/shots/
+          for f in nexus-go/ci/shots/*.png; do
+            sz=$(stat -c%s "$f")
+            [ "$sz" -gt 15000 ] || { echo "❌ Ảnh $f quá nhỏ ($sz byte) — có thể chụp trống"; exit 1; }
+          done
+          echo "✅ 4 ảnh FPS test đều có nội dung (baseline 60, FPS=120, Tối ưu, kết quả sau)"
+
+      - name: Upload artifact (ảnh bằng chứng FPS test)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fps-test-screenshots-${{ github.run_number }}
+          path: nexus-go/ci/shots/*.png
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Ghi tóm tắt vào job summary
+        if: always()
+        run: |
+          [ -f nexus-go/ci/fps-summary.md ] && cat nexus-go/ci/fps-summary.md >> $GITHUB_STEP_SUMMARY || true

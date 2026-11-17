@@ -307,6 +307,14 @@ td.num { font-variant-numeric: tabular-nums; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* ---- Sakura welcome ---- */
+/* ---- Hiệu năng (v3.5.0): timer resolution / ép xung / FPS test ---- */
+.perf-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 12px 0; border-top: 1px solid rgba(255,255,255,.07); }
+.perf-row > div:first-child { flex: 1 1 220px; min-width: 200px; }
+.perf-row b { color: #ffc9dc; }
+.perf-row .muted { font-size: 12.5px; margin: 2px 0 0; }
+#perfResult { border-top: 1px solid rgba(255,255,255,.07); padding-top: 10px; font-size: 13px; }
+
 .welcome-overlay { position: fixed; inset: 0; background: rgba(10,4,10,.72); backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center; z-index: 999; }
 .welcome-card { width: min(680px, 92vw); max-height: 92vh; border-radius: 20px; overflow: auto;

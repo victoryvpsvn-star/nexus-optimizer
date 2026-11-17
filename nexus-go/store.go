@@ -59,8 +59,9 @@ type ScriptRecord struct {
 }
 
 type storeData struct {
-	Settings   UISettings `json:"settings"`
-	WebhookURL string     `json:"webhookUrl"`
+	Settings   UISettings   `json:"settings"`
+	WebhookURL string       `json:"webhookUrl"`
+	Perf       PerfSettings `json:"perf"`
 	Gaming     struct {
 		Enabled   bool           `json:"enabled"`
 		EnabledAt *time.Time     `json:"enabledAt,omitempty"`
@@ -119,6 +120,17 @@ func (s *Store) Load() error {
 	}
 	if d.Scripts == nil {
 		d.Scripts = []ScriptRecord{}
+	}
+	// v3.5.0: mặc định hiệu năng (config cũ không có mục "perf")
+	if d.Perf.FpsTarget <= 0 {
+		d.Perf = defaultPerfSettings()
+	} else {
+		if d.Perf.TimerRes == "" {
+			d.Perf.TimerRes = "auto"
+		}
+		if d.Perf.OcLevel != "safe" && d.Perf.OcLevel != "balanced" && d.Perf.OcLevel != "max" {
+			d.Perf.OcLevel = "balanced"
+		}
 	}
 	s.data = d
 	return nil

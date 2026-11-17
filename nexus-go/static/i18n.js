@@ -23,6 +23,25 @@
 
   /* ================== Dictionary VI → EN ================== */
   window.I18N = {
+    /* ---- v3.5.0 Hiệu năng: timer resolution / ép xung / FPS test ---- */
+    '⚡ Hiệu năng — Timer Resolution • Ép xung • FPS': '⚡ Performance — Timer Resolution • Overclock • FPS',
+    'Đang tải trạng thái…': 'Loading status…',
+    '⏱️ Timer Resolution': '⏱️ Timer Resolution',
+    '🎯 Tự động (khuyên dùng)': '🎯 Auto (recommended)',
+    '↩️ Tắt': '↩️ Off',
+    '🎬 FPS mục tiêu (FPS test)': '🎬 FPS target (FPS test)',
+    'Mặc định 60 — Tối ưu sẽ tự đưa lên 120': 'Default 60 — Optimize raises it to 120',
+    '🚀 Ép xung GPU / CPU': '🚀 Overclock GPU / CPU',
+    'An toàn: khóa xung boost + power plan — không đụng voltage': 'Safe: lock boost clocks + power plan — no voltage changes',
+    '🚀 Tối ưu': '🚀 Optimize',
+    '↩️ Khôi phục': '↩️ Restore',
+    '🧪 Test FPS': '🧪 FPS test',
+    'Benchmark 4 giây ngay trong tool — xem FPS đạt mục tiêu chưa': '4-second in-app benchmark — see if FPS hits the target',
+    '▶️ Chạy test FPS': '▶️ Run FPS test',
+    '🧪 Đang test FPS…': '🧪 Running FPS test…',
+    'FPS hiện tại:': 'Current FPS:',
+    'Mục tiêu:': 'Target:',
+    'Benchmark giữ nhịp bằng bộ đếm hiệu năng của tool — trên Windows, timer resolution 0.5ms chính là thứ giúp giữ ổn định 120 FPS.': 'The benchmark paces frames with the tool timer — on Windows, 0.5 ms timer resolution is exactly what holds 120 FPS steady.',
     /* ---- 28 nhóm tinh chỉnh thật (cột category trong data/*.tsv) + nhãn "Tất cả" ---- */
     'Dịch vụ': 'Services',
     'Telemetry & Riêng tư': 'Telemetry & Privacy',
