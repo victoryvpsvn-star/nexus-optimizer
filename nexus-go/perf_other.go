@@ -55,11 +55,11 @@ func perfOverclock(level string) OcResult {
 		PerfStep{Name: "Khóa xung lõi GPU mức boost tối đa", OK: true, Detail: note},
 		PerfStep{Name: "Power plan High Performance", OK: true, Detail: note},
 	)
-	if level == "max" {
-		oc.Steps = append(oc.Steps,
-			PerfStep{Name: "CPU min state 100%", OK: true, Detail: note},
-			PerfStep{Name: "Ultimate Performance plan", OK: true, Detail: note},
-		)
+	if level != "safe" {
+		oc.Steps = append(oc.Steps, PerfStep{Name: "CPU min state 100% (cắm điện)", OK: true, Detail: note})
+		if level == "max" {
+			oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: true, Detail: note})
+		}
 	}
 	oc.Message = fmt.Sprintf("Ép xung mức %s hoàn tất (mô phỏng CI, thời gian ghi nhận %s) — Windows sẽ chạy thật", ocLevelVN2(level), time.Now().Format("15:04:05"))
 	return oc
@@ -74,6 +74,31 @@ func perfRestore() OcResult {
 	)
 	res.Message = "Đã khôi phục cấu hình gốc (mô phỏng CI)"
 	return res
+}
+
+// v3.6.0: mô phỏng UserGpuPreferences — lưu in-memory để CI test được shape end-to-end
+var ciSimGpuPrefs = map[string]string{}
+
+func perfGameGPUSet(path, action string) GameGpuResult {
+	res := GameGpuResult{Mode: perfMode, Action: action, Path: path}
+	if action == "clear" {
+		delete(ciSimGpuPrefs, path)
+		res.Success = true
+		res.Message = "Đã gỡ ưu tiên GPU cho " + path + " (mô phỏng CI)"
+		return res
+	}
+	ciSimGpuPrefs[path] = gpuPrefValue
+	res.Success = true
+	res.Message = "Đã đặt GPU Ưu tiên cao cho " + path + " (mô phỏng CI — Windows sẽ ghi HKCU UserGpuPreferences thật)"
+	return res
+}
+
+func perfGameGPUList() GameGpuList {
+	lst := GameGpuList{Mode: perfMode, Entries: []GameGpuEntry{}}
+	for p, v := range ciSimGpuPrefs {
+		lst.Entries = append(lst.Entries, GameGpuEntry{Path: p, Value: v})
+	}
+	return lst
 }
 
 func ocLevelVN2(l string) string {

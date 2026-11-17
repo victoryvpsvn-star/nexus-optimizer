@@ -35,6 +35,49 @@ func TestCatalogIntegrity(t *testing.T) {
 		if a.Def.Order <= 0 {
 			t.Fatalf("order 0 (nhóm lạ?): %s [%s]", a.Def.ID, a.Def.Category)
 		}
+		if a.Apply == nil || a.Revert == nil {
+			t.Fatalf("tweak thiếu Apply/Revert — sẽ lỗi khi bấm trên máy thật: %s", a.Def.ID)
+		}
+		switch a.Def.Risk {
+		case "low", "medium", "high":
+		default:
+			t.Fatalf("risk lạ: %s [%s]", a.Def.Risk, a.Def.ID)
+		}
+		if a.Def.Name == "" || a.Def.Category == "" || a.Def.Description == "" {
+			t.Fatalf("tweak thiếu tên/category/mô tả: %s", a.Def.ID)
+		}
+	}
+}
+
+// v3.6.0: preset Gaming phải chỉ tới id có thật trong catalog — nếu thiếu thì bấm
+// Gaming Mode trên máy thật sẽ áp dụng "id ẩn danh" không ai nhận ra
+func TestGamingPresetIdsExist(t *testing.T) {
+	tw := tweakActions()
+	have := map[string]bool{}
+	for _, a := range tw {
+		have[a.Def.ID] = true
+	}
+	for _, list := range [][]string{gamingPresetApplyWin, gamingPresetRevertWin} {
+		for _, id := range list {
+			if !have[id] {
+				t.Fatalf("preset Gaming dùng id không có trong catalog: %s", id)
+			}
+		}
+	}
+	if len(gamingPresetApplyWin) < 19 {
+		t.Fatalf("preset Gaming v3.6.0 phải ≥19 mục (nagle/tdr/dynamic tick mới thêm): %d", len(gamingPresetApplyWin))
+	}
+	// mọi id apply phải có revert tương ứng — trừ hành động chạy-lần-một (dọn RAM, flush DNS:
+	// là thao tác làm sạch tức thời, không có trạng thái nào để hoàn tác)
+	oneShot := map[string]bool{"win-ram-clean": true, "win-flush-dns": true, "win-ram-standby-clear": true}
+	haveRevert := map[string]bool{}
+	for _, id := range gamingPresetRevertWin {
+		haveRevert[id] = true
+	}
+	for _, id := range gamingPresetApplyWin {
+		if !haveRevert[id] && !oneShot[id] {
+			t.Fatalf("preset Gaming bật %s nhưng revert không có %s — bật xong không gỡ được", id, id)
+		}
 	}
 }
 

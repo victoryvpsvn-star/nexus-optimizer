@@ -242,6 +242,34 @@
     tickPaced();
   }
 
+  /* ---------- GPU ưu tiên cao cho game (v3.6.0) ---------- */
+  const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function renderGameGpuList(lst) {
+    const el = $('perfGameGpuList');
+    if (!el) return;
+    const rows = ((lst && lst.entries) || []).map((e) => `<div>⚡ ${escHtml(e.path)} — <span class="muted">${escHtml(e.value)}</span></div>`).join('');
+    el.innerHTML = rows ? `<div style="margin-top:6px"><b>Đã đặt ưu tiên cao (${(lst.entries || []).length}):</b>${rows}</div>`
+      : '<div style="margin-top:6px">Chưa đặt GPU ưu tiên cao cho game nào</div>';
+  }
+  async function refreshGameGpu() {
+    try { renderGameGpuList(await api('/api/perf/game-gpu')); } catch (_) {}
+  }
+  async function doGameGpu(action) {
+    const pathEl = $('perfGameGpuPath');
+    const path = (pathEl.value || '').trim();
+    if (!path) { setBusy('⚠️ Nhập đường dẫn file .exe của game (ví dụ D:\\Games\\game.exe)'); return; }
+    try {
+      const r = await api('/api/perf/game-gpu', { method: 'POST', headers: JSON_HDR, body: JSON.stringify({ path, action }) });
+      renderResult([escHtml(r.message || '')], r.success, action === 'set' ? '🎮 GPU ưu tiên cao cho game' : '↩️ Gỡ ưu tiên GPU');
+      if (r.success && action === 'set') pathEl.value = '';
+      await refreshGameGpu();
+    } catch (e) { renderResult([escHtml(e.message || '')], false, '🎮 GPU ưu tiên cao cho game'); }
+  }
+  const ggSet = $('perfGameGpuSet'), ggClear = $('perfGameGpuClear');
+  if (ggSet) ggSet.addEventListener('click', () => doGameGpu('set'));
+  if (ggClear) ggClear.addEventListener('click', () => doGameGpu('clear'));
+  refreshGameGpu();
+
   /* ---------- Gắn sự kiện ---------- */
   $('perfFpsRange').addEventListener('input', () => {
     const val = Number($('perfFpsRange').value);

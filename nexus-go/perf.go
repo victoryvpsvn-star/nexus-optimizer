@@ -8,6 +8,7 @@ package main
 import (
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // PerfSettings — cấu hình hiệu năng lưu trong config.json (mục "perf").
@@ -56,6 +57,30 @@ type PerfStep struct {
 	OK     bool   `json:"ok"`
 	Detail string `json:"detail"`
 }
+
+// v3.6.0: GPU ưu tiên cao cho game — UserGpuPreferences (HKCU, không cần admin)
+type GameGpuEntry struct {
+	Path  string `json:"path"`
+	Value string `json:"value"`
+}
+
+type GameGpuResult struct {
+	Success bool   `json:"success"`
+	Mode    string `json:"mode"` // "windows" (HKCU thật) | "ci-sim"
+	Action  string `json:"action"`
+	Path    string `json:"path,omitempty"`
+	Message string `json:"message"`
+}
+
+type GameGpuList struct {
+	Mode    string         `json:"mode"`
+	Entries []GameGpuEntry `json:"entries"`
+}
+
+// v3.6.0: GPU ưu tiên cao cho game — UserGpuPreferences trong HKCU (không cần admin).
+// Ghi chú: GpuPreference=2 = "Hiệu năng cao" → Windows luôn chọn GPU rời cho file exe đó.
+const gpuPrefKey = `HKCU\Software\Microsoft\DirectX\UserGpuPreferences`
+const gpuPrefValue = "GpuPreference=2;"
 
 type OcResult struct {
 	Success bool       `json:"success"`
@@ -174,6 +199,37 @@ func registerPerfRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /api/perf/restore", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, perfRestore())
+	})
+	// v3.6.0: GPU ưu tiên cao cho game (UserGpuPreferences)
+	mux.HandleFunc("GET /api/perf/game-gpu", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, perfGameGPUList())
+	})
+	mux.HandleFunc("POST /api/perf/game-gpu", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Path   string `json:"path"`
+			Action string `json:"action"` // set | clear
+		}
+		if !readBody(w, r, &body) {
+			return
+		}
+		body.Path = strings.TrimSpace(strings.Trim(body.Path, `"`))
+		if body.Action == "" {
+			body.Action = "set"
+		}
+		if body.Action != "set" && body.Action != "clear" {
+			writeErr(w, 400, "Action chỉ nhận set/clear")
+			return
+		}
+		if body.Path == "" || len(body.Path) > 260 {
+			writeErr(w, 400, "Đường dẫn exe game rỗng hoặc quá dài (>260 ký tự)")
+			return
+		}
+		res := perfGameGPUSet(body.Path, body.Action)
+		code := 200
+		if !res.Success {
+			code = 500
+		}
+		writeJSON(w, code, res)
 	})
 }
 

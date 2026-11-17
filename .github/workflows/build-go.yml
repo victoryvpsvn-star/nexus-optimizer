@@ -32,6 +32,10 @@ jobs:
         working-directory: nexus-go
         run: go vet ./...
 
+      - name: Unit test (catalog integrity + preset Gaming + updater)
+        working-directory: nexus-go
+        run: go test ./... -count=1
+
       - name: Build Linux (kiểm tra dịch được ở cả 2 nền tảng)
         working-directory: nexus-go
         run: go build -o /tmp/nexus-go-linux .

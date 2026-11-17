@@ -426,3 +426,15 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   jitter (119/120, max dao động) = dấu hiệu đo thật. exe #34 + 4 ảnh đã về download/.
 - Lưu ý trung thực cho user: trong game thật, FPS vẫn cap bởi engine/vsync/màn hình — timer
   resolution giúp nhịp frame mượt (stutter) + màn 120Hz+; tool không đội FPS game vượt cap.
+
+
+## Bổ sung 12-p: v3.5.1b — FIX đứt chuỗi auto-update (user bắt "mất auto update")
+- Nguyên nhân: build-go.yml cắt release CHỈ khi workflow_dispatch (if event==dispatch) →
+  các run push 29..34 build exe nhưng KHÔNG có release → updater (tra releases/latest
+  tag go-vN) dừng ở go-v28 → tool cũ không bao giờ được mời lên v3.5.1. Code updater
+  (updater.go, updateRepo/updateAsset go-vN + asset NEXUS-Optimizer-Go-x64.exe) NGUYÊN.
+- Cấp cứu: cắt release go-v34 qua API từ exe CI #34 (scripts/cut_release_go34.py),
+  upload asset đúng tên; verify releases/latest→go-v34 + sha256 asset == exe local (9e48410c…).
+- Fix gốc: job `release` riêng needs [build-go, perf-test] (chỉ cắt khi cả 2 xanh),
+  download-artifact exe → softprops cut go-v{run_number} + asset. Push e5f94b9 → run #35
+  (44083775053): 3/3 job xanh, go-v35 TỰ SINH ✓. Từ giờ mọi push xanh = release mới tự có.

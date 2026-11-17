@@ -99,16 +99,18 @@
     'Tùy chỉnh màu nhấn, bo góc, hiệu ứng': 'Accent color, corner radius, effects',
 
     /* ---- Topbar / badge ---- */
-    '🌸 100% FREE — không Plus, không khóa tính năng': '🌸 100% FREE — no Plus, no locked features',
     '👤 thường': '👤 Standard',
     'reg.exe thiếu': 'reg.exe missing',
     'PowerShell thiếu': 'PowerShell missing',
     'thiếu': 'missing',
 
-    /* ---- Overview ---- */
-    'Bộ tối ưu PC của bạn — mọi tính năng đều': 'Your PC optimizer — every feature is',
-    'MIỄN PHÍ 100%': '100% FREE',
-    ', không Plus, không quảng cáo, không khóa gì cả.': ', no Plus, no ads, nothing locked.',
+    /* ---- v3.6.0: GPU ưu tiên cao cho game ---- */
+    'Bộ tối ưu PC của bạn — nhanh, gọn, hiệu quả.': 'Your PC optimizer — fast, light, effective.',
+    'Đặt GpuPreference=2 cho file .exe — game luôn chạy GPU rời mạnh nhất, không đụng laptop iGPU yếu (HKCU, không cần admin)': 'Sets GpuPreference=2 for the .exe — games always run on your fastest discrete GPU (HKCU, no admin needed)',
+    '⚡ Ưu tiên cao': '⚡ High priority',
+    '↩️ Gỡ': '↩️ Remove',
+    'Chưa đặt GPU ưu tiên cao cho game nào': 'No game is set to high-priority GPU yet',
+    'Giờ test GPU game có sẵn ở card Hiệu năng, kèm benchmark FPS 2 pha.': 'Game GPU priority now lives in the Performance card, with a two-phase FPS benchmark.',
     'Ổ đĩa': 'Disk',
     'Đã giải phóng': 'Freed so far',
     'tổng dung lượng tool đã dọn giúp bạn': 'total space this tool has cleaned for you',

@@ -402,9 +402,19 @@ $('tweaksSelNone').addEventListener('click', () => {
 });
 
 // ---------- Processes ----------
+// v3.6.0: retry 1 lần khi fetch lỗi (tool vừa relaunch / network hiccup) — báo lỗi inline, không chỉ toast
+async function fetchProcessesWithRetry() {
+  try {
+    return await api('/api/processes');
+  } catch (_) {
+    await new Promise((r) => setTimeout(r, 1200));
+    return await api('/api/processes');
+  }
+}
+
 async function refreshProcesses() {
   try {
-    const d = await api('/api/processes');
+    const d = await fetchProcessesWithRetry();
     const q = ($('procSearch').value || '').toLowerCase();
     const rows = (d.list || []).filter((p) => !q || p.name.toLowerCase().includes(q) || String(p.pid).includes(q));
     $('procTable').querySelector('tbody').innerHTML = rows.map((p) => `
@@ -424,6 +434,8 @@ async function refreshProcesses() {
       });
     });
   } catch (e) {
+    $('procTable').querySelector('tbody').innerHTML =
+      `<tr><td colspan="7" class="muted">⚠️ ${esc(e.message)} — thử lại bằng nút ⟳ Làm mới</td></tr>`;
     toast('Không đọc được tiến trình: ' + e.message, 'err');
   }
 }
@@ -744,7 +756,7 @@ $('relaunchAdmin').addEventListener('click', async () => {
 (async function boot() {
   try {
     const h = await api('/api/health');
-    $('brandVersion').textContent = `100% FREE • v${h.version}`;
+    $('brandVersion').textContent = `Go edition • v${h.version}`;
     $('setVersion').textContent = 'v' + h.version;
     const sys = await api('/api/system');
     const badges = [];

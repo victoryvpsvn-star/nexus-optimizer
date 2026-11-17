@@ -170,6 +170,33 @@ try {
   if (after.max < 120) fail(`Năng lực TỐI ĐA thật chỉ ${after.max} FPS < 120 — không được khoe 120 khi máy không đủ (anti-fake)`);
   if (after.max < after.fps) fail(`Năng lực thật (${after.max}) thấp hơn nhịp giữ được (${after.fps}) — phép đo có vấn đề`);
 
+  // ---- Bước 6 (v3.6.0): test GPU ưu tiên cao cho game (mô phỏng) + Gaming Mode shape ----
+  const ggSet = await (await fetch(BASE + '/api/perf/game-gpu', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'C:\\Games\\game.exe', action: 'set' }),
+  })).json();
+  if (!ggSet.success) fail('game-gpu set fail: ' + JSON.stringify(ggSet));
+  const ggList = await (await fetch(BASE + '/api/perf/game-gpu')).json();
+  if (!Array.isArray(ggList.entries) || ggList.entries.length < 1) fail('game-gpu list phải có ≥1 entry: ' + JSON.stringify(ggList));
+  if (!ggList.entries.some((e) => e.value.includes('GpuPreference=2'))) fail('entry phải chứa GpuPreference=2');
+  const ggClear = await (await fetch(BASE + '/api/perf/game-gpu', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'C:\\Games\\game.exe', action: 'clear' }),
+  })).json();
+  if (!ggClear.success) fail('game-gpu clear fail: ' + JSON.stringify(ggClear));
+  ok(`GPU ưu tiên cao cho game: set → list (${ggList.entries.length} entry) → clear đều OK (mode=${ggList.mode})`);
+
+  for (const en of [true, false]) {
+    const g = await (await fetch(BASE + '/api/gaming', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: en }),
+    })).json();
+    if (!Array.isArray(g.effects) || g.effects.length < 19) {
+      fail(`Gaming Mode ${en ? 'bật' : 'tắt'} phải trả ≥19 effects (v3.6.0 thêm nagle/tdr/dynamictick): ${g.effects ? g.effects.length : 'null'}`);
+    }
+    ok(`Gaming Mode ${en ? 'BẬT' : 'TẮT'}: ${g.effects.filter((x) => x.success).length}/${g.effects.length} bước OK (nền không-Windows sẽ báo trung thực)`);
+  }
+
   summary.pass = true;
   ok(`FPS TĂNG (giữ nhịp): ${base.fps} → ${after.fps} (mục tiêu 120) • năng lực thật: ${base.max} → ${after.max} FPS — ảnh test FPS oke`);
   writeSummary();

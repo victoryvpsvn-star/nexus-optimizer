@@ -227,19 +227,21 @@ func perfOverclock(level string) OcResult {
 			Detail: firstLine(r.Stdout+r.Stderr) + " (cần quyền admin?)"})
 	}
 
-	// 3) Mức max: CPU min state 100% + Ultimate Performance nếu có
-	if level == "max" {
+	// 3) CPU min state 100% cho từ mức Cân bằng (chỉ AC — cắm điện) + Ultimate Performance nếu max
+	if level != "safe" {
 		r := runExe("powercfg", []string{"/setacvalueindex", "SCHEME_CURRENT", "SUB_PROCESSOR", "PROCTHROTTLEMIN", "100"}, 5*time.Second)
 		if r.OK {
 			runExe("powercfg", []string{"/setactive", "SCHEME_CURRENT"}, 5*time.Second)
-			oc.Steps = append(oc.Steps, PerfStep{Name: "CPU min state 100%", OK: true, Detail: "CPU luôn giữ xung cao nhất khi cắm điện"})
+			oc.Steps = append(oc.Steps, PerfStep{Name: "CPU min state 100% (cắm điện)", OK: true, Detail: "CPU luôn giữ xung cao nhất khi cắm điện"})
 		}
-		r2 := runExe("powercfg", []string{"/duplicatescheme", "e9a42b02-d5df-448d-aa00-03f14749eb61"}, 6*time.Second)
-		if r2.OK {
-			if guid := firstGUID(r2.Stdout); guid != "" {
-				r3 := runExe("powercfg", []string{"/setactive", guid}, 5*time.Second)
-				oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: r3.OK,
-					Detail: "Scheme Ultimate (" + guid + ")"})
+		if level == "max" {
+			r2 := runExe("powercfg", []string{"/duplicatescheme", "e9a42b02-d5df-448d-aa00-03f14749eb61"}, 6*time.Second)
+			if r2.OK {
+				if guid := firstGUID(r2.Stdout); guid != "" {
+					r3 := runExe("powercfg", []string{"/setactive", guid}, 5*time.Second)
+					oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: r3.OK,
+						Detail: "Scheme Ultimate (" + guid + ")"})
+				}
 			}
 		}
 	}
@@ -264,6 +266,52 @@ func perfRestore() OcResult {
 	}
 	res.Message = "Đã khôi phục cấu hình gốc (GPU / power plan / timer)"
 	return res
+}
+
+// v3.6.0: GPU ưu tiên cao cho game — UserGpuPreferences trong HKCU (không cần admin),
+// const gpuPrefKey/gpuPrefValue nằm ở perf.go dùng chung với bản mô phỏng CI.
+func perfGameGPUSet(path, action string) GameGpuResult {
+	res := GameGpuResult{Mode: perfMode, Action: action, Path: path}
+	switch action {
+	case "clear":
+		r := runExe("reg", []string{"delete", gpuPrefKey, "/v", path, "/f"}, 5*time.Second)
+		res.Success = r.OK
+		if r.OK {
+			res.Message = "Đã gỡ ưu tiên GPU cho " + path + " — Windows tự chọn lại GPU"
+		} else {
+			res.Message = firstLine(r.Stdout + r.Stderr) + " (chưa đặt hoặc thiếu quyền?)"
+		}
+	default:
+		r := runExe("reg", []string{"add", gpuPrefKey, "/v", path, "/t", "REG_SZ", "/d", gpuPrefValue, "/f"}, 5*time.Second)
+		res.Success = r.OK
+		if r.OK {
+			res.Message = "Đã đặt GPU Ưu tiên cao (hiệu năng cao) cho " + path + " — hiệu lực ngay, không cần khởi động lại"
+		} else {
+			res.Message = firstLine(r.Stdout + r.Stderr)
+		}
+	}
+	return res
+}
+
+func perfGameGPUList() GameGpuList {
+	lst := GameGpuList{Mode: perfMode, Entries: []GameGpuEntry{}}
+	r := runExe("reg", []string{"query", gpuPrefKey}, 5*time.Second)
+	if !r.OK {
+		return lst // key chưa tồn tại = chưa có entry nào
+	}
+	// output dạng: "    C:\\Games\\game.exe    REG_SZ    GpuPreference=2;" — tách theo dấu REG_SZ
+	for _, line := range strings.Split(r.Stdout, "\n") {
+		i := strings.Index(line, "REG_SZ")
+		if i < 0 {
+			continue
+		}
+		name := strings.TrimSpace(line[:i])
+		data := strings.TrimSpace(line[i+len("REG_SZ"):])
+		if name != "" && data != "" {
+			lst.Entries = append(lst.Entries, GameGpuEntry{Path: name, Value: data})
+		}
+	}
+	return lst
 }
 
 func firstLine(s string) string {

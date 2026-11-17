@@ -5,12 +5,14 @@ import (
 	"time"
 )
 
+// v3.6.0: thêm Nagle (độ trễ mạng), TDR delay (chống reset driver GPU) và dynamic tick off
+// vào preset Gaming — cả apply lẫn revert phải có id trong catalog (go test enforce)
 var gamingPresetApplyWin = []string{
 	"win-game-dvr-off", "win-gamemode-on", "win-fse-off", "win-mouse-accurate",
 	"win-keyboard-fast", "win-keyboard-accessibility-off", "win-menu-delay", "win-startup-delay",
 	"win-ram-clean", "win-flush-dns", "win-power-high", "win-cpu-priority-separation",
 	"win-cpu-core-parking-off", "win-gpu-hwsch-on", "win-mmcss-gaming", "win-netthrottle",
-	"win-background-apps-off",
+	"win-background-apps-off", "win-nagle", "win-gpu-tdr-delay", "win-cpu-dynamic-tick-off",
 }
 
 var gamingPresetRevertWin = []string{
@@ -18,6 +20,7 @@ var gamingPresetRevertWin = []string{
 	"win-keyboard-fast", "win-keyboard-accessibility-off", "win-menu-delay", "win-startup-delay",
 	"win-power-high", "win-sysresp", "win-cpu-priority-separation", "win-cpu-core-parking-off",
 	"win-gpu-hwsch-on", "win-mmcss-gaming", "win-netthrottle", "win-background-apps-off",
+	"win-nagle", "win-gpu-tdr-delay", "win-cpu-dynamic-tick-off",
 } // v3.4.0 fix: bỏ 3 id không có trong apply (tránh bật lại SysMain/DiagTrack user chưa tắt)
 
 const gamingNoteWin = "Các tinh chỉnh HKCU áp dụng ngay cho user hiện tại; các mục HKLM/service cần quyền Administrator — nếu thiếu quyền sẽ báo lỗi trung thực."
