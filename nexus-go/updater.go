@@ -176,6 +176,7 @@ func updateApply() (string, error) {
 	}
 	cmd := exec.Command(exePath())
 	cmd.Dir = filepath.Dir(exePath())
+	cmd.Args = append([]string{exePath()}, os.Args[1:]...) // v3.4.1 fix: giữ --web/--port của phiên trước
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("đã cài xong nhưng tự mở lại lỗi: %v — hãy mở tool tay", err)
 	}

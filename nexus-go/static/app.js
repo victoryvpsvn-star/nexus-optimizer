@@ -714,14 +714,15 @@ function applyUiSettings(s) {
 
 $('settingsSave').addEventListener('click', async () => {
   try {
-    const body = {
+    const body = Object.assign({}, uiSettingsCache || {}, { // v3.4.1 fix: giữ lang/welcomeSeen
       accent: $('setAccent').value,
       background: uiSettingsCache?.background || 'sakura', // v3.4.0 fix: không ghi đè lựa chọn wallpaper
       customBgUrl: uiSettingsCache?.customBgUrl || '',
       radius: Number($('setRadius').value) || 1.25,
       petals: $('setPetals').checked,
-    };
+    });
     const s = await api('/api/settings', { method: 'PUT', body });
+    uiSettingsCache = s;
     applyUiSettings(s);
     toast('Đã lưu cài đặt', 'ok');
   } catch (e) {
@@ -763,6 +764,13 @@ $('relaunchAdmin').addEventListener('click', async () => {
 (function () {
   const ov = document.getElementById('welcomeOverlay');
   if (!ov || localStorage.getItem('sakura_welcome_seen') === '1') return;
+  // v3.4.1 fix: server nhớ đã đồng ý → ẩn overlay (localStorage có thể trống khi origin đổi)
+  fetch('/api/settings').then((r) => r.json()).then((s) => {
+    if (s && s.welcomeSeen) {
+      try { localStorage.setItem('sakura_welcome_seen', '1'); } catch (_) {}
+      ov.style.display = 'none';
+    }
+  }).catch(() => {});
   ov.style.display = 'flex';
   fetch('/api/health').then((r) => r.json()).then((d) => {
     const v = document.getElementById('welcomeVer');
@@ -771,7 +779,14 @@ $('relaunchAdmin').addEventListener('click', async () => {
   const agree = document.getElementById('welcomeAgree');
   const start = document.getElementById('welcomeStart');
   agree.addEventListener('change', () => { start.disabled = !agree.checked; });
-  start.addEventListener('click', () => { localStorage.setItem('sakura_welcome_seen', '1'); ov.style.display = 'none'; });
+  start.addEventListener('click', () => {
+    localStorage.setItem('sakura_welcome_seen', '1');
+    ov.style.display = 'none';
+    // v3.4.1 fix: ghi nhớ lên server nữa — port đổi/clear cache vẫn không hỏi lại
+    fetch('/api/settings').then((r) => r.json()).then((s) =>
+      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({}, s, { welcomeSeen: true })) })).catch(() => {});
+  });
   document.getElementById('welcomeRestore').addEventListener('click', async () => {
     const msg = document.getElementById('welcomeRestoreMsg');
     msg.textContent = 'Đang tạo điểm khôi phục (có thể mất ~1 phút)…';

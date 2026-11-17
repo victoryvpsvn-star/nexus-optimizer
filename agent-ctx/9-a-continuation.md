@@ -374,3 +374,19 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   (nav/chips/tags/toast + placeholder roundtrip), AI Night áp background + overlay 45%,
   VI khôi phục chuẩn. go vet sạch, test pass, API 1000.
 - ROADMAP từ suggester (làm tiếp): presets 1-click → startup manager → restore point button.
+
+
+## Bổ sung 11-m: v3.4.1 — fix 2 bug user báo bằng screenshot
+- BUG TOAST SPAM "Lưu cài đặt lỗi: lang chỉ hỗ trợ vi/en": config cũ v3.3.0 không có lang →
+  GET trả lang:"" → mọi PUT (settingsSave / wallpaper merge) bị ValidateSettings từ chối.
+  Fix: ValidateSettings chấp nhận "" + PutSettings chuẩn hóa ""→"vi" + settingsSave spread
+  uiSettingsCache (giữ lang/welcomeSeen) + cache update sau save.
+- BUG WELCOME HỎI LẠI MỖI LẦN MỞ: root = main.go chọn cổng NGẪU NHIÊN mỗi lần mở (flag port=0)
+  → origin 127.0.0.1:PORT đổi → localStorage (welcome seen, lang, wallpaper tinh chỉnh) "mất".
+  Fix 3 lớp: (1) main.go cổng cố định mặc định 32199 (+1…+10 nếu bận, cuối cùng mới OS-random);
+  (2) UISettings + WelcomeSeen bool — bấm Bắt đầu ghi cả server (GET-merge-PUT), boot adopt:
+  server seen=true → ẩn overlay + set localStorage dù origin mới; (3) i18n adopt server lang khi
+  localStorage trống. Thêm: updater giữ os.Args[1:] khi tự mở lại (--web/--port không rơi).
+- VERIFY browser thật (origin 32199): legacy PUT 200 lang=vi; welcomeSeen persist; fresh flow:
+  overlay hiện → đồng ý → server nhớ → mở lại lần 2 overlay ẩn (ls trống vẫn ẩn nhờ adopt).
+  go vet/test pass. exe buildNumber=22.

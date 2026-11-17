@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const AppVersion = "3.4.0"
+const AppVersion = "3.4.1"
 
 // buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
 var buildNumber = "0"
@@ -25,7 +25,7 @@ var appState *Store
 
 func main() {
 	web := flag.Bool("web", false, "Chạy chế độ web (mở trình duyệt, không mở cửa sổ app)")
-	port := flag.Int("port", 0, "Cổng HTTP cụ thể (mặc định: chọn cổng trống ngẫu nhiên)")
+	port := flag.Int("port", 0, "Cổng HTTP cụ thể (mặc định: 32199 — bận thì thử +1…+10 rồi mới cổng trống bất kỳ)")
 	flag.Parse()
 
 	if p, e := os.Executable(); e == nil {
@@ -37,11 +37,33 @@ func main() {
 	}
 	appState.StartAutosave(3 * time.Second)
 
-	// HTTP server: bind cổng yêu cầu hoặc cổng trống do OS cấp (127.0.0.1:0) — không thể kẹt cổng
+	// HTTP server — v3.4.1 fix: mặc định CỔNG CỐ ĐỊNH 32199. Trước đây mỗi lần mở chọn cổng
+	// ngẫu nhiên → origin 127.0.0.1:PORT đổi liên tục → localStorage của UI (welcome seen,
+	// ngôn ngữ, tinh chỉnh wallpaper) bị "mất" giữa các lần mở tool.
 	mux := buildMux()
-	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprint(*port)))
-	if err != nil {
-		log.Fatalf("Không mở được cổng HTTP: %v", err)
+	var ln net.Listener
+	var err error
+	if *port > 0 {
+		ln, err = net.Listen("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprint(*port)))
+		if err != nil {
+			log.Fatalf("Không mở được cổng HTTP %d: %v", *port, err)
+		}
+	} else {
+		ln, err = net.Listen("tcp", "127.0.0.1:32199")
+		if err != nil {
+			for p := 32200; p <= 32210; p++ {
+				ln, err = net.Listen("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprint(p)))
+				if err == nil {
+					break
+				}
+			}
+		}
+		if err != nil { // hết cổng dự phòng — giao OS chọn cổng trống bất kỳ
+			ln, err = net.Listen("tcp", "127.0.0.1:0")
+		}
+		if err != nil {
+			log.Fatalf("Không mở được cổng HTTP: %v", err)
+		}
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
 

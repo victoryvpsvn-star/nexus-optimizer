@@ -605,6 +605,15 @@
     document.documentElement.setAttribute('lang', lang);
   }
 
+  // v3.4.1 fix: localStorage trống (origin mới / clear cache) → nhận ngôn ngữ từ server
+  (async () => {
+    try {
+      if (localStorage.getItem(LANG_KEY)) return;
+      const s = await fetch('/api/settings').then((r) => r.json());
+      if (s && (s.lang === 'en' || s.lang === 'vi') && s.lang !== lang) applyLang(s.lang);
+    } catch (_) {}
+  })();
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {

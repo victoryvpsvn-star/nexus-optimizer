@@ -20,6 +20,7 @@ type UISettings struct {
 	Radius      float64 `json:"radius"`
 	Petals      bool    `json:"petals"`
 	Lang        string  `json:"lang"`
+	WelcomeSeen bool    `json:"welcomeSeen"`
 }
 
 func defaultUISettings() UISettings {
@@ -187,7 +188,7 @@ func (s *Store) ValidateSettings(u UISettings) error {
 	if u.Radius < 0 || u.Radius > 2.5 {
 		return fmt.Errorf("radius phải từ 0 đến 2.5")
 	}
-	if u.Lang != "vi" && u.Lang != "en" {
+	if u.Lang != "" && u.Lang != "vi" && u.Lang != "en" {
 		return fmt.Errorf("lang chỉ hỗ trợ vi/en")
 	}
 	if u.CustomBgURL != "" && !strings.HasPrefix(u.CustomBgURL, "http://") &&
@@ -200,6 +201,9 @@ func (s *Store) ValidateSettings(u UISettings) error {
 func (s *Store) PutSettings(u UISettings) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if u.Lang == "" { // config cũ (v3.3.0) không có lang — chuẩn hóa thay vì để rỗng
+		u.Lang = "vi"
+	}
 	s.data.Settings = u
 	_ = s.saveLocked()
 }
