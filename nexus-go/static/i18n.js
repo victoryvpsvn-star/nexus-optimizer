@@ -41,7 +41,7 @@
     '🧪 Đang test FPS…': '🧪 Running FPS test…',
     'FPS hiện tại:': 'Current FPS:',
     'Mục tiêu:': 'Target:',
-    'Benchmark giữ nhịp bằng bộ đếm hiệu năng của tool — trên Windows, timer resolution 0.5ms chính là thứ giúp giữ ổn định 120 FPS.': 'The benchmark paces frames with the tool timer — on Windows, 0.5 ms timer resolution is exactly what holds 120 FPS steady.',
+    'Test 2 pha: (1) giữ nhịp theo mục tiêu — chứng minh timer resolution giữ được nhịp; (2) đo TỐI ĐA KHÔNG GIỚI HẠN — năng lực render thật của máy, không đặt trước số nào.': 'Two-phase test: (1) hold the target pace — proves timer resolution can hold it; (2) measure UNCAPPED max — your machine\'s real render throughput, never pre-set.',
     /* ---- 28 nhóm tinh chỉnh thật (cột category trong data/*.tsv) + nhãn "Tất cả" ---- */
     'Dịch vụ': 'Services',
     'Telemetry & Riêng tư': 'Telemetry & Privacy',

@@ -159,18 +159,20 @@
     const cv = $('benchCanvas');
     const ctx = cv.getContext('2d');
     const target = perfSet.fpsTarget || 60;
-    const durMs = 4000;
     $('benchTargetVal').textContent = target + ' FPS';
     const v = $('benchVerdict');
     v.textContent = '';
     v.dataset.done = '0';
+    delete v.dataset.paced;
+    delete v.dataset.max;
     v.style.color = '';
+    $('benchPhase').textContent = 'Giai đoạn 1/2 — giữ nhịp mục tiêu ' + target + ' FPS (4 giây)…';
     $('benchOverlay').style.display = 'flex';
 
-    const t0 = performance.now();
     let frames = 0;
-    let last = t0;
     let stop = false;
+    let t0 = performance.now();
+    let last = t0;
     const interval = 1000 / target;
     const live = setInterval(() => {
       const el = performance.now() - t0;
@@ -179,35 +181,65 @@
 
     function spin(until) { while (performance.now() < until) { /* giữ nhịp chính xác */ } }
 
-    function tick() {
+    /* PHA 1 — giữ nhịp: vẽ đúng nhịp 1000/target ms (test ngưỡng, chứng minh timer giữ được nhịp) */
+    function tickPaced() {
       if (stop) return;
       drawFrame(ctx, cv.width, cv.height, performance.now() - t0);
       frames++;
       const now = performance.now();
-      if (now - t0 >= durMs) { finish(); return; }
+      if (now - t0 >= 4000) { startMax(); return; }
       const next = Math.max(last + interval, now + 0.5); // không chạy bù dồn
       last = next;
       const wait = next - performance.now();
-      if (wait > 2.5) setTimeout(() => { spin(next); tick(); }, wait - 2.5);
-      else { spin(next); tick(); }
+      if (wait > 2.5) setTimeout(() => { spin(next); tickPaced(); }, wait - 2.5);
+      else { spin(next); tickPaced(); }
     }
 
-    function finish() {
+    /* PHA 2 — tối đa: bơm frame KHÔNG GIỚI HẠN qua MessageChannel (không qua timer,
+     * không bị clamp 4ms của setTimeout) → đo throughput render THẬT của máy,
+     * không đặt trước số nào. */
+    function startMax() {
+      const pacedFps = frames / ((performance.now() - t0) / 1000);
+      v.dataset.paced = String(Math.round(pacedFps));
+      frames = 0;
+      t0 = performance.now();
+      $('benchPhase').textContent = 'Giai đoạn 2/2 — đo NĂNG LỰC TỐI ĐA thật, không giới hạn (3 giây)…';
+      const chan = new MessageChannel();
+      chan.port1.onmessage = () => {
+        if (stop) return;
+        drawFrame(ctx, cv.width, cv.height, performance.now() - t0);
+        frames++;
+        if (performance.now() - t0 >= 3000) { finishMax(); return; }
+        chan.port2.postMessage(0);
+      };
+      chan.port2.postMessage(0);
+    }
+
+    function finishMax() {
       clearInterval(live);
-      const el = performance.now() - t0;
-      const fps = frames / (el / 1000);
-      const ok = fps >= target * 0.9;
-      v.textContent = ok
-        ? '🎯 ' + Math.round(fps) + ' FPS — Đạt mục tiêu ' + target + ' ✓'
-        : '⚠️ ' + Math.round(fps) + ' FPS — chưa đạt ' + target;
-      v.style.color = ok ? '#8ff0a4' : '#ffb3c8';
+      const maxFps = frames / ((performance.now() - t0) / 1000);
+      const paced = Number(v.dataset.paced || 0);
+      v.dataset.max = String(Math.round(maxFps));
       v.dataset.done = '1';
-      $('benchLive').textContent = Math.round(fps);
+      const pacedOk = paced >= target * 0.9;
+      const maxOk = maxFps >= target;
+      if (pacedOk && maxOk) {
+        v.textContent = '🎯 Giữ nhịp ' + paced + ' FPS (mục tiêu ' + target + ') ✓ • Tối đa thật: ' + Math.round(maxFps) + ' FPS';
+        v.style.color = '#8ff0a4';
+      } else if (!maxOk) {
+        v.textContent = '❌ Năng lực thật chỉ ' + Math.round(maxFps) + ' FPS — máy không đủ ' + target + ' (giới hạn phần cứng, tool không làm phép màu)';
+        v.style.color = '#ffb3c8';
+      } else {
+        v.textContent = '⚠️ Máy render được ' + Math.round(maxFps) + ' FPS nhưng chỉ giữ nhịp ' + paced + '/' + target + ' — timer/CPU chưa đủ nhịp (bấm 🚀 Tối ưu để đặt timer 0.5ms)';
+        v.style.color = '#ffd98f';
+      }
+      $('benchLive').textContent = Math.round(maxFps);
+      $('benchPhase').textContent = 'Xong — nhịp mục tiêu: ' + paced + ' FPS • năng lực tối đa thật: ' + Math.round(maxFps) + ' FPS';
       benchCtl = null;
     }
 
     benchCtl = { stop: () => { stop = true; clearInterval(live); benchCtl = null; } };
-    tick();
+    tickPaced();
   }
 
   /* ---------- Gắn sự kiện ---------- */

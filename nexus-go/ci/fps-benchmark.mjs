@@ -37,7 +37,7 @@ if (!exe) {
 }
 console.log('🌐 Browser:', exe);
 
-const summary = { baseline: null, after: null, pass: false, steps: [] };
+const summary = { baseline: null, after: null, maxBefore: null, maxAfter: null, pass: false, steps: [] };
 const fail = (msg) => {
   console.error('❌', msg);
   summary.steps.push('❌ ' + msg);
@@ -56,9 +56,11 @@ function writeSummary(exitCode) {
     '| Bước | Kết quả |',
     '| --- | --- |',
     `| Test ép xung (curl trước UI) | ${summary.steps.filter((s) => s.includes('Ép xung API')).join(' ') || '(ở job step curl)' } |`,
-    `| FPS baseline (mặc định 60) | ${summary.baseline ?? '—'} |`,
-    `| FPS sau Tối ưu (mục tiêu 120) | ${summary.after ?? '—'} |`,
-    `| Kết luận | ${summary.pass ? '✅ ĐẠT — FPS tăng từ 60 lên ' + summary.after : '❌ FAIL'} |`,
+    `| FPS baseline (giữ nhịp, mặc định 60) | ${summary.baseline ?? '—'} |`,
+    `| Năng lực TỐI ĐA thật trước (không giới hạn) | ${summary.maxBefore ?? '—'} |`,
+    `| FPS sau Tối ưu (giữ nhịp, mục tiêu 120) | ${summary.after ?? '—'} |`,
+    `| Năng lực TỐI ĐA thật sau (không giới hạn) | ${summary.maxAfter ?? '—'} |`,
+    `| Kết luận | ${summary.pass ? '✅ ĐẠT — giữ nhịp tăng ' + summary.baseline + ' → ' + summary.after + ', năng lực thật ' + summary.maxAfter + ' FPS ≥ 120' : '❌ FAIL'} |`,
     '',
     ...summary.steps.map((s) => '- ' + s),
     '',
@@ -76,14 +78,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function runBench(page, shot) {
   await page.click('#perfBenchBtn');
-  await page.waitForFunction(() => document.querySelector('#benchVerdict').dataset.done === '1', { timeout: 30000 });
-  const text = await page.$eval('#benchVerdict', (el) => el.textContent);
-  const fps = Math.round(Number((text.match(/([\d.]+)\s*FPS/) || [])[1]));
-  if (!Number.isFinite(fps)) fail('Không đọc được FPS từ verdict: ' + text);
+  // 2 pha: giữ nhịp 4s + đo tối đa 3s → verdict gắn dataset paced/max (không parse text cho chắc)
+  await page.waitForFunction(() => document.querySelector('#benchVerdict').dataset.done === '1', { timeout: 45000 });
+  const d = await page.$eval('#benchVerdict', (el) => ({ text: el.textContent, paced: el.dataset.paced, max: el.dataset.max }));
+  const fps = Math.round(Number(d.paced));
+  const max = Math.round(Number(d.max));
+  if (!Number.isFinite(fps) || !Number.isFinite(max)) fail('Không đọc được paced/max từ verdict: ' + d.text);
   await sleep(300); // đợi render verdict ổn định
   await page.screenshot({ path: path.join(SHOTS, shot) });
-  ok(`FPS test (${shot}): ${text}`);
-  return { fps, text };
+  ok(`FPS test (${shot}): ${d.text}`);
+  return { fps, max, text: d.text };
 }
 
 const browser = await puppeteer.launch({
@@ -126,11 +130,13 @@ try {
   }, { timeout: 10000 });
   ok('UI mở được, tab Tinh chỉnh + card Hiệu năng hiển thị');
 
-  // ---- Bước 2: FPS baseline (mặc định 60) ----
+  // ---- Bước 2: FPS baseline (mặc định 60) + đo năng lực tối đa thật ----
   const base = await runBench(page, '00-baseline-60fps.png');
   summary.baseline = base.fps;
+  summary.maxBefore = base.max;
   if (base.fps < 50 || base.fps > 75) fail(`Baseline phải ≈60 (nhận ${base.fps}) — mặc định của tool là 60`);
-  ok(`Baseline ≈60 xác nhận (thực tế ${base.fps} FPS)`);
+  if (base.max <= base.fps) fail(`Năng lực tối đa (${base.max}) phải cao hơn nhịp (${base.fps}) — nếu không, phép đo tối đa có vấn đề`);
+  ok(`Baseline ≈60 xác nhận (${base.fps} FPS) • năng lực thật của runner: ${base.max} FPS`);
   await page.click('#benchClose');
   await sleep(400);
 
@@ -155,16 +161,19 @@ try {
   if (!resOk) fail('Tối ưu báo có bước lỗi — xem 02-toi-uu-applied.png');
   ok('Đã bấm Tối ưu — các bước ép xung + timer áp dụng xong (screenshot 02-toi-uu-applied.png)');
 
-  // ---- Bước 5: FPS test lần 2, kỳ vọng ≥105 (mục tiêu 120) ----
+  // ---- Bước 5: FPS test lần 2 — paced ≥105 (mục tiêu 120) VÀ năng lực thật ≥120 ----
   const after = await runBench(page, '03-fps-after-120.png');
   summary.after = after.fps;
+  summary.maxAfter = after.max;
   if (after.fps < 105) fail(`FPS sau Tối ưu phải ≥105 (mục tiêu 120, nhận ${after.fps})`);
   if (after.fps <= base.fps) fail('FPS sau Tối ưu phải TĂNG so với baseline');
+  if (after.max < 120) fail(`Năng lực TỐI ĐA thật chỉ ${after.max} FPS < 120 — không được khoe 120 khi máy không đủ (anti-fake)`);
+  if (after.max < after.fps) fail(`Năng lực thật (${after.max}) thấp hơn nhịp giữ được (${after.fps}) — phép đo có vấn đề`);
 
   summary.pass = true;
-  ok(`FPS TĂNG: ${base.fps} → ${after.fps} (mục tiêu 120) — ảnh test FPS oke`);
+  ok(`FPS TĂNG (giữ nhịp): ${base.fps} → ${after.fps} (mục tiêu 120) • năng lực thật: ${base.max} → ${after.max} FPS — ảnh test FPS oke`);
   writeSummary();
-  console.log('KẾT QUẢ JSON:', JSON.stringify({ baseline: base.fps, after: after.fps, pass: true }));
+  console.log('KẾT QUẢ JSON:', JSON.stringify({ baseline: base.fps, after: after.fps, maxBefore: base.max, maxAfter: after.max, pass: true }));
   await browser.close();
   process.exit(0);
 } catch (e) {

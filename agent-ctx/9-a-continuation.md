@@ -390,3 +390,25 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
 - VERIFY browser thật (origin 32199): legacy PUT 200 lang=vi; welcomeSeen persist; fresh flow:
   overlay hiện → đồng ý → server nhớ → mở lại lần 2 overlay ẩn (ls trống vẫn ẩn nhờ adopt).
   go vet/test pass. exe buildNumber=22.
+
+
+## Bổ sung 12-n: v3.5.0 — Hiệu năng: Timer Resolution tự động + Ép xung + FPS test (yêu cầu user)
+- Timer Resolution: perf_windows.go dùng ntdll!NtSetTimerResolution/QueryTimerResolution — dò
+  0.5→1→2ms lấy mức TỐT NHẤT máy hỗ trợ (kernel cấp gì nhận nấy, ≤2x mong muốn); perf_other.go
+  = chế độ mô phỏng CI (mode "ci-sim", ghi rõ từng bước là mô phỏng — không nhầm tác dụng thật).
+- Ép xung an toàn (không vọc voltage): NVIDIA → nvidia-smi -lgc/-lmc khóa xung boost tối đa
+  (balanced/max); GPU khác → HAGS reg; powercfg High Performance (mọi mức); max → CPU min 100%
+  + Ultimate Performance. POST /api/perf/restore khôi phục (-rgc/-rmc, Balanced, timer off).
+- FPS test in-app (perf.js): benchmark paced performance.now + busy-spin ≤2.5ms — mục tiêu
+  mặc định 60; "🚀 Tối ưu" = ép xung + timer auto + TỰ ĐẨY FPS 60→120; slider 60-240;
+  modal canvas particles + verdict "🎯 X FPS — Đạt mục tiêu ✓" (data-done cho CI đọc).
+  Trên Windows timer 0.5ms chính là thứ giữ nhịp 8.33ms → 120 FPS thật.
+- storeData + PerfSettings {fpsTarget,timerRes,ocLevel} (mục "perf" config.json, defaults 60/auto/balanced).
+- CI: job perf-test trong build-go.yml — Bước 1 ép xung + timer qua curl (assert success),
+  Bước 2 ci/fps-benchmark.mjs (puppeteer-core + google-chrome-stable có sẵn trên runner):
+  mở UI → CHUYỂN TAB Tinh chỉnh (fix lần 1: perfCard ẩn ở tab mặc định) → FPS baseline 60
+  (assert 50-75) → chỉnh slider 120 (ảnh 01) → bấm Tối ưu (ảnh 02) → FPS test lần 2
+  (assert ≥105 + > baseline, ảnh 03) → 4 ảnh artifact + step summary. Ảnh kiểm tra không trống >15KB.
+- KẾT QUẢ CI run 44062955472 (SHA 5ec2bb5, run #33): cả 2 job SUCCESS —
+  JSON {"baseline":60,"after":120,"pass":true}, log "FPS TĂNG: 60 → 120". 4 ảnh artifact OK.
+- exe chuẩn build #33 tải từ CI artifact về download/Sakura-Tool-x64.exe; ảnh đặt download/fps-test-photos/.
