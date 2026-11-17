@@ -6,9 +6,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -114,6 +116,64 @@ const polBrave = `HKLM\SOFTWARE\Policies\BraveSoftware\Brave`
 const polFirefox = `HKLM\SOFTWARE\Policies\Mozilla\Firefox`
 const ifeoDiscord = `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\Discord.exe\PerfOptions`
 
+// ---------- v3.9.0: snapshot gốc trước khi apply (theo audit P2-03/P2-04/P2-16) ----------
+// Lưu vào dataDir()/appopt-snap.json — hoàn tác trả về GIÁ TRỊ GỐC, không delete mù.
+// Cấu trúc: { "section": { "key hoặc name": { "type": "REG_DWORD", "data": "0x1" } } }
+
+func appoptSnapPath() string { return filepath.Join(dataDir(), "appopt-snap.json") }
+
+func saveAppoptSnap(section string, m map[string]map[string]string) {
+	var all map[string]map[string]map[string]string
+	if b, err := os.ReadFile(appoptSnapPath()); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	if all == nil {
+		all = map[string]map[string]map[string]string{}
+	}
+	all[section] = m
+	if out, err := json.MarshalIndent(all, "", "  "); err == nil {
+		_ = os.WriteFile(appoptSnapPath(), out, filePerm())
+	}
+}
+
+func loadAppoptSnap(section string) map[string]map[string]string {
+	all := map[string]map[string]map[string]string{}
+	if b, err := os.ReadFile(appoptSnapPath()); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	return all[section]
+}
+
+func clearAppoptSnap(section string) {
+	all := map[string]map[string]map[string]string{}
+	if b, err := os.ReadFile(appoptSnapPath()); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	delete(all, section)
+	if out, err := json.MarshalIndent(all, "", "  "); err == nil {
+		_ = os.WriteFile(appoptSnapPath(), out, filePerm())
+	}
+}
+
+/** regQueryValue — đọc type+data hiện tại của 1 registry value (dùng cho snapshot) */
+func regQueryValue(key, name string) (string, string, bool) {
+	r := runExe("reg", []string{"query", key, "/v", name}, 10*time.Second)
+	if !r.OK {
+		return "", "", false
+	}
+	for _, ln := range strings.Split(r.Stdout, "\n") {
+		ln = strings.TrimSpace(ln)
+		if strings.HasPrefix(ln, name) && strings.Contains(ln, "REG_") {
+			// dạng: "StartupBoostEnabled    REG_DWORD    0x1"
+			f := strings.Fields(ln)
+			if len(f) >= 3 {
+				return f[1], strings.Join(f[2:], " "), true
+			}
+		}
+	}
+	return "", "", false
+}
+
 // ---------- áp dụng / hoàn tác từng app ----------
 
 func applyBrowserPolicy(id string) AppOptRunResult {
@@ -132,6 +192,16 @@ func applyBrowserPolicy(id string) AppOptRunResult {
 	case "firefox":
 		key = polFirefox
 		vals = []RegValue{{"DisableTelemetry", "REG_DWORD", "1"}}
+	}
+	// v3.9.0: snapshot giá trị gốc TRƯỚC khi ghi — hoàn tác sẽ trả đúng giá trị cũ
+	snap := map[string]map[string]string{}
+	for _, v := range vals {
+		if typ, data, found := regQueryValue(key, v.Name); found {
+			snap[v.Name] = map[string]string{"type": typ, "data": data}
+		}
+	}
+	if len(snap) > 0 {
+		saveAppoptSnap("policy:"+id, snap)
 	}
 	r := regAddValues(key, vals, "")
 	res := AppOptRunResult{Mode: "windows", ID: id, Steps: []PerfStep{{Name: "Ghi chính sách " + key, OK: r.Success, Detail: r.Message}}}
@@ -160,10 +230,30 @@ func revertBrowserPolicy(id string) AppOptRunResult {
 	case "firefox":
 		key, names = polFirefox, []string{"DisableTelemetry"}
 	}
-	r := regDeleteValues(key, names, "")
-	return AppOptRunResult{Mode: "windows", ID: id, Success: r.Success,
-		Steps: []PerfStep{{Name: "Gỡ chính sách (về mặc định)", OK: r.Success, Detail: r.Message}},
-		Message: map[bool]string{true: "Đã hoàn tác — trình duyệt về mặc định", false: r.Message}[r.Success]}
+	// v3.9.0 (audit P2-03): có snapshot → trả giá trị GỐC (giữ chính sách admin có trước);
+	// không có snapshot → delete về mặc định Windows
+	snap := loadAppoptSnap("policy:" + id)
+	allOK := true
+	var detail []string
+	for _, n := range names {
+		if s, ok := snap[n]; ok {
+			r := runExe("reg", []string{"add", key, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+			if !r.OK {
+				allOK = false
+			}
+			detail = append(detail, n+" → trả giá trị gốc ("+s["data"]+")")
+		} else {
+			r := regDeleteValues(key, []string{n}, "")
+			if !r.Success {
+				allOK = false
+			}
+			detail = append(detail, n+" → gỡ (chưa từng có trước khi tối ưu)")
+		}
+	}
+	clearAppoptSnap("policy:" + id)
+	return AppOptRunResult{Mode: "windows", ID: id, Success: allOK,
+		Steps:   []PerfStep{{Name: "Hoàn tác chính sách (trả đúng trạng thái gốc)", OK: allOK, Detail: strings.Join(detail, "; ")}},
+		Message: map[bool]string{true: "Đã hoàn tác — trả đúng trạng thái trước khi tối ưu", false: "Một số value hoàn tác lỗi — xem chi tiết"}[allOK]}
 }
 
 func applyDiscord(enabled bool) AppOptRunResult {
@@ -171,13 +261,21 @@ func applyDiscord(enabled bool) AppOptRunResult {
 	home, _ := os.UserHomeDir()
 	cfg := filepath.Join(home, "AppData", "Roaming", "discord", "settings.json")
 	if enabled {
+		hwOK := false
 		if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
 			raw, err := os.ReadFile(cfg)
 			if err == nil {
 				var m map[string]any
 				if err := json.Unmarshal(raw, &m); err == nil {
+					// v3.9.0 (audit P2-02): lưu giá trị HardwareAcceleration GỐC trước khi đổi
+					if prev, had := m["HardwareAcceleration"]; had {
+						saveAppoptSnap("discord-hw", map[string]map[string]string{
+							"value": map[string]string{"json": fmt.Sprint(prev), "had": "1"},
+						})
+					}
 					m["HardwareAcceleration"] = false
 					if out, err := json.MarshalIndent(m, "", "  "); err == nil && os.WriteFile(cfg, out, 0644) == nil {
+						hwOK = true
 						res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → tắt trong settings.json", OK: true,
 							Detail: "Discord không còn cạnh tranh GPU với game — áp dụng sau khi mở lại Discord"})
 					}
@@ -187,28 +285,87 @@ func applyDiscord(enabled bool) AppOptRunResult {
 			res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → tắt trong settings.json", OK: false,
 				Detail: "không tìm thấy settings.json của Discord"})
 		}
-		// IFEO CPU priority — cần admin
+		// IFEO CPU priority — cần admin; snapshot giá trị gốc nếu có
+		if typ, data, found := regQueryValue(ifeoDiscord, "CpuPriorityClass"); found {
+			saveAppoptSnap("discord-ifeo", map[string]map[string]string{
+				"CpuPriorityClass": map[string]string{"type": typ, "data": data},
+			})
+		}
 		r := regAddValues(ifeoDiscord, []RegValue{{"CpuPriorityClass", "REG_DWORD", "16384"}}, "")
 		res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → Below Normal (IFEO)", OK: r.Success,
 			Detail: map[bool]string{true: "16384 (Below Normal) — game luôn được CPU trước Discord", false: r.Message + " (cần quyền admin)"}[r.Success]})
-		res.Success = len(res.Steps) > 0 && res.Steps[0].OK
-		res.Message = "Đã tối ưu Discord (HW accel tắt + ưu tiên CPU thấp)"
+		// v3.9.0 (audit P2-02): tổng hợp trung thực — bước chính là HW accel; IFEO lỗi thì cảnh báo rõ
+		res.Success = hwOK
+		if hwOK && r.Success {
+			res.Message = "Đã tối ưu Discord (HW accel tắt + ưu tiên CPU thấp)"
+		} else if hwOK {
+			res.Message = "Đã tắt HW accel Discord — RIÊNG phần IFEO CPU priority cần quyền admin nên chưa đặt được (chạy lại app với quyền admin sẽ đủ cả 2)"
+		} else {
+			res.Message = "Không tắt được Hardware Acceleration — settings.json Discord không tìm thấy/không ghi được"
+		}
 	} else {
-		if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
-			if raw, err := os.ReadFile(cfg); err == nil {
-				var m map[string]any
-				if err := json.Unmarshal(raw, &m); err == nil {
-					delete(m, "HardwareAcceleration")
-					if out, err := json.MarshalIndent(m, "", "  "); err == nil && os.WriteFile(cfg, out, 0644) == nil {
-						res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → về mặc định", OK: true, Detail: "xóa key khỏi settings.json"})
+		// v3.9.0 (audit P2-02): hoàn tác trả GIÁ TRỊ GỐC — key có trước thì giữ nguyên giá trị cũ
+		hwRestored := false
+		if snap := loadAppoptSnap("discord-hw"); snap != nil && snap["value"] != nil {
+			if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
+				if raw, err := os.ReadFile(cfg); err == nil {
+					var m map[string]any
+					if err := json.Unmarshal(raw, &m); err == nil {
+						if snap["value"]["had"] == "1" && snap["value"]["json"] != "" {
+							var prev any
+							if err := json.Unmarshal([]byte(snap["value"]["json"]), &prev); err == nil {
+								m["HardwareAcceleration"] = prev
+							} else {
+								m["HardwareAcceleration"] = true
+							}
+							detail := "trả giá trị gốc: " + snap["value"]["json"]
+							if out, err := json.MarshalIndent(m, "", "  "); err == nil && os.WriteFile(cfg, out, 0644) == nil {
+								res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → trả giá trị gốc", OK: true, Detail: detail})
+								hwRestored = true
+							}
+						} else {
+							delete(m, "HardwareAcceleration")
+							if out, err := json.MarshalIndent(m, "", "  "); err == nil && os.WriteFile(cfg, out, 0644) == nil {
+								res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → về mặc định", OK: true, Detail: "key chưa từng có trước khi tối ưu — đã gỡ"})
+								hwRestored = true
+							}
+						}
+					}
+				}
+			}
+			clearAppoptSnap("discord-hw")
+		}
+		if !hwRestored {
+			// không có snapshot (tối ưu trước khi cài v3.9.0) — fallback: gỡ key như cũ
+			if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
+				if raw, err := os.ReadFile(cfg); err == nil {
+					var m map[string]any
+					if err := json.Unmarshal(raw, &m); err == nil {
+						delete(m, "HardwareAcceleration")
+						if out, err := json.MarshalIndent(m, "", "  "); err == nil && os.WriteFile(cfg, out, 0644) == nil {
+							res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → về mặc định", OK: true, Detail: "không có snapshot gốc — đã gỡ key (bản tối ưu cũ)"})
+							hwRestored = true
+						}
 					}
 				}
 			}
 		}
-		regDeleteValues(ifeoDiscord, []string{"CpuPriorityClass"}, "")
-		res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → mặc định", OK: true, Detail: "đã gỡ IFEO PerfOptions"})
-		res.Success = true
-		res.Message = "Đã hoàn tác tối ưu Discord"
+		// IFEO: trả giá trị gốc nếu có snapshot, không thì gỡ
+		ifeoOK := true
+		if snap := loadAppoptSnap("discord-ifeo"); snap != nil && snap["CpuPriorityClass"] != nil {
+			s := snap["CpuPriorityClass"]
+			r := runExe("reg", []string{"add", ifeoDiscord, "/v", "CpuPriorityClass", "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+			ifeoOK = r.OK
+			clearAppoptSnap("discord-ifeo")
+			res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → trả giá trị gốc", OK: ifeoOK, Detail: s["data"]})
+		} else {
+			r := regDeleteValues(ifeoDiscord, []string{"CpuPriorityClass"}, "")
+			ifeoOK = r.Success
+			res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → mặc định", OK: ifeoOK, Detail: "đã gỡ IFEO PerfOptions"})
+		}
+		res.Success = hwRestored && ifeoOK
+		res.Message = map[bool]string{true: "Đã hoàn tác tối ưu Discord — trả đúng trạng thái gốc",
+			false: "Hoàn tác một phần — xem chi tiết từng bước"}[res.Success]
 	}
 	return res
 }
@@ -217,12 +374,39 @@ func applySpotify(enabled bool) AppOptRunResult {
 	res := AppOptRunResult{Mode: "windows", ID: "spotify", Steps: []PerfStep{}}
 	runKey := `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
 	if enabled {
+		// v3.9.0 (audit P2-04): snapshot nguyên chuỗi command gốc trước khi xóa
+		snap := map[string]map[string]string{}
+		for _, n := range []string{"Spotify", "Spotify Web Helper"} {
+			if typ, data, found := regQueryValue(runKey, n); found {
+				snap[n] = map[string]string{"type": typ, "data": data}
+			}
+		}
+		if len(snap) > 0 {
+			saveAppoptSnap("spotify", snap)
+		}
 		r := regDeleteValues(runKey, []string{"Spotify", "Spotify Web Helper"}, "")
 		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ Spotify khỏi tự khởi động (HKCU Run)", OK: r.Success,
 			Detail: map[bool]string{true: "máy bật nhanh hơn — Spotify chỉ mở khi bấm vào", false: r.Message}[r.Success]})
 		res.Success = r.Success
 		res.Message = "Đã gỡ Spotify khỏi khởi động Windows"
 	} else {
+		// hoàn tác: trả nguyên chuỗi gốc (đúng path + arguments) nếu có snapshot
+		snap := loadAppoptSnap("spotify")
+		if len(snap) > 0 {
+			allOK := true
+			for n, s := range snap {
+				r := runExe("reg", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+				if !r.OK {
+					allOK = false
+				}
+				res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + n + " (nguyên chuỗi gốc)", OK: r.OK, Detail: s["data"]})
+			}
+			clearAppoptSnap("spotify")
+			res.Success = allOK
+			res.Message = map[bool]string{true: "Đã hoàn tác — trả đúng chuỗi khởi động gốc", false: "Một số value lỗi — xem chi tiết"}[allOK]
+			return res
+		}
+		// không có snapshot (tối ưu trước v3.9.0) — fallback path chuẩn
 		home, _ := os.UserHomeDir()
 		exe := filepath.Join(home, "AppData", "Roaming", "Spotify", "Spotify.exe")
 		if _, err := os.Stat(exe); err == nil {

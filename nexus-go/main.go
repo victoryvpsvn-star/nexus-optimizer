@@ -5,6 +5,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -16,12 +18,40 @@ import (
 	"time"
 )
 
-const AppVersion = "3.8.0"
+const AppVersion = "3.9.0"
 
 // buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
 var buildNumber = "0"
 
 var appState *Store
+
+// apiToken — v3.9.0 (theo audit P1-07): token phiên 128-bit sinh mỗi lần mở app, inject vào
+// index.html; mọi route POST/PUT/DELETE /api/* bắt buộc kèm header X-Nexus-Token → chặn
+// CSRF/local-web từ tiến trình khác trên máy (server vẫn bind 127.0.0.1).
+var apiToken = genAPIToken()
+
+func genAPIToken() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "fallback-" + fmt.Sprint(time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
+// filePerm/dirPerm — v3.9.0 (theo audit P2-09/21): Unix 0600/0700; Windows bỏ qua permission
+func filePerm() os.FileMode {
+	if runtime.GOOS == "windows" {
+		return 0o666
+	}
+	return 0o600
+}
+
+func dirPerm() os.FileMode {
+	if runtime.GOOS == "windows" {
+		return 0o777
+	}
+	return 0o700
+}
 
 func main() {
 	web := flag.Bool("web", false, "Chạy chế độ web (mở trình duyệt, không mở cửa sổ app)")
@@ -29,11 +59,14 @@ func main() {
 	flag.Parse()
 
 	if p, e := os.Executable(); e == nil {
-		_ = os.Remove(p + ".old") // dọn bản cũ còn sót sau khi tự cập nhật
+		// v3.9.0 (theo audit P1-11): không xóa .old ngay lúc start — chỉ xóa sau 2 phút ổn định,
+		// để còn đường hồi phục nếu bản mới lỗi ngay lần chạy đầu.
+		old := p + ".old"
+		time.AfterFunc(2*time.Minute, func() { _ = os.Remove(old) })
 	}
 	appState = NewStore(dataDir())
 	if err := appState.Load(); err != nil {
-		log.Printf("[store] đọc config lỗi (dùng mặc định): %v", err)
+		log.Printf("[store] đọc config lỗi (file hỏng đã được giữ lại, dùng mặc định): %v", err)
 	}
 	appState.StartAutosave(3 * time.Second)
 
@@ -89,26 +122,27 @@ func main() {
 	}
 }
 
-/** Thư mục dữ liệu: %APPDATA%/Sakura Tool (Windows) hoặc NEXUS_DATA_DIR/XDG (khác) */
+/** Thư mục dữ liệu: %APPDATA%/Sakura Tool (Windows) hoặc NEXUS_DATA_DIR/XDG (khác)
+ * v3.9.0: perms 0700 trên Unix (audit P2-21) */
 func dataDir() string {
 	if v := os.Getenv("NEXUS_DATA_DIR"); v != "" {
-		_ = os.MkdirAll(v, 0o755)
+		_ = os.MkdirAll(v, dirPerm())
 		return v
 	}
 	if runtime.GOOS == "windows" {
 		if ad := os.Getenv("APPDATA"); ad != "" {
 			p := filepath.Join(ad, "Sakura Tool")
-			_ = os.MkdirAll(p, 0o755)
+			_ = os.MkdirAll(p, dirPerm())
 			return p
 		}
 	}
 	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
 		p := filepath.Join(x, "nexus-optimizer")
-		_ = os.MkdirAll(p, 0o755)
+		_ = os.MkdirAll(p, dirPerm())
 		return p
 	}
 	home, _ := os.UserHomeDir()
 	p := filepath.Join(home, ".local", "share", "nexus-optimizer")
-	_ = os.MkdirAll(p, 0o755)
+	_ = os.MkdirAll(p, dirPerm())
 	return p
 }

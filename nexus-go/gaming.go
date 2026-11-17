@@ -2,6 +2,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -31,6 +32,8 @@ type GamingStatus struct {
 	EnabledAt string         `json:"enabledAt,omitempty"`
 	Effects   []GamingEffect `json:"effects"`
 	Note      string         `json:"note"`
+	Partial   bool           `json:"partial,omitempty"` // v3.9.0 (audit P2-15): bật nhưng có hiệu ứng lỗi
+	Failed    int            `json:"failed,omitempty"`
 }
 
 func getGamingStatus() GamingStatus {
@@ -40,6 +43,19 @@ func getGamingStatus() GamingStatus {
 		st.Note = gamingNoteWin
 	} else {
 		st.Note = gamingNoteOther
+	}
+	// v3.9.0 (theo audit P2-15): không giả "enabled" là đủ — đếm hiệu ứng lỗi thật,
+	// UI hiển thị rõ "bật nhưng một phần lỗi" thay vì giả vờ mọi thứ OK
+	if enabled {
+		for _, e := range effects {
+			if !e.Success {
+				st.Failed++
+			}
+		}
+		if st.Failed > 0 {
+			st.Partial = true
+			st.Note = fmt.Sprintf("⚠️ Gaming Mode đang BẬT nhưng %d/%d hiệu ứng lỗi (thường do thiếu quyền admin) — xem chi tiết từng mục bên dưới. %s", st.Failed, len(effects), st.Note)
+		}
 	}
 	if at != nil {
 		st.EnabledAt = at.Format(time.RFC3339)

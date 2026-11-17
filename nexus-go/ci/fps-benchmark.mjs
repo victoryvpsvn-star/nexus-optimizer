@@ -116,6 +116,10 @@ try {
     }
   });
 
+  // v3.9.0: token phiên — mọi API mutating phải kèm header X-Nexus-Token (audit P1-07)
+  const TOKEN = await page.evaluate(() => window.__nexus_token || '');
+  if (!TOKEN) fail('Không đọc được token phiên từ UI (window.__nexus_token)');
+
   await page.waitForSelector('#perfCard', { timeout: 15000 });
   // Card Hiệu năng nằm trong tab Tinh chỉnh — UI mặc định mở tab Tổng quan → chuyển tab trước
   await page.evaluate(() => {
@@ -172,7 +176,7 @@ try {
 
   // ---- Bước 6 (v3.6.0): test GPU ưu tiên cao cho game (mô phỏng) + Gaming Mode shape ----
   const ggSet = await (await fetch(BASE + '/api/perf/game-gpu', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
     body: JSON.stringify({ path: 'C:\\Games\\game.exe', action: 'set' }),
   })).json();
   if (!ggSet.success) fail('game-gpu set fail: ' + JSON.stringify(ggSet));
@@ -180,7 +184,7 @@ try {
   if (!Array.isArray(ggList.entries) || ggList.entries.length < 1) fail('game-gpu list phải có ≥1 entry: ' + JSON.stringify(ggList));
   if (!ggList.entries.some((e) => e.value.includes('GpuPreference=2'))) fail('entry phải chứa GpuPreference=2');
   const ggClear = await (await fetch(BASE + '/api/perf/game-gpu', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
     body: JSON.stringify({ path: 'C:\\Games\\game.exe', action: 'clear' }),
   })).json();
   if (!ggClear.success) fail('game-gpu clear fail: ' + JSON.stringify(ggClear));
@@ -188,7 +192,7 @@ try {
 
   for (const en of [true, false]) {
     const g = await (await fetch(BASE + '/api/gaming', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
       body: JSON.stringify({ enabled: en }),
     })).json();
     if (!Array.isArray(g.effects) || g.effects.length < 19) {
@@ -203,7 +207,7 @@ try {
   if (apps.some((a) => a.installed !== false)) fail('trên Linux không được báo app đã cài (detect đường dẫn Windows)');
   if (!apps.every((a) => typeof a.id === 'string' && typeof a.desc === 'string' && a.warning)) fail('mỗi app phải có id/desc/warning');
   const appRun = await (await fetch(BASE + '/api/appopt', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
     body: JSON.stringify({ id: 'edge', enabled: true }),
   })).json();
   if (appRun.success !== false) fail('appopt trên Linux phải báo trung thực success=false');
@@ -211,7 +215,7 @@ try {
   const fixes = await (await fetch(BASE + '/api/fixes')).json();
   if (!Array.isArray(fixes) || fixes.length !== 6) fail(`fixes phải trả 6 fix: ${fixes ? fixes.length : 'null'}`);
   const fixRun = await (await fetch(BASE + '/api/fixes', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
     body: JSON.stringify({ id: 'fix-internet' }),
   })).json();
   if (!Array.isArray(fixRun.steps) || fixRun.steps.length < 1) fail('fixes POST phải trả steps');
@@ -226,11 +230,24 @@ try {
   if (svcs.groups.some((g) => !['red', 'orange', 'teal', 'purple'].includes(g.tone))) fail('nhóm phải có tone glow');
   if (!svcs.groups.every((g) => g.items.every((i) => typeof i.name === 'string' && typeof i.desc === 'string' && i.state))) fail('item thiếu name/desc/state');
   const svcRun = await (await fetch(BASE + '/api/services', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
     body: JSON.stringify({ action: 'preset', level: 'minimum' }),
   })).json();
   if (svcRun.success !== false || svcRun.mode === 'windows') fail('preset trên Linux phải trung thực');
   ok(`Dịch vụ: 4 nhóm / 9 mục (tone glow đủ) + POST preset minimum trung thực (mode=${svcRun.mode})`);
+
+  // ---- Bước 9 (v3.9.0): token guard + confirm guard + restore shape ----
+  const noTok = await fetch(BASE + '/api/gaming', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+  if (noTok.status !== 403) fail(`POST không token phải 403, nhận ${noTok.status}`);
+  const badTok = await fetch(BASE + '/api/services', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': 'x' }, body: JSON.stringify({ action: 'preset', level: 'off' }) });
+  if (badTok.status !== 403) fail(`POST token sai phải 403, nhận ${badTok.status}`);
+  ok('Token guard: POST không/sai token → 403 trung thực');
+  const stFull = await (await fetch(BASE + '/api/selftest', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ mode: 'full', confirm: false }) })).json();
+  if (!(stFull.error || '').includes('confirm')) fail('selftest full không confirm phải bị chặn, nhận: ' + JSON.stringify(stFull));
+  ok('Selftest full: bắt buộc confirm=true (audit P0-03) ✓');
+  const bkr = await (await fetch(BASE + '/api/backup/restore', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ name: 'nope.reg' }) })).json();
+  if (!bkr.error) fail('backup restore phải báo trung thực lỗi, nhận: ' + JSON.stringify(bkr));
+  ok('Backup restore endpoint có shape trung thực (audit P0-02) ✓');
 
   summary.pass = true;
   ok(`FPS TĂNG (giữ nhịp): ${base.fps} → ${after.fps} (mục tiêu 120) • năng lực thật: ${base.max} → ${after.max} FPS — ảnh test FPS oke`);

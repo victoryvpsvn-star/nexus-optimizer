@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 type SystemStatus struct {
@@ -99,7 +100,10 @@ func backupDir() string {
 	return d
 }
 
-/** Export mọi key registry mà catalog đụng tới thành 1 file .reg (merge được bằng reg import) */
+/** Export mọi key registry mà catalog đụng tới thành 1 file .reg (merge được bằng reg import).
+ * v3.9.0 (theo audit P0-02): KHÔNG tự parse `reg query` nữa — export mỗi key bằng
+ * `reg export <key> <file> /y` thật rồi ghép nguyên văn phần section (giữ cả hex multi-line)
+ * vào 1 file; không có value nào → báo thất bại thay vì khoe thành công. */
 func createRegistryBackup() (BackupLocal, string, bool) {
 	if !runtimeIsWindows {
 		return BackupLocal{}, "Backup registry chỉ chạy được trên Windows", false
@@ -112,31 +116,58 @@ func createRegistryBackup() (BackupLocal, string, bool) {
 	out := filepath.Join(backupDir(), fmt.Sprintf("nexus-registry-backup_%s.reg", ts))
 	var b strings.Builder
 	b.WriteString("Windows Registry Editor Version 5.00\r\n\r\n")
-	exported := 0
+	exported, totalValues := 0, 0
 	var missing []string
 	for _, k := range backupKeys {
-		r := runExe(reg, []string{"export", k, os.DevNull, "/y"}, 15*time.Second)
-		_ = r // reg export ghi file riêng; dùng query thay vì export để gộp 1 file:
-		q := runExe(reg, []string{"query", k}, 15*time.Second)
-		if !q.OK {
+		tmp, err := os.CreateTemp("", "nexus-regexport-*.reg")
+		if err != nil {
+			return BackupLocal{}, "Không tạo được file tạm: " + err.Error(), false
+		}
+		tmpName := tmp.Name()
+		tmp.Close()
+		os.Remove(tmpName) // reg export tự tạo file mới
+		r := runExe(reg, []string{"export", k, tmpName, "/y"}, 15*time.Second)
+		if !r.OK {
+			os.Remove(tmpName)
+			missing = append(missing, k) // key không tồn tại trên máy — bỏ qua trung thực
+			continue
+		}
+		data, err := os.ReadFile(tmpName)
+		os.Remove(tmpName)
+		if err != nil {
 			missing = append(missing, k)
 			continue
 		}
-		fmt.Fprintf(&b, "[%s]\r\n", k)
-		for _, ln := range strings.Split(q.Stdout, "\n") {
-			ln = strings.TrimRight(ln, "\r")
-			if ln == "" || strings.HasPrefix(ln, " ") || strings.HasPrefix(strings.ToUpper(ln), "HKEY_") {
-				continue
+		s := decodeRegExport(data) // reg.exe export ghi UTF-16LE — decode về UTF-8
+		idx := strings.Index(s, "[")
+		if idx < 0 { // file không có section nào — bỏ qua
+			missing = append(missing, k)
+			continue
+		}
+		body := s[idx:]
+		nv := 0
+		for _, ln := range strings.Split(body, "\n") {
+			t := strings.TrimSpace(ln)
+			if strings.HasPrefix(t, "\"") || strings.HasPrefix(t, "@=") {
+				nv++
 			}
-			fmt.Fprintf(&b, "%s\r\n", ln)
+		}
+		b.WriteString(strings.TrimLeft(body, "\r\n"))
+		if !strings.HasSuffix(body, "\n") {
+			b.WriteString("\r\n")
 		}
 		b.WriteString("\r\n")
 		exported++
+		totalValues += nv
 	}
 	if exported == 0 {
-		return BackupLocal{}, "Không export được key nào: " + strings.Join(missing, "; "), false
+		return BackupLocal{}, "Không export được key nào (key không tồn tại trên máy): " + strings.Join(missing, "; "), false
 	}
-	if err := os.WriteFile(out, []byte(b.String()), 0o644); err != nil {
+	if totalValues == 0 {
+		// audit P0-02: backup không chứa value nào thì không có gì để khôi phục — KHÔNG ghi file rỗng
+		return BackupLocal{}, fmt.Sprintf("Export có %d key nhưng 0 value — dừng, không ghi backup rỗng", exported), false
+	}
+	if err := os.WriteFile(out, []byte(b.String()), filePerm()); err != nil {
 		return BackupLocal{}, "Không ghi được file backup: " + err.Error(), false
 	}
 	st, _ := os.Stat(out)
@@ -146,8 +177,70 @@ func createRegistryBackup() (BackupLocal, string, bool) {
 		SizeBytes: st.Size(),
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}
-	appState.AddCleanupLog("backup", rec.Name, rec.SizeBytes, true, fmt.Sprintf("Backup %d key registry thành file .reg (bỏ qua %d key không tồn tại)", exported, len(missing)))
-	return rec, fmt.Sprintf("Đã backup %d key registry → %s", exported, rec.Name), true
+	appState.AddCleanupLog("backup", rec.Name, rec.SizeBytes, true,
+		fmt.Sprintf("Backup %d key registry (%d value) bằng reg export thật — bỏ qua %d key không tồn tại", exported, totalValues, len(missing)))
+	return rec, fmt.Sprintf("Đã backup %d key registry (%d value) → %s", exported, totalValues, rec.Name), true
+}
+
+/** v3.9.0 (theo audit P0-02): khôi phục file backup .reg bằng reg import — cần admin. */
+func restoreRegistryBackup(name string) (bool, string) {
+	if !runtimeIsWindows {
+		return false, "Khôi phục registry chỉ chạy được trên Windows"
+	}
+	if !safeBackupName(name) {
+		return false, "Tên backup không hợp lệ"
+	}
+	found := false
+	for _, bk := range listRegistryBackups() {
+		if bk.Name == name {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false, "Không tìm thấy file backup: " + name
+	}
+	if _, ok := adminGate(); !ok {
+		m, _ := adminGate()
+		return false, m
+	}
+	reg := findSysExe("reg.exe")
+	if reg == "" {
+		return false, noRegExeMsg
+	}
+	p := filepath.Join(backupDir(), name)
+	r := runExe(reg, []string{"import", p}, 30*time.Second)
+	if !r.OK {
+		return false, firstLine(r.Stdout + r.Stderr)
+	}
+	appState.AddCleanupLog("backup", name, 0, true, "Đã khôi phục registry từ "+name)
+	return true, "Đã import " + name + " về Registry — giá trị trong backup đã ghi đè trạng thái hiện tại"
+}
+
+/** Chỉ nhận tên backup an toàn (chặn path traversal) */
+func safeBackupName(name string) bool {
+	if !strings.HasSuffix(name, ".reg") || len(name) > 200 || strings.ContainsAny(name, `/\`) || strings.HasPrefix(name, ".") {
+		return false
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.') {
+			return false
+		}
+	}
+	return true
+}
+
+/** decode file reg.exe export: UTF-16LE (mặc định) hoặc UTF-8 với BOM */
+func decodeRegExport(b []byte) string {
+	if len(b) >= 2 && b[0] == 0xFF && b[1] == 0xFE { // BOM UTF-16LE
+		u := make([]uint16, 0, (len(b)-2)/2)
+		for i := 2; i+1 < len(b); i += 2 {
+			u = append(u, uint16(b[i])|uint16(b[i+1])<<8)
+		}
+		return string(utf16.Decode(u))
+	}
+	s := string(b)
+	return strings.TrimPrefix(s, "\xef\xbb\xbf")
 }
 
 func listRegistryBackups() []BackupLocal {

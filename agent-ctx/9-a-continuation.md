@@ -476,3 +476,24 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   trung thực. go test vẫn xanh; CI #37 3/3 xanh, go-v37 tự cắt, exe buildNumber=37 về download/.
 - Ghi chú: firstLine chuyển perf_windows.go → perf.go (dùng chung); step() đổi tên fixStep
   (trùng `step` type trong tweaks_table.go — build tag 2 nền bắt được).
+
+
+## 15-a: v3.8.0 (SHA 457c7ff, run 44106723761 #38) — tab Dịch vụ kiểu tham chiếu (2 ảnh user gửi)
+- **services_cat.go** + route /api/services (GET view + POST action): 4 nhóm tone glow
+  red/orange/teal/purple (User Features, Connectivity, Hardware & Display, Windows Services),
+  9 mục dịch vụ Windows thật: sc config start= disabled + sc stop; khôi phục về StartDefault
+  từng dịch vụ (default map auto/delayed-auto/demand/disabled). Trạng thái đọc LIVE bằng
+  `sc qc` (không lưu trạng thái ảo) → item state off/partial/default/na.
+- Item AMD dò động (sc query state= all, lọc SERVICE_NAME chứa AMD/AUEP + WIN32) → máy không
+  có card AMD hiện "N/A — không có trên máy" đúng tham chiếu.
+- Preset: minimum/medium (map dịch vụ), extreme (toàn bộ catalog), off = restore mặc định.
+  Defender card: Set-MpPreference -DisableRealtimeMonitoring + xác minh Get-MpComputerStatus
+  RealTimeProtectionEnabled — Tamper Protection chặn → message hướng dẫn tắt TP.
+- UI: banner gradient glow theo tone + master toggle cả nhóm (action=group), search filter
+  client-side, preset bar sticky nổi Off/Minimum/Medium/Extreme có tooltip + confirm.
+- BỌC BUG ĐÃ SỬA: struct SvcGroupState/SvcItemState/SvcSvcState/ServicesActionResult thiếu
+  json tags → serialize hoa "Tone"/"Name" → UI + CI không đọc được; item AMD services nil →
+  JSON null crash JS ("Cannot read properties of null"). Fix: tags lowercase + init slice.
+  Lưu ý: `pkill -f nexus-v380` tự giết shell vì cmdline chứa chuỗi đó → dùng `pkill -x`.
+- CI bước 8: 4 nhóm/9 mục/tone đủ + preset minimum trung thực trên Linux (mode=ci-sim).
+  go-v38 tự cắt, exe buildNumber=38, FPS 2 pha 60→120 xanh (năng lực thật 2106→2069).

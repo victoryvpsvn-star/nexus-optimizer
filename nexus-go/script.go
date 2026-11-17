@@ -38,7 +38,33 @@ type ScriptRunResponse struct {
 	Message    string `json:"message,omitempty"`
 }
 
-/** Chạy code tùy chỉnh — PowerShell (Windows) / bash, python (khác). Giới hạn size + timeout. */
+// cappedWriter — v3.9.0 (theo audit P1-06): giới hạn output trong lúc đọc (không chờ
+// process xong mới cắt); sau khi đủ cap vẫn tiêu thụ + vứt để pipe không block tiến trình con.
+type cappedWriter struct {
+	sb   strings.Builder
+	over bool
+}
+
+func (c *cappedWriter) Write(p []byte) (int, error) {
+	if !c.over {
+		remain := maxOutputChars - c.sb.Len()
+		if remain > 0 {
+			n := remain
+			if len(p) < n {
+				n = len(p)
+			}
+			c.sb.Write(p[:n])
+		}
+		if c.sb.Len() >= maxOutputChars {
+			c.over = true
+		}
+	}
+	return len(p), nil // giả vờ ghi hết — process con không bao giờ block vì output
+}
+
+/** Chạy code tùy chỉnh — PowerShell (Windows) / bash, python (khác). Giới hạn size + timeout.
+ * v3.9.0 (theo audit P1-04): exec.CommandContext — hết deadline là tiến trình bị hủy thật;
+ * Windows kill thêm cả cây bằng taskkill /T vì CommandContext chỉ giết tiến trình cha. */
 func runScriptCode(language, code string, timeoutMs int64) ScriptRunResponse {
 	res := ScriptRunResponse{}
 	if !scriptLangs[language] {
@@ -55,6 +81,8 @@ func runScriptCode(language, code string, timeoutMs int64) ScriptRunResponse {
 	if timeoutMs > maxTimeoutMs {
 		timeoutMs = maxTimeoutMs
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+	defer cancel()
 	var cmd *exec.Cmd
 	if language == "powershell" {
 		if !runtimeIsWindows {
@@ -74,11 +102,11 @@ func runScriptCode(language, code string, timeoutMs int64) ScriptRunResponse {
 		f.WriteString("\uFEFF[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false\n" + code)
 		f.Close()
 		defer os.Remove(f.Name())
-		cmd = exec.Command(ps.Exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", f.Name())
+		cmd = exec.CommandContext(ctx, ps.Exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", f.Name())
 	} else if language == "python" {
-		cmd = exec.Command("python3", "-I", "-c", code)
+		cmd = exec.CommandContext(ctx, "python3", "-I", "-c", code)
 		if _, err := exec.LookPath("python3"); err != nil {
-			cmd = exec.Command("python", "-I", "-c", code)
+			cmd = exec.CommandContext(ctx, "python", "-I", "-c", code)
 		}
 	} else {
 		f, err := os.CreateTemp("", "nexus-script-*.sh")
@@ -90,25 +118,40 @@ func runScriptCode(language, code string, timeoutMs int64) ScriptRunResponse {
 		f.Close()
 		os.Chmod(f.Name(), 0o700)
 		defer os.Remove(f.Name())
-		cmd = exec.Command("bash", f.Name())
+		cmd = exec.CommandContext(ctx, "bash", f.Name())
 	}
 	setHideWindow(cmd)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
-	defer cancel()
-	cmd.Env = append(os.Environ(), "NEXUS_SANDBOX=1")
-	var out strings.Builder
-	cmd.Stdout = &out
-	cmd.Stderr = &out
+	// v3.9.0: đổi tên biến môi trường — trước đây "NEXUS_SANDBOX=1" chỉ là biến, không cô lập gì
+	// (audit P1-05). UI đã nói đúng "script chạy với quyền của app"; biến giờ mang tên trung thực.
+	cmd.Env = append(os.Environ(), "NEXUS_SCRIPT_RUN=1", "NEXUS_NO_SANDBOX=1")
+	cw := &cappedWriter{}
+	cmd.Stdout = cw
+	cmd.Stderr = cw
+	// Kill cây tiến trình khi hết deadline (Windows: taskkill /T — giết cả con cháu)
+	if runtimeIsWindows {
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-ctx.Done():
+				if cmd.Process != nil {
+					runSysExe("taskkill.exe", []string{"/F", "/T", "/PID", fmt.Sprint(cmd.Process.Pid)}, 8*time.Second)
+				}
+			case <-done:
+			}
+		}()
+	}
 	t0 := time.Now()
 	err := cmd.Run()
 	res.DurationMs = time.Since(t0).Milliseconds()
-	res.Output = out.String()
-	if len(res.Output) > maxOutputChars {
-		res.Output = res.Output[:maxOutputChars] + "\n…(output cắt bớt)"
+	res.Output = cw.sb.String()
+	if cw.over {
+		res.Output += "\n…(output cắt bớt tại " + fmt.Sprint(maxOutputChars) + " ký tự — phần sau bị vứt trong lúc chạy)"
 	}
 	if ctx.Err() == context.DeadlineExceeded {
 		res.TimedOut = true
-		res.Message = fmt.Sprintf("Script vượt thời gian chờ %dms — đã kill", timeoutMs)
+		res.Success = false
+		res.Message = fmt.Sprintf("Script vượt thời gian chờ %dms — tiến trình (và cây con) đã bị kill", timeoutMs)
 		return res
 	}
 	if ee, ok := err.(*exec.ExitError); ok {

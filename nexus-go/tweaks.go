@@ -95,17 +95,20 @@ func regAddValues(key string, values []RegValue, okMsg string) ActionResult {
 	return ActionResult{true, okMsg}
 }
 
-/** Xóa giá trị: reg query exit != 0 = chưa từng set (không phải lỗi); delete lỗi mới là lỗi thật */
+/** Xóa giá trị: reg query exit != 0 = chưa từng set (không phải lỗi); delete lỗi mới là lỗi thật.
+ * v3.9.0 (theo audit P2-01): danh sách value bị bỏ qua (không tìm thấy / không đọc được) được
+ * ghi vào message thay vì nuốt cộc lốc — lỗi quyền sẽ lộ qua phần delete thất bại. */
 func regDeleteValues(key string, names []string, okMsg string) ActionResult {
 	reg := findSysExe("reg.exe")
 	if reg == "" {
 		return ActionResult{false, noRegExeMsg}
 	}
-	var failed []string
+	var failed, skipped []string
 	for _, n := range names {
 		q := runExe(reg, []string{"query", key, "/v", n}, 15*time.Second)
 		if !q.OK {
-			continue // missing = đã ở trạng thái mặc định
+			skipped = append(skipped, n)
+			continue
 		}
 		d := runExe(reg, []string{"delete", key, "/v", n, "/f"}, 15*time.Second)
 		if !d.OK {
@@ -115,7 +118,11 @@ func regDeleteValues(key string, names []string, okMsg string) ActionResult {
 	if len(failed) > 0 {
 		return ActionResult{false, truncateShort("reg.exe delete thất bại tại: " + strings.Join(failed, "; "))}
 	}
-	return ActionResult{true, okMsg}
+	msg := okMsg
+	if len(skipped) > 0 {
+		msg += fmt.Sprintf(" (bỏ qua %d value không tìm thấy/không đọc được: %s)", len(skipped), strings.Join(skipped, ", "))
+	}
+	return ActionResult{true, truncateShort(msg)}
 }
 
 func orDefault(a, b, c string) string {

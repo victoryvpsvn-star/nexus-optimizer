@@ -81,7 +81,9 @@ func ramStandbyPurge() ActionResult {
 		if freed < 0 {
 			freed = 0
 		}
-		return ActionResult{true, fmt.Sprintf("Đã xả standby list — RAM trống %sMB → %sMB (giải phóng ~%dMB)", m[1], m[2], freed)}
+		// v3.9.0 (theo audit P2-06): đây là quan sát RAM trống toàn hệ thống trước/sau —
+		// bao gồm cả tác động của Windows/app khác, không gán toàn bộ delta cho tool
+		return ActionResult{true, fmt.Sprintf("Đã xả standby list — RAM trống tăng từ %sMB → %sMB (quan sát toàn hệ thống: +~%dMB)", m[1], m[2], freed)}
 	}
 	return ActionResult{true, "Đã yêu cầu xả standby list RAM"}
 }

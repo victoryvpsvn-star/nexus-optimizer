@@ -209,8 +209,32 @@ func listProcesses() ([]ProcessInfo, error) {
 	return out, nil
 }
 
-/** Kill tiến trình: Windows dùng taskkill /T /F (giết cả cây); Linux SIGKILL */
-func killProcess(pid int) (bool, string) {
+/** Kill tiến trình: Windows dùng taskkill /T /F (giết cả cây); Linux SIGKILL.
+ * v3.9.0 (theo audit P2-31): khi UI gửi kèm `name`, đối chiếu tên tiến trình thật qua
+ * tasklist trước khi kill — PID tái sử dụng (process chết rồi PID bị nhặt lại) sẽ bị chặn. */
+func killProcess(pid int, expectedName string) (bool, string) {
+	if expectedName != "" {
+		if runtimeIsWindows {
+			r := runSysExe("tasklist.exe", []string{"/FI", fmt.Sprintf("PID eq %d", pid), "/FO", "CSV", "/NH"}, 8*time.Second)
+			line := strings.TrimSpace(r.Stdout)
+			// CSV: "name","pid","sess",... — lấy cột 1
+			cols := strings.Split(line, `","`)
+			real := ""
+			if len(cols) > 1 {
+				real = strings.TrimPrefix(cols[0], `"`)
+			}
+			if !r.OK || line == "" || line == "INFO: No tasks are running" || strings.Contains(line, "INFO:") {
+				return false, fmt.Sprintf("PID %d không còn chạy — không kill gì cả", pid)
+			}
+			if !strings.EqualFold(real, expectedName) {
+				return false, fmt.Sprintf("PID %d giờ là tiến trình khác (%s ≠ %s) — chặn theo audit P2-31, không kill nhầm", pid, real, expectedName)
+			}
+		} else if ps, err := process.NewProcess(int32(pid)); err == nil {
+			if n, err := ps.Name(); err == nil && !strings.EqualFold(n, expectedName) {
+				return false, fmt.Sprintf("PID %d giờ là tiến trình khác (%s ≠ %s) — chặn, không kill nhầm", pid, n, expectedName)
+			}
+		}
+	}
 	if runtimeIsWindows {
 		r := runSysExe("taskkill.exe", []string{"/PID", fmt.Sprint(pid), "/T", "/F"}, 15*time.Second)
 		if r.OK {

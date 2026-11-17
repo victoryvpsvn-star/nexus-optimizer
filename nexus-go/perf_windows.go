@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 	"syscall"
 	"time"
@@ -250,21 +251,34 @@ func perfOverclock(level string) OcResult {
 	return oc
 }
 
+// v3.9.0 (theo audit P2-29): aggregate kết quả thật — từng bước ghi cả khi lỗi;
+// Success chỉ true khi các bước bắt buộc (power plan, timer) đã thành công.
 func perfRestore() OcResult {
 	res := OcResult{Mode: perfMode, Level: "restore", Success: true, Steps: []PerfStep{}}
 	r := runExe("nvidia-smi", []string{"-rgc"}, 8*time.Second)
 	if r.OK {
 		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ khóa xung GPU", OK: true, Detail: "xung lõi trả về điều khiển động"})
-	}
+	} else if _, lookErr := exec.LookPath("nvidia-smi"); lookErr == nil {
+		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ khóa xung GPU", OK: false, Detail: firstLine(r.Stdout + r.Stderr)})
+		res.Success = false
+	} // không có nvidia-smi → máy không phải GPU NVIDIA — không tính là lỗi
 	runExe("nvidia-smi", []string{"-rmc"}, 8*time.Second)
 	r2 := runExe("powercfg", []string{"/setactive", "381b4222-f694-41f0-9685-ff5bb260df2e"}, 5*time.Second)
 	if r2.OK {
-		res.Steps = append(res.Steps, PerfStep{Name: "Power plan Balanced", OK: true, Detail: "Về scheme mặc định của Windows"})
+		res.Steps = append(res.Steps, PerfStep{Name: "Power plan Balanced", OK: true, Detail: "Về scheme mặc định Windows (không phải plan bạn dùng trước đó — tự chọn lại nếu cần)"})
+	} else {
+		res.Steps = append(res.Steps, PerfStep{Name: "Power plan Balanced", OK: false, Detail: firstLine(r2.Stdout + r2.Stderr)})
+		res.Success = false
 	}
-	if tr := perfTimerResolution("off", 0); tr.Success {
+	tr := perfTimerResolution("off", 0)
+	if tr.Success {
 		res.Steps = append(res.Steps, PerfStep{Name: "Timer resolution mặc định", OK: true, Detail: tr.Message})
+	} else {
+		res.Steps = append(res.Steps, PerfStep{Name: "Timer resolution mặc định", OK: false, Detail: tr.Message})
+		res.Success = false
 	}
-	res.Message = "Đã khôi phục cấu hình gốc (GPU / power plan / timer)"
+	res.Message = map[bool]string{true: "Đã khôi phục cấu hình gốc (GPU / power plan / timer)",
+		false: "Khôi phục xong nhưng một số bước lỗi — xem chi tiết từng bước"}[res.Success]
 	return res
 }
 

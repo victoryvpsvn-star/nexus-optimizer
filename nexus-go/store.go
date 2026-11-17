@@ -109,6 +109,12 @@ func (s *Store) Load() error {
 	}
 	var d storeData
 	if err := json.Unmarshal(b, &d); err != nil {
+		// v3.9.0 (theo audit P2-09): file hỏng được CÁCH LY (rename) thay vì để autosave
+		// 3s sau ghi đè mất bản gốc — user còn mang file đó đi khôi phục thủ công được.
+		q := fmt.Sprintf("%s.corrupt-%s", s.file(), time.Now().Format("20060102-150405"))
+		if rerr := os.Rename(s.file(), q); rerr == nil {
+			return fmt.Errorf("config.json hỏng: %w — đã giữ bản lỗi lại tại %q, dùng cấu hình mặc định", err, filepath.Base(q))
+		}
 		return fmt.Errorf("config.json hỏng: %w", err)
 	}
 	if d.Settings.Accent == "" {
@@ -142,13 +148,14 @@ func (s *Store) Load() error {
 }
 
 // saveLocked ghi file nguyên tử (tmp + rename) — gọi khi đang giữ mu
+// v3.9.0: perm 0600 trên Unix (config chứa webhook/scripts — audit P2-09/21)
 func (s *Store) saveLocked() error {
 	b, err := json.MarshalIndent(&s.data, "", " ")
 	if err != nil {
 		return err
 	}
 	tmp := s.file() + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+	if err := os.WriteFile(tmp, b, filePerm()); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.file())

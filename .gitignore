@@ -66,3 +66,7 @@ dev.log
 
 # electron-builder output
 release/
+
+# artifacts/dev context (audit P2-26)
+__pycache__/
+*.py[cod]

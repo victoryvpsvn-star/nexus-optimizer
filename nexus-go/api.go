@@ -43,6 +43,25 @@ func readBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
+// tokenGuard — v3.9.0 (theo audit P1-07): mọi route thay đổi trạng thái (POST/PUT/DELETE
+// dưới /api/) bắt buộc kèm header X-Nexus-Token khớp token phiên sinh lúc mở app.
+// Token được inject vào index.html (window.__nexus_token) — UI cùng nguồn luôn có;
+// website khác / tiến trình lạ gọi trực tiếp sẽ bị 403.
+func tokenGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+			if strings.HasPrefix(r.URL.Path, "/api/") && r.Header.Get("X-Nexus-Token") != apiToken {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Token phiên không hợp lệ — tải lại trang UI (Ctrl+R) rồi thử lại"})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func buildMux() http.Handler {
 	mux := http.NewServeMux()
 
@@ -152,7 +171,8 @@ func buildMux() http.Handler {
 			writeJSON(w, 400, map[string]any{"success": false, "message": "Không thể kết thúc chính app NEXUS từ trong app"})
 			return
 		}
-		ok, msg := killProcess(pid)
+		// v3.9.0 (audit P2-31): UI gửi kèm tên tiến trình — đối chiếu trước khi kill
+		ok, msg := killProcess(pid, r.URL.Query().Get("name"))
 		writeJSON(w, 200, map[string]any{"success": ok, "message": msg})
 	})
 
@@ -219,12 +239,19 @@ func buildMux() http.Handler {
 		var body struct {
 			Mode    string `json:"mode"`
 			Webhook bool   `json:"webhook"`
+			Confirm bool   `json:"confirm"`
 		}
 		if !readBody(w, r, &body) {
 			return
 		}
 		if body.Mode != "check" && body.Mode != "full" {
 			writeErr(w, 400, "Cần trường mode: check|full")
+			return
+		}
+		// v3.9.0 (theo audit P0-03): chế độ full apply→revert TRÊN MÁY THẬT — bắt buộc
+		// confirm:true từ UI (UI đã hiện cảnh báo), không cho gọi lặng lẽ.
+		if body.Mode == "full" && !body.Confirm {
+			writeErr(w, 400, "Chế độ full sẽ áp dụng rồi hoàn tác từng tinh chỉnh TRÊN MÁY THẬT — cần confirm:true (UI phải hiện cảnh báo trước)")
 			return
 		}
 		report := runSelftest(body.Mode, body.Webhook)
@@ -401,6 +428,22 @@ func buildMux() http.Handler {
 	mux.HandleFunc("POST /api/backup/open", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"folder": openBackupsFolder()})
 	})
+	// v3.9.0 (theo audit P0-02): khôi phục backup .reg — reg import, cần admin
+	mux.HandleFunc("POST /api/backup/restore", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name string `json:"name"`
+		}
+		if !readBody(w, r, &body) || body.Name == "" {
+			writeErr(w, 400, "Cần { name: \"tên file .reg\" }")
+			return
+		}
+		ok, msg := restoreRegistryBackup(body.Name)
+		if !ok {
+			writeErr(w, 400, msg)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "message": msg})
+	})
 
 	// ---------- Static: UI nhúng + ảnh chụp ----------
 	sub, _ := fs.Sub(staticFS, "static")
@@ -415,7 +458,10 @@ func buildMux() http.Handler {
 			http.Error(w, "Thiếu UI", 500)
 			return
 		}
+		// v3.9.0: inject token phiên vào UI cùng nguồn
+		b = injectToken(b)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		w.Write(b)
 	})
 	mux.HandleFunc("GET /shots/", func(w http.ResponseWriter, r *http.Request) {
@@ -427,7 +473,12 @@ func buildMux() http.Handler {
 		http.ServeFile(w, r, filepath.Join(shotsDir(), name))
 	})
 
-	return mux
+	return tokenGuard(mux)
+}
+
+func injectToken(b []byte) []byte {
+	sc := fmt.Sprintf(`<script>window.__nexus_token=%q;</script>`, apiToken)
+	return []byte(strings.Replace(string(b), "</head>", sc+"</head>", 1))
 }
 
 func osProcPID() int { return os.Getpid() }

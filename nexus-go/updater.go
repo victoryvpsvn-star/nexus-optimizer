@@ -79,21 +79,45 @@ func updateCheck(force bool) map[string]any {
 	if !force && !updCache.at.IsZero() && time.Since(updCache.at) < 10*time.Minute {
 		return emit()
 	}
-	// 1) Redirect releases/latest — không rate limit (khi repo public)
+	// v3.9.0 (theo audit P1-10): repo có 2 họ tag (go-vN của Go edition + win-x64-vN của
+	// edition cũ) — releases/latest có thể trượt sang họ khác. Giờ query danh sách releases
+	// và chỉ nhận tag go-vN có asset đúng tên; fallback releases/latest nếu API lỗi.
 	client := &http.Client{Timeout: 12 * time.Second}
-	resp, err := client.Do(ghReq("https://github.com/" + updateRepo + "/releases/latest"))
 	tag := ""
+	resp, err := client.Do(ghReq("https://api.github.com/repos/" + updateRepo + "/releases?per_page=15"))
 	if err == nil {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+		var rels []struct {
+			TagName    string `json:"tag_name"`
+			Draft      bool   `json:"draft"`
+			Prerelease bool   `json:"prerelease"`
+		}
+		je := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&rels)
 		resp.Body.Close()
-		if u := resp.Request.URL; u != nil {
-			parts := strings.Split(u.Path, "/releases/tag/")
-			if len(parts) == 2 {
-				tag = parts[1]
+		if je == nil {
+			for _, rl := range rels {
+				if !rl.Draft && !rl.Prerelease && goTagNum(rl.TagName) > 0 {
+					tag = rl.TagName // danh sách trả theo thứ tự mới → cũ; chọn go-vN mới nhất
+					break
+				}
 			}
 		}
 	}
-	// 2) Fallback REST API (cần token nếu repo private)
+	// Fallback: redirect releases/latest (không rate limit khi repo public) — chỉ dùng nếu
+	// tag đó đúng là họ go-vN, tránh nhầm win-x64-vN
+	if tag == "" {
+		resp, err = client.Do(ghReq("https://github.com/" + updateRepo + "/releases/latest"))
+		if err == nil {
+			io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+			resp.Body.Close()
+			if u := resp.Request.URL; u != nil {
+				parts := strings.Split(u.Path, "/releases/tag/")
+				if len(parts) == 2 && goTagNum(parts[1]) > 0 {
+					tag = parts[1]
+				}
+			}
+		}
+	}
+	// Fallback cuối: REST releases/latest — chỉ dùng nếu đúng họ go-vN
 	if tag == "" {
 		resp2, err2 := client.Do(ghReq("https://api.github.com/repos/" + updateRepo + "/releases/latest"))
 		if err2 == nil {
@@ -101,9 +125,9 @@ func updateCheck(force bool) map[string]any {
 				TagName string `json:"tag_name"`
 				Message string `json:"message"`
 			}
-			je := json.NewDecoder(resp2.Body).Decode(&rel)
+			je := json.NewDecoder(io.LimitReader(resp2.Body, 1<<20)).Decode(&rel)
 			resp2.Body.Close()
-			if je == nil && rel.TagName != "" {
+			if je == nil && goTagNum(rel.TagName) > 0 {
 				tag = rel.TagName
 			} else if rel.Message != "" && strings.Contains(rel.Message, "Not Found") {
 				updCache.err = "repo đang PRIVATE — tự cập nhật cần repo Public, hoặc đặt PAT vào gh-token.txt trong thư mục dữ liệu"

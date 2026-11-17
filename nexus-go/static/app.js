@@ -30,8 +30,10 @@ let statsTimer = null;
 
 // ---------- helpers ----------
 async function api(path, opts = {}) {
+  // v3.9.0 (audit P1-07): token phiên sinh từ server, inject vào UI — mọi route
+  // POST/PUT/DELETE bắt buộc kèm header này (chặn CSRF/local-web từ tiến trình khác)
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(window.__nexus_token ? { 'X-Nexus-Token': window.__nexus_token } : {}) },
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
@@ -678,7 +680,7 @@ async function refreshProcesses() {
       b.addEventListener('click', async () => {
         if (!confirm(`Kết thúc tiến trình ${b.dataset.name} (PID ${b.dataset.kill})?`)) return;
         try {
-          const r = await api(`/api/processes?pid=${b.dataset.kill}`, { method: 'DELETE' });
+          const r = await api(`/api/processes?pid=${b.dataset.kill}&name=${encodeURIComponent(b.dataset.name)}`, { method: 'DELETE' });
           toast(r.message || 'Xong', r.success ? 'ok' : 'err');
           refreshProcesses();
         } catch (e) { toast(e.message, 'err'); }
@@ -790,10 +792,11 @@ $('webhookSave').addEventListener('click', async () => {
   }
 });
 
-async function runSelftest(mode) {
+async function runSelftest(mode, confirmFull) {
   try {
     toast(`Đang chạy self-test ${mode.toUpperCase()}…`);
-    const r = await api('/api/selftest', { method: 'POST', body: { mode, webhook: false } });
+    // v3.9.0 (audit P0-03): mode full phải kèm confirm:true — server chặn gọi lặng lẽ
+    const r = await api('/api/selftest', { method: 'POST', body: { mode, webhook: false, confirm: !!confirmFull } });
     renderSelftestReport(r.report);
     if (r.report.webhook && r.report.webhook.detail) toast('Webhook: ' + r.report.webhook.detail, r.report.webhook.ok ? 'ok' : 'err');
   } catch (e) {
@@ -802,7 +805,7 @@ async function runSelftest(mode) {
 }
 $('selftestCheck').addEventListener('click', () => runSelftest('check'));
 $('selftestFull').addEventListener('click', () => {
-  if (confirm('Chế độ FULL sẽ ÁP DỤNG rồi HOÀN TÁC từng tinh chỉnh trên hệ thống thật. Tiếp tục?')) runSelftest('full');
+  if (confirm('⚠️ Chế độ FULL sẽ ÁP DỤNG rồi HOÀN TÁC từng tinh chỉnh TRÊN MÁY THẬT (không phải phép thử chỉ đọc — giá trị gốc của bạn có thể đổi về mặc định Windows). Chỉ nên chạy khi đã hiểu rõ. Tiếp tục?')) runSelftest('full', true);
 });
 
 function renderSelftestReport(rep) {
@@ -909,7 +912,18 @@ async function refreshBackups() {
     const d = await api('/api/backup');
     $('backupTable').querySelector('tbody').innerHTML = (d.local || []).map((b) => `
       <tr><td>${esc(b.name)}</td><td class="num">${fmtBytes(b.sizeBytes)}</td><td class="muted">${new Date(b.createdAt).toLocaleString('vi-VN')}</td>
-      <td><button class="btn danger" data-del="${esc(b.name)}">Xóa</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Chưa có backup nào</td></tr>';
+      <td><button class="btn" data-restore="${esc(b.name)}">Khôi phục</button>
+      <button class="btn danger" data-del="${esc(b.name)}">Xóa</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Chưa có backup nào</td></tr>';
+    // v3.9.0 (audit P0-02): khôi phục backup .reg — reg import, cần admin
+    $('backupTable').querySelectorAll('[data-restore]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (!confirm(`Khôi phục registry từ ${b.dataset.restore}?\nCác giá trị trong file backup sẽ GHI ĐÈ trạng thái registry hiện tại (cần quyền admin).`)) return;
+        try {
+          const r = await api('/api/backup/restore', { method: 'POST', body: { name: b.dataset.restore } });
+          toast(r.message || 'Đã khôi phục', 'ok');
+        } catch (e) { toast(e.message, 'err'); }
+      });
+    });
     $('backupTable').querySelectorAll('[data-del]').forEach((b) => {
       b.addEventListener('click', async () => {
         if (!confirm('Xóa backup ' + b.dataset.del + '?')) return;
