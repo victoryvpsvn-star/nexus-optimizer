@@ -22,6 +22,7 @@ let selectedTweaks = new Set();
 let tweakSearch = '';
 let tweakLimit = 150;
 const TWEAK_PAGE = 150;
+let tweaksRunning = false; // v3.4.0: guard double-click
 let statsTimer = null;
 
 // ---------- helpers ----------
@@ -57,7 +58,7 @@ function fmtBytes(b) {
 function esc(s) {
   const d = document.createElement('div');
   d.textContent = String(s ?? '');
-  return d.innerHTML;
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); // v3.4.0 fix: escape nháy cho attribute
 }
 
 function setBusy(elId, text) { $(elId).textContent = text || ''; }
@@ -363,17 +364,10 @@ function renderTweakFilters() {
   });
 }
 
-document.querySelectorAll('#tweakFilters .chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('#tweakFilters .chip').forEach((c) => c.classList.remove('active'));
-    chip.classList.add('active');
-    tweakFilter = chip.dataset.cat;
-    renderTweaks();
-  });
-});
-
 async function runTweaks(ids, action) {
   if (!ids.length) return toast('Chưa chọn mục nào', 'err');
+  if (tweaksRunning) return toast('Đang chạy loạt tinh chỉnh — đợi xong đã', 'err');
+  tweaksRunning = true;
   const verb = action === 'apply' ? 'áp dụng' : 'hoàn tác';
   let done = 0, fails = 0;
   try {
@@ -389,16 +383,17 @@ async function runTweaks(ids, action) {
     selectedTweaks.clear();
     refreshTweaks();
   } catch (e) {
-    toast('Chạy tinh chỉnh lỗi: ' + e.message, 'err');
+    toast(`Chạy lỗi sau ${done}/${ids.length} mục (${fails} lỗi trước đó): ` + e.message, 'err');
     refreshTweaks();
   } finally {
+    tweaksRunning = false;
     setBusy('tweaksBusy', '');
   }
 }
 $('tweaksApplySel').addEventListener('click', () => runTweaks([...selectedTweaks], 'apply'));
 $('tweaksRevertSel').addEventListener('click', () => runTweaks([...selectedTweaks], 'revert'));
 $('tweaksSelAll').addEventListener('click', () => {
-  filteredTweaks().forEach((t) => selectedTweaks.add(t.id));
+  filteredTweaks().slice(0, tweakLimit).forEach((t) => selectedTweaks.add(t.id)); // v3.4.0 fix: chỉ chọn mục ĐANG hiển thị
   renderTweaks();
 });
 $('tweaksSelNone').addEventListener('click', () => {
@@ -433,7 +428,10 @@ async function refreshProcesses() {
   }
 }
 $('procRefresh').addEventListener('click', refreshProcesses);
-$('procSearch').addEventListener('input', refreshProcesses);
+(() => { // v3.4.0: procSearch debounce 250ms như tweakSearch
+  let tmr = null;
+  $('procSearch').addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(refreshProcesses, 250); });
+})();
 
 // ---------- Network ----------
 async function refreshNetwork() {
@@ -443,7 +441,7 @@ async function refreshNetwork() {
       `<div><b>${esc(i.name)}</b> ${i.ipv4.map(esc).join(', ')} ${i.mac ? `<span class="muted">${esc(i.mac)}</span>` : ''}</div>`
     ).join('') || '<div class="muted">Không có giao diện nào</div>';
     $('netPorts').innerHTML = (d.ports || []).map((p) =>
-      `<span class="chip" style="cursor:default">${p.port}<span class="muted">/${p.proto}</span></span>`
+      `<span class="chip" style="cursor:default">${esc(p.port)}<span class="muted">/${esc(p.proto)}</span></span>`
     ).join('') || '<span class="muted">Không đọc được cổng LISTEN</span>';
   } catch (e) {
     toast('Không đọc được thông tin mạng: ' + e.message, 'err');
@@ -455,7 +453,7 @@ $('netRefresh').addEventListener('click', refreshNetwork);
 async function refreshScripts() {
   try {
     const d = await api('/api/script');
-    $('scriptLang').innerHTML = (d.languages || []).map((l) => `<option value="${l}">${l}</option>`).join('');
+    $('scriptLang').innerHTML = (d.languages || []).map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
     $('scriptSaved').innerHTML = (d.scripts || []).map((s) =>
       `<span class="chip" data-load="${s.id}">📜 ${esc(s.name)} <button style="all:unset;color:var(--err);cursor:pointer" data-del="${s.id}">✕</button></span>`
     ).join('') || '<span class="muted">Chưa lưu script nào</span>';
@@ -679,9 +677,15 @@ $('backupOpen').addEventListener('click', async () => {
 });
 
 // ---------- Settings ----------
+let uiSettingsCache = null; // v3.4.0: cache settings — settingsSave echo lại background thay vì hardcode
+
+// Áp dụng settings đã lưu NGAY khi mở app (accent/radius/petals) — không đợi mở tab Cài đặt
+(async () => { try { const s0 = await api('/api/settings'); uiSettingsCache = s0; applyUiSettings(s0); } catch (_) {} })();
+
 async function refreshSettings() {
   try {
     const s = await api('/api/settings');
+    uiSettingsCache = s;
     $('setAccent').value = s.accent;
     $('setRadius').value = s.radius;
     $('setPetals').checked = !!s.petals;
@@ -704,14 +708,16 @@ async function refreshSettings() {
 function applyUiSettings(s) {
   document.documentElement.dataset.accent = s.accent;
   document.documentElement.style.setProperty('--radius', (s.radius || 1.25) + 'rem');
+  const pt = document.querySelector('.petals'); // v3.4.0 fix: petals checkbox giờ có tác dụng thật
+  if (pt) pt.style.display = s.petals === false ? 'none' : '';
 }
 
 $('settingsSave').addEventListener('click', async () => {
   try {
     const body = {
       accent: $('setAccent').value,
-      background: 'sakura',
-      customBgUrl: '',
+      background: uiSettingsCache?.background || 'sakura', // v3.4.0 fix: không ghi đè lựa chọn wallpaper
+      customBgUrl: uiSettingsCache?.customBgUrl || '',
       radius: Number($('setRadius').value) || 1.25,
       petals: $('setPetals').checked,
     };
@@ -788,7 +794,7 @@ $('relaunchAdmin').addEventListener('click', async () => {
     const u = await fetch('/api/update').then((r) => r.json());
     if (u.available) {
       bar.style.display = 'block';
-      bar.innerHTML = `🆕 Có bản mới <b>${u.latest}</b> — <button id="updGo" style="cursor:pointer;border:0;border-radius:6px;padding:4px 10px;font-weight:700;background:#a4133c;color:#fff">Cài ngay & tự mở lại</button>`;
+      bar.innerHTML = `🆕 Có bản mới <b>${esc(u.latest)}</b> — <button id="updGo" style="cursor:pointer;border:0;border-radius:6px;padding:4px 10px;font-weight:700;background:#a4133c;color:#fff">Cài ngay & tự mở lại</button>`;
       document.getElementById('updGo').onclick = async () => {
         await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'apply' }) });
         bar.innerHTML = '⬇️ Đang tải bản mới… tool sẽ <b>tự đóng và tự mở lại</b> (tối đa ~1 phút). Nếu 2 phút không thấy mở lại, hãy mở tool tay.';

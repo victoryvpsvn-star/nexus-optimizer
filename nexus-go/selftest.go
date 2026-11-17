@@ -85,7 +85,7 @@ type SelftestReport struct {
 func shortDetail(msg string) string {
 	clean := strings.TrimSpace(wsRe.ReplaceAllString(msg, " "))
 	if len(clean) > 160 {
-		return clean[:159] + "…"
+		return runeCut(clean, 159) + "…"
 	}
 	return clean
 }
@@ -136,11 +136,7 @@ func deriveTableDeps(tt *tableTweak) (tools []string, needsPs bool) {
 			case stepAppx, stepPS:
 				needsPs = true
 			case stepExe:
-				if len(s.Args) > 0 {
-					add(s.Args[0])
-				} else {
-					add(s.Name)
-				}
+				add(s.Name) // v3.4.0 fix: Name mới là tên exe (Args[0] là cờ — gây selftest sai dep)
 			}
 		}
 	}
@@ -286,11 +282,11 @@ func runFull(deadline time.Duration) []SelftestFullEntry {
 type webhookEmbed struct {
 	Username string `json:"username"`
 	Embeds   []struct {
-		Title       string        `json:"title"`
-		Color       int           `json:"color"`
-		Description string        `json:"description"`
+		Title       string         `json:"title"`
+		Color       int            `json:"color"`
+		Description string         `json:"description"`
 		Fields      []webhookField `json:"fields"`
-		Timestamp   string        `json:"timestamp"`
+		Timestamp   string         `json:"timestamp"`
 		Footer      struct {
 			Text string `json:"text"`
 		} `json:"footer"`
@@ -358,7 +354,7 @@ func sendWebhookReport(report *SelftestReport) (bool, string) {
 					detail = f.RevertMsg
 				}
 				if len(detail) > 80 {
-					detail = detail[:79] + "…"
+					detail = runeCut(detail, 79) + "…"
 				}
 				lines = append(lines, fmt.Sprintf("• %s: apply %s / revert %s — %s", f.Name, applyMark, revertMark, detail))
 			}
@@ -367,7 +363,7 @@ func sendWebhookReport(report *SelftestReport) (bool, string) {
 	desc := strings.Join(lines, "\n")
 	desc = strings.TrimPrefix(desc, "\n")
 	if len(desc) > 1800 {
-		desc = desc[:1800]
+		desc = runeCut(desc, 1800)
 	}
 	if desc == "" {
 		desc = "Tất cả mục đã kiểm tra đều đạt ✅"
@@ -385,11 +381,11 @@ func sendWebhookReport(report *SelftestReport) (bool, string) {
 		mode = "FULL"
 	}
 	payload.Embeds = append(payload.Embeds, struct {
-		Title       string        `json:"title"`
-		Color       int           `json:"color"`
-		Description string        `json:"description"`
+		Title       string         `json:"title"`
+		Color       int            `json:"color"`
+		Description string         `json:"description"`
 		Fields      []webhookField `json:"fields"`
-		Timestamp   string        `json:"timestamp"`
+		Timestamp   string         `json:"timestamp"`
 		Footer      struct {
 			Text string `json:"text"`
 		} `json:"footer"`
@@ -501,11 +497,11 @@ func runSelftest(mode string, useWebhook bool) *SelftestReport {
 			"total": len(tw), "recommended": rec, "uniqueIds": uniq,
 			"uniqueOrders": len(tw) > 0,
 		},
-		Items:  items,
-		Full:   full,
-		Counts: map[string]int{"pass": pass, "fail": fail, "skipped": skipped + fullSkipped},
+		Items:   items,
+		Full:    full,
+		Counts:  map[string]int{"pass": pass, "fail": fail, "skipped": skipped + fullSkipped},
 		Webhook: map[string]any{"requested": useWebhook, "ok": false, "detail": "Không yêu cầu gửi"},
-		OK:     fail == 0 && uniq,
+		OK:      fail == 0 && uniq,
 	}
 	if useWebhook {
 		ok, detail := sendWebhookReport(report)

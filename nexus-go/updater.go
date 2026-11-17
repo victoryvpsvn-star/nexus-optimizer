@@ -19,6 +19,9 @@ import (
 	"time"
 )
 
+// updateMtx: chống double-apply updater
+var updateMtx sync.Mutex
+
 const updateRepo = "victoryvpsvn-star/nexus-optimizer"
 const updateAsset = "NEXUS-Optimizer-Go-x64.exe"
 
@@ -78,7 +81,7 @@ func updateCheck(force bool) map[string]any {
 	}
 	// 1) Redirect releases/latest — không rate limit (khi repo public)
 	client := &http.Client{Timeout: 12 * time.Second}
-	resp, err := client.Do(ghReq("https://github.com/"+updateRepo+"/releases/latest"))
+	resp, err := client.Do(ghReq("https://github.com/" + updateRepo + "/releases/latest"))
 	tag := ""
 	if err == nil {
 		io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
@@ -123,6 +126,8 @@ func updateCheck(force bool) map[string]any {
 
 /** Tải exe mới → đổi tên hoán đổi (.old) → khởi động tiến trình mới (tiến trình cũ tự thoát ở caller) */
 func updateApply() (string, error) {
+	updateMtx.Lock() // v3.4.0: chặn bấm Cài 2 lần → 2 goroutine rename chồng nhau
+	defer updateMtx.Unlock()
 	c := updateCheck(true)
 	if s, _ := c["error"].(string); s != "" {
 		return "", fmt.Errorf("%s", s)

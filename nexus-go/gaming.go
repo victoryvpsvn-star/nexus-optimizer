@@ -18,17 +18,16 @@ var gamingPresetRevertWin = []string{
 	"win-keyboard-fast", "win-keyboard-accessibility-off", "win-menu-delay", "win-startup-delay",
 	"win-power-high", "win-sysresp", "win-cpu-priority-separation", "win-cpu-core-parking-off",
 	"win-gpu-hwsch-on", "win-mmcss-gaming", "win-netthrottle", "win-background-apps-off",
-	"win-sysmain-off", "win-diagtrack-off",
-}
+} // v3.4.0 fix: bỏ 3 id không có trong apply (tránh bật lại SysMain/DiagTrack user chưa tắt)
 
 const gamingNoteWin = "Các tinh chỉnh HKCU áp dụng ngay cho user hiện tại; các mục HKLM/service cần quyền Administrator — nếu thiếu quyền sẽ báo lỗi trung thực."
 const gamingNoteOther = "Gaming Mode chỉ áp dụng được trên Windows (bản .exe) — các mục sẽ được báo lỗi trung thực."
 
 type GamingStatus struct {
-	Enabled   bool            `json:"enabled"`
-	EnabledAt string          `json:"enabledAt,omitempty"`
-	Effects   []GamingEffect  `json:"effects"`
-	Note      string          `json:"note"`
+	Enabled   bool           `json:"enabled"`
+	EnabledAt string         `json:"enabledAt,omitempty"`
+	Effects   []GamingEffect `json:"effects"`
+	Note      string         `json:"note"`
 }
 
 func getGamingStatus() GamingStatus {

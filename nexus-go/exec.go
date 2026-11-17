@@ -354,7 +354,16 @@ var wsRe = regexp.MustCompile(`\s+`)
 func truncateShort(msg string) string {
 	clean := strings.TrimSpace(wsRe.ReplaceAllString(msg, " "))
 	if len(clean) > 220 {
-		return clean[:219] + "…"
+		return runeCut(clean, 219) + "…"
 	}
 	return clean
+}
+
+// runeCut cắt theo RUNE (không vỡ ký tự UTF-8 tiếng Việt khi cắt giữa rune)
+func runeCut(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n])
+	}
+	return s
 }

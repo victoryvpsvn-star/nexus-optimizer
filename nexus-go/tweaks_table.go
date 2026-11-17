@@ -14,17 +14,17 @@ import (
 type stepKind int
 
 const (
-	stepRegAdd   stepKind = iota // reg add key /v name /t typ /d data /f
-	stepRegDel                   // reg delete value — query trước: missing = OK
-	stepRegAddVe                 // reg add key /ve /d "" (tạo key với default rỗng)
-	stepRegDelKey                // reg delete key /f — query trước: missing = OK
-	stepRegAddKey                // reg add key /f (tạo lại key rỗng)
-	stepSc                       // sc config <svc> start= <mode> (+stop khi apply, +start khi revert); 1060 = OK
-	stepPc                       // powercfg -setacvalueindex scheme_current sub setting val + /setactive
-	stepTask                     // schtasks /Query rồi /Change /DISABLE|ENABLE — task missing = OK
-	stepAppx                     // Get-AppxPackage remove (apply) / re-register (revert)
-	stepPS                       // script PowerShell tùy chỉnh
-	stepExe                      // runSysExe(name, args) — Tolerant = bỏ qua lỗi
+	stepRegAdd    stepKind = iota // reg add key /v name /t typ /d data /f
+	stepRegDel                    // reg delete value — query trước: missing = OK
+	stepRegAddVe                  // reg add key /ve /d "" (tạo key với default rỗng)
+	stepRegDelKey                 // reg delete key /f — query trước: missing = OK
+	stepRegAddKey                 // reg add key /f (tạo lại key rỗng)
+	stepSc                        // sc config <svc> start= <mode> (+stop khi apply, +start khi revert); 1060 = OK
+	stepPc                        // powercfg -setacvalueindex scheme_current sub setting val + /setactive
+	stepTask                      // schtasks /Query rồi /Change /DISABLE|ENABLE — task missing = OK
+	stepAppx                      // Get-AppxPackage remove (apply) / re-register (revert)
+	stepPS                        // script PowerShell tùy chỉnh
+	stepExe                       // runSysExe(name, args) — Tolerant = bỏ qua lỗi
 )
 
 type step struct {
@@ -56,16 +56,20 @@ func (s *step) timeout() time.Duration {
 }
 
 // helpers dựng step gọn
-func ra(key, name, typ, data string) step { return step{Kind: stepRegAdd, Key: key, Name: name, Typ: typ, Data: data} }
-func rd(key, name string) step            { return step{Kind: stepRegDel, Key: key, Name: name} }
-func rdk(key string) step                 { return step{Kind: stepRegDelKey, Key: key} }
-func rak(key string) step                 { return step{Kind: stepRegAddKey, Key: key} }
-func rave(key string) step                { return step{Kind: stepRegAddVe, Key: key} }
-func svc(name, mode string) step          { return step{Kind: stepSc, Name: name, Data: mode} }
-func pcfg(sub, setting, val string) step  { return step{Kind: stepPc, Sub: sub, Setting: setting, Data: val} }
-func task(name string) step               { return step{Kind: stepTask, Name: name} }
-func appx(pkg string) step                { return step{Kind: stepAppx, Name: pkg} }
-func pss(script string) step              { return step{Kind: stepPS, Script: script} }
+func ra(key, name, typ, data string) step {
+	return step{Kind: stepRegAdd, Key: key, Name: name, Typ: typ, Data: data}
+}
+func rd(key, name string) step   { return step{Kind: stepRegDel, Key: key, Name: name} }
+func rdk(key string) step        { return step{Kind: stepRegDelKey, Key: key} }
+func rak(key string) step        { return step{Kind: stepRegAddKey, Key: key} }
+func rave(key string) step       { return step{Kind: stepRegAddVe, Key: key} }
+func svc(name, mode string) step { return step{Kind: stepSc, Name: name, Data: mode} }
+func pcfg(sub, setting, val string) step {
+	return step{Kind: stepPc, Sub: sub, Setting: setting, Data: val}
+}
+func task(name string) step  { return step{Kind: stepTask, Name: name} }
+func appx(pkg string) step   { return step{Kind: stepAppx, Name: pkg} }
+func pss(script string) step { return step{Kind: stepPS, Script: script} }
 func exe(name string, args ...string) step {
 	return step{Kind: stepExe, Name: name, Args: args}
 }
@@ -194,8 +198,11 @@ func runStep(s step, revert bool) (string, bool) {
 }
 
 func runSteps(steps []step, revert bool) (string, bool) {
-	for _, s := range steps {
+	for i, s := range steps {
 		if msg, ok := runStep(s, revert); !ok {
+			if len(steps) > 1 {
+				return fmt.Sprintf("bước %d/%d — %s (các bước TRƯỚC nó nếu đã chạy là đã áp dụng thật)", i+1, len(steps), msg), false
+			}
 			return msg, false
 		}
 	}
@@ -328,21 +335,21 @@ func privacyTweaks() []tableTweak {
 	return []tableTweak{
 		{Def: TweakDef{ID: "tel-allow-telemetry-0", Name: "Tắt gửi dữ liệu chẩn đoán (AllowTelemetry=0)",
 			Description: "Policy AllowTelemetry=0 chặn Windows gửi dữ liệu chẩn đoán/telemetry về Microsoft ở mức thấp nhất (Enterprise/Pro áp đầy; Home áp một phần).",
-			Category: "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true, Recommended: true},
+			Category:    "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true, Recommended: true},
 			ApplySteps:  []step{ra(privacyKeys.DataCollection, "AllowTelemetry", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt gửi dữ liệu chẩn đoán (AllowTelemetry=0)",
 			RevertSteps: []step{rd(privacyKeys.DataCollection, "AllowTelemetry")},
 			RevertMsg:   "Đã xóa policy AllowTelemetry — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-feedback-off", Name: "Tắt hộp thoại xin feedback của Windows",
 			Description: "NumberOfSIUFInPeriod=0 — Windows không còn hiện 'Bạn có muốn cho chúng tôi biết cảm nhận của bạn?'",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps:  []step{ra(privacyKeys.Siuf, "NumberOfSIUFInPeriod", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt xin feedback (SIUF)",
 			RevertSteps: []step{rd(privacyKeys.Siuf, "NumberOfSIUFInPeriod")},
 			RevertMsg:   "Đã xóa số lần xin feedback — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-ceip-off", Name: "Tắt CEIP (Chương trình cải tiến trải nghiệm)",
 			Description: "CEIPEnable=0 (HKLM + HKCU) — tắt thu thập dữ liệu Chương trình Cải tiến Trải nghiệm Khách hàng.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps: []step{
 				ra(privacyKeys.SQM, "CEIPEnable", "REG_DWORD", "0"),
 				ra(`HKCU\Software\Policies\Microsoft\SQMClient\Windows`, "CEIPEnable", "REG_DWORD", "0"),
@@ -355,7 +362,7 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã xóa policy CEIP — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-appcompat-off", Name: "Tắt AppCompat telemetry (AIT + inventory)",
 			Description: "AITEnable=0 + DisableInventory=1 — tắt trình thu thập dữ liệu tương thích ứng dụng (bộ phận telemetry nặng nhất khi chạy nền).",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps: []step{
 				ra(privacyKeys.AppCompat, "AITEnable", "REG_DWORD", "0"),
 				ra(privacyKeys.AppCompat, "DisableInventory", "REG_DWORD", "1"),
@@ -368,7 +375,7 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã xóa policy AppCompat — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-error-report-off", Name: "Tắt Windows Error Reporting",
 			Description: "Disabled=1 cho Windows Error Reporting (HKLM + HKCU) — không gửi báo cáo crash về Microsoft; crash dump cục bộ vẫn ghi bình thường.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps: []step{
 				ra(privacyKeys.WER, "Disabled", "REG_DWORD", "1"),
 				ra(`HKCU\SOFTWARE\Microsoft\Windows\Windows Error Reporting`, "Disabled", "REG_DWORD", "1"),
@@ -381,28 +388,28 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã bật lại Windows Error Reporting (mặc định)"},
 		{Def: TweakDef{ID: "tel-tailored-off", Name: "Tắt trải nghiệm cá nhân hóa theo dữ liệu chẩn đoán",
 			Description: "TailoredExperiencesWithDiagnosticDataEnabled=0 — Windows không dùng dữ liệu chẩn đoán để cá nhân hóa tips/quảng cáo.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps:  []step{ra(privacyKeys.Privacy, "TailoredExperiencesWithDiagnosticDataEnabled", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt trải nghiệm cá nhân hóa theo dữ liệu chẩn đoán",
 			RevertSteps: []step{ra(privacyKeys.Privacy, "TailoredExperiencesWithDiagnosticDataEnabled", "REG_DWORD", "1")},
 			RevertMsg:   "Đã bật lại trải nghiệm cá nhân hóa (mặc định)"},
 		{Def: TweakDef{ID: "tel-ads-id-off", Name: "Tắt Advertising ID (quảng cáo cá nhân hóa)",
 			Description: "Enabled=0 — apps không còn đọc Advertising ID để nhắm quảng cáo theo người dùng.",
-			Category: "Bảo mật & riêng tư", Risk: "low", Recommended: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", Recommended: true},
 			ApplySteps:  []step{ra(privacyKeys.Advertising, "Enabled", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt Advertising ID",
 			RevertSteps: []step{ra(privacyKeys.Advertising, "Enabled", "REG_DWORD", "1")},
 			RevertMsg:   "Đã bật lại Advertising ID (mặc định)"},
 		{Def: TweakDef{ID: "tel-activity-feed-off", Name: "Tắt Timeline / Activity Feed",
 			Description: "EnableActivityFeed=0 — tắt dòng thời gian hoạt động (Timeline) và lịch sử app trên các thiết bị.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.System, "EnableActivityFeed", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt Timeline / Activity Feed",
 			RevertSteps: []step{rd(privacyKeys.System, "EnableActivityFeed")},
 			RevertMsg:   "Đã xóa policy Activity Feed — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-activity-upload-off", Name: "Tắt tải lên cloud hoạt động người dùng",
 			Description: "PublishUserActivities=0 + UploadUserActivities=0 — Windows không gửi lịch sử hoạt động lên Microsoft cloud để đồng bộ giữa các máy.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps: []step{
 				ra(privacyKeys.System, "PublishUserActivities", "REG_DWORD", "0"),
 				ra(privacyKeys.System, "UploadUserActivities", "REG_DWORD", "0"),
@@ -415,7 +422,7 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã xóa policy upload hoạt động — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-wifi-sense-off", Name: "Tắt chia sẻ Wi-Fi (Wi-Fi Sense policy)",
 			Description: "Chặn Windows báo cáo hotspot và tự kết nối mạng mở được chia sẻ — hết rủi ro tự dính mạng lạ.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps: []step{
 				ra(privacyKeys.WiFiPolicy, "AllowWiFiHotSpotReporting", "REG_DWORD", "0"),
 				ra(privacyKeys.WiFiPolicy, "AllowAutoConnectToWiFiSenseHotspots", "REG_DWORD", "0"),
@@ -428,14 +435,14 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã xóa policy Wi-Fi Sense — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-speech-off", Name: "Tắt nhận diện giọng nói online",
 			Description: "HasAccepted=0 — không gửi giọng nói lên Microsoft cloud để nhận dạng; ghi chú từng phím offline vẫn hoạt động.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps:  []step{ra(privacyKeys.SpeechOneCore, "HasAccepted", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt nhận diện giọng nói online",
 			RevertSteps: []step{ra(privacyKeys.SpeechOneCore, "HasAccepted", "REG_DWORD", "1")},
 			RevertMsg:   "Đã bật lại nhận diện giọng nói online (mặc định)"},
 		{Def: TweakDef{ID: "tel-input-personalization-off", Name: "Tắt cá nhân hóa bàn phím/nhập liệu",
 			Description: "RestrictImplicitTextCollection + RestrictImplicitInkCollection=1 và chặn HarvestContacts — Windows không tự thu thập nội dung gõ/vẽ/danh bạ để học cách gõ của bạn.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps: []step{
 				ra(privacyKeys.InputPers, "RestrictImplicitTextCollection", "REG_DWORD", "1"),
 				ra(privacyKeys.InputPers, "RestrictImplicitInkCollection", "REG_DWORD", "1"),
@@ -450,14 +457,14 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã xóa giới hạn nhập liệu — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-bing-suggest-off", Name: "Tắt gợi ý web Bing trong Search (policy)",
 			Description: "DisableSearchBoxSuggestions=1 — ô tìm kiếm không còn đưa gợi ý web/link Bing từ internet (chỉ tìm nội dung máy).",
-			Category: "Bảo mật & riêng tư", Risk: "low", Recommended: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", Recommended: true},
 			ApplySteps:  []step{ra(privacyKeys.ExplorerPolicy, "DisableSearchBoxSuggestions", "REG_DWORD", "1")},
 			ApplyMsg:    "Đã tắt gợi ý web Bing trong Search",
 			RevertSteps: []step{rd(privacyKeys.ExplorerPolicy, "DisableSearchBoxSuggestions")},
 			RevertMsg:   "Đã xóa policy — Search gợi ý web lại như mặc định"},
 		{Def: TweakDef{ID: "tel-bing-web-off", Name: "Tắt tìm web Bing trong Start (per-user)",
 			Description: "BingSearchEnabled=0 + CortanaConsent=0 — tìm kiếm Start không truy Bing nữa, kết quả tức thì hơn.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps: []step{
 				ra(privacyKeys.Search, "BingSearchEnabled", "REG_DWORD", "0"),
 				ra(privacyKeys.Search, "CortanaConsent", "REG_DWORD", "0"),
@@ -470,77 +477,77 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã bật lại tìm web Bing (mặc định)"},
 		{Def: TweakDef{ID: "tel-cortana-policy-off", Name: "Tắt Cortana (policy máy)",
 			Description: "AllowCortana=0 — Cortana bị tắt hoàn toàn ở mức policy trên máy.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.WinSearchPol, "AllowCortana", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt Cortana (policy)",
 			RevertSteps: []step{rd(privacyKeys.WinSearchPol, "AllowCortana")},
 			RevertMsg:   "Đã xóa policy Cortana — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-location-policy-off", Name: "Tắt vị trí máy (Location policy)",
 			Description: "DisableLocation=1 — các app không đọc được vị trí thiết bị qua Windows Location.",
-			Category: "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.LocSensors, "DisableLocation", "REG_DWORD", "1")},
 			ApplyMsg:    "Đã tắt vị trí máy (policy)",
 			RevertSteps: []step{rd(privacyKeys.LocSensors, "DisableLocation")},
 			RevertMsg:   "Đã xóa policy vị trí — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-findmydevice-off", Name: "Tắt Find My Device",
 			Description: "AllowFindMyDevice=0 — Windows không định vị máy khi mất (tính năng cloud) và không gửi vị trí định kỳ.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.FindMyDevice, "AllowFindMyDevice", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt Find My Device",
 			RevertSteps: []step{rd(privacyKeys.FindMyDevice, "AllowFindMyDevice")},
 			RevertMsg:   "Đã xóa policy Find My Device — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-recall-off", Name: "Tắt Recall / phân tích AI (Win11 24H2)",
 			Description: "DisableAIDataAnalysis=1 — tắt Recall (chụp màn hình định kỳ + phân tích AI cục bộ) và Click to Do trên Windows 11 24H2.",
-			Category: "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true, Recommended: true},
+			Category:    "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true, Recommended: true},
 			ApplySteps:  []step{ra(privacyKeys.WindowsAI, "DisableAIDataAnalysis", "REG_DWORD", "1")},
 			ApplyMsg:    "Đã tắt Recall / AI phân tích (DisableAIDataAnalysis=1)",
 			RevertSteps: []step{rd(privacyKeys.WindowsAI, "DisableAIDataAnalysis")},
 			RevertMsg:   "Đã xóa policy Recall — trở về mặc định"},
 		{Def: TweakDef{ID: "tel-clipboard-history-off", Name: "Tắt lịch sử clipboard (Win+V)",
 			Description: "EnableClipboardHistory=0 — không lưu lịch sử copy; lợi riêng tư (mật khẩu copy không nằm lại), mất tiện lợi Win+V.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps:  []step{ra(privacyKeys.Clipboard, "EnableClipboardHistory", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt lịch sử clipboard",
 			RevertSteps: []step{rd(privacyKeys.Clipboard, "EnableClipboardHistory")},
 			RevertMsg:   "Đã xóa giới hạn — clipboard history về mặc định"},
 		{Def: TweakDef{ID: "tel-clipboard-cloud-off", Name: "Tắt đồng bộ clipboard lên cloud",
 			Description: "CloudClipboardAutomaticUpload=0 — nội dung copy không được tải lên Microsoft cloud để đồng bộ giữa các thiết bị.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps:  []step{ra(privacyKeys.Clipboard, "CloudClipboardAutomaticUpload", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt đồng bộ clipboard cloud",
 			RevertSteps: []step{rd(privacyKeys.Clipboard, "CloudClipboardAutomaticUpload")},
 			RevertMsg:   "Đã xóa giới hạn — đồng bộ cloud về mặc định"},
 		{Def: TweakDef{ID: "tel-device-metadata-off", Name: "Tắt tải metadata thiết bị từ mạng",
 			Description: "PreventDeviceMetadataFromNetwork=1 — Windows không tải icon/thông tin chi tiết thiết bị từ Device Metadata Service (chỉ hiển thị icon dựng sẵn).",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.DeviceMeta, "PreventDeviceMetadataFromNetwork", "REG_DWORD", "1")},
 			ApplyMsg:    "Đã tắt tải metadata thiết bị từ mạng",
 			RevertSteps: []step{rd(privacyKeys.DeviceMeta, "PreventDeviceMetadataFromNetwork")},
 			RevertMsg:   "Đã xóa policy — tải metadata về mặc định"},
 		{Def: TweakDef{ID: "tel-suggest-3rd-party-off", Name: "Tắt gợi ý app bên thứ 3 trong Start",
 			Description: "SubscribedContent-353698Enabled=0 — Start không còn đề xuất app bên thứ ba trả phí cho Microsoft.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps:  []step{ra(privacyKeys.CDM, "SubscribedContent-353698Enabled", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt gợi ý app bên thứ 3",
 			RevertSteps: []step{ra(privacyKeys.CDM, "SubscribedContent-353698Enabled", "REG_DWORD", "1")},
 			RevertMsg:   "Đã bật lại gợi ý app (mặc định)"},
 		{Def: TweakDef{ID: "tel-silent-apps-off", Name: "Tắt tự cài app khuyến nghị (SilentInstalledApps)",
 			Description: "SilentInstalledAppsEnabled=0 — Windows không còn âm thầm cài app khuyến nghị (Candy Crush thời xưa…) sau cập nhật.",
-			Category: "Bảo mật & riêng tư", Risk: "low", Recommended: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", Recommended: true},
 			ApplySteps:  []step{ra(privacyKeys.CDM, "SilentInstalledAppsEnabled", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt tự cài app khuyến nghị",
 			RevertSteps: []step{ra(privacyKeys.CDM, "SilentInstalledAppsEnabled", "REG_DWORD", "1")},
 			RevertMsg:   "Đã bật lại tự cài app khuyến nghị (mặc định)"},
 		{Def: TweakDef{ID: "tel-softlanding-off", Name: "Tắt tips/chào mừng (SoftLanding)",
 			Description: "SoftLandingEnabled=0 — tắt thông báo 'tips, tricks và suggestions' của Content Delivery Manager.",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps:  []step{ra(privacyKeys.CDM, "SoftLandingEnabled", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt tips/chào mừng (SoftLanding)",
 			RevertSteps: []step{ra(privacyKeys.CDM, "SoftLandingEnabled", "REG_DWORD", "1")},
 			RevertMsg:   "Đã bật lại SoftLanding (mặc định)"},
 		{Def: TweakDef{ID: "tel-rotating-lock-off", Name: "Tắt Spotlight hình nền khóa đổi liên tục",
 			Description: "RotatingLockScreenEnabled + Overlay=0 — màn hình khóa không tải hình Spotlight từ mạng mỗi ngày (tiết kiệm băng thông + riêng tư).",
-			Category: "Bảo mật & riêng tư", Risk: "low"},
+			Category:    "Bảo mật & riêng tư", Risk: "low"},
 			ApplySteps: []step{
 				ra(privacyKeys.CDM, "RotatingLockScreenEnabled", "REG_DWORD", "0"),
 				ra(privacyKeys.CDM, "RotatingLockScreenOverlayEnabled", "REG_DWORD", "0"),
@@ -553,7 +560,7 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã bật lại Spotlight (mặc định)"},
 		{Def: TweakDef{ID: "tel-tasks-diag-off", Name: "Tắt 6 task chẩn đoán/telemetry định kỳ",
 			Description: "Disable các Scheduled Task: Microsoft Compatibility Appraiser, ProgramDataUpdater, CEIP Consolidator, UsbCeip, Autochk Proxy, DiskDiagnosticDataCollector — các task chạy nền gửi dữ liệu về Microsoft.",
-			Category: "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
 			ApplySteps: []step{
 				task(`\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser`),
 				task(`\Microsoft\Windows\Application Experience\ProgramDataUpdater`),
@@ -574,35 +581,35 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã bật lại các task chẩn đoán (task thiếu tự bỏ qua)"},
 		{Def: TweakDef{ID: "tel-nvtelemetry-off", Name: "Tắt NVIDIA Telemetry service",
 			Description: "Disable + stop dịch vụ NvTelemetryContainer — hết tiến trình NVIDIA gửi thống kê usage. Máy không có dịch vụ này sẽ tự bỏ qua.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps:  []step{svc("NvTelemetryContainer", "disabled")},
 			ApplyMsg:    "Đã tắt NVIDIA Telemetry service (nếu có)",
 			RevertSteps: []step{svc("NvTelemetryContainer", "demand")},
 			RevertMsg:   "Đã hoàn tác NVIDIA Telemetry về start=demand"},
 		{Def: TweakDef{ID: "sec-autorun-off", Name: "Tắt AutoRun/AutoPlay từ mọi ổ đĩa",
 			Description: "NoDriveTypeAutoRun=255 — chặn USB/CD tự chạy file khi cắm vào (một trong các lây nhiễm ransomware phổ biến nhất qua USB).",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true, Recommended: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true, Recommended: true},
 			ApplySteps:  []step{ra(`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer`, "NoDriveTypeAutoRun", "REG_DWORD", "255")},
 			ApplyMsg:    "Đã tắt AutoRun mọi loại ổ đĩa",
 			RevertSteps: []step{rd(`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer`, "NoDriveTypeAutoRun")},
 			RevertMsg:   "Đã xóa policy AutoRun — trở về mặc định"},
 		{Def: TweakDef{ID: "sec-lsa-ppl-on", Name: "Bật LSA Protection (chống đọc mật khẩu RAM)",
 			Description: "RunAsPPL=1 — tiến trình LSASS chạy có bảo vệ, chặn tool dump credential (Mimikatz kiểu này) đọc bộ nhớ. Cần khởi động lại.",
-			Category: "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.Lsa, "RunAsPPL", "REG_DWORD", "1")},
 			ApplyMsg:    "Đã bật LSA Protection — khởi động lại để áp dụng",
 			RevertSteps: []step{rd(privacyKeys.Lsa, "RunAsPPL")},
 			RevertMsg:   "Đã xóa RunAsPPL — trở về mặc định"},
 		{Def: TweakDef{ID: "sec-remote-assistance-off", Name: "Tắt Remote Assistance",
 			Description: "fAllowToGetHelp=0 — không ai có thể gửi lời mời hỗ trợ từ xa vào máy (kênh xã hội rộng hay bị lợi dụng).",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.RemoteAsst, "fAllowToGetHelp", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt Remote Assistance",
 			RevertSteps: []step{ra(privacyKeys.RemoteAsst, "fAllowToGetHelp", "REG_DWORD", "1")},
 			RevertMsg:   "Đã bật lại Remote Assistance (mặc định)"},
 		{Def: TweakDef{ID: "sec-spectre-mitigations-off", Name: "Tắt mitigate Spectre/Meltdown (nhanh hơn, kém an toàn)",
 			Description: "FeatureSettingsOverride=3 + Mask=3 — bỏ vánh bảo vệ Spectre/Meltdown để tăng hiệu năng trên CPU đời cũ (Haswell trở về trước cảm nhận rõ). CHỈ dùng máy cá nhân không xử lý dữ liệu nhạy cảm. Cần khởi động lại.",
-			Category: "Bảo mật & riêng tư", Risk: "high", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "high", RequiresRoot: true},
 			ApplySteps: []step{
 				ra(privacyKeys.MemMgmt, "FeatureSettingsOverride", "REG_DWORD", "3"),
 				ra(privacyKeys.MemMgmt, "FeatureSettingsOverrideMask", "REG_DWORD", "3"),
@@ -615,21 +622,21 @@ func privacyTweaks() []tableTweak {
 			RevertMsg: "Đã xóa override — mitigations bật lại như mặc định (khởi động lại)"},
 		{Def: TweakDef{ID: "sec-smb-guest-auth-off", Name: "Chặn đăng nhập SMB guest không xác thực",
 			Description: "AllowInsecureGuestAuth=0 — không cho kết nối NAS/chia sẻ kiểu guest (không mật khẩu) — chống tấn công man-in-the-middle trong LAN.",
-			Category: "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.LanmanWs, "AllowInsecureGuestAuth", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã chặn SMB guest không xác thực",
 			RevertSteps: []step{rd(privacyKeys.LanmanWs, "AllowInsecureGuestAuth")},
 			RevertMsg:   "Đã xóa giới hạn — SMB guest về mặc định"},
 		{Def: TweakDef{ID: "sec-smb1-client-off", Name: "Tắt driver client SMB1 (mrxsmb10)",
 			Description: "Start=4 cho mrxsmb10 — máy không còn nói chuyện SMB1 với server cũ (vẫn kết nối SMB2/3 bình thường); đi kèm nút Tắt SMB1 server đã có.",
-			Category: "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "medium", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.Mrxsmb10, "Start", "REG_DWORD", "4")},
 			ApplyMsg:    "Đã tắt SMB1 client driver — khởi động lại để áp dụng",
 			RevertSteps: []step{rd(privacyKeys.Mrxsmb10, "Start")},
 			RevertMsg:   "Đã xóa override mrxsmb10 — driver về cấu hình mặc định"},
 		{Def: TweakDef{ID: "tel-mdns-off", Name: "Tắt mDNS resolution",
 			Description: "EnableMDNS=0 — tắt multicast DNS (mDNS) của Dnscache; giảm broadcast rác trong LAN, một số game/tool chặn mDNS để tránh nhảy IP ảo.",
-			Category: "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
+			Category:    "Bảo mật & riêng tư", Risk: "low", RequiresRoot: true},
 			ApplySteps:  []step{ra(privacyKeys.Dnscache, "EnableMDNS", "REG_DWORD", "0")},
 			ApplyMsg:    "Đã tắt mDNS — khởi động lại để áp dụng",
 			RevertSteps: []step{rd(privacyKeys.Dnscache, "EnableMDNS")},

@@ -12,11 +12,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 //go:embed static
 var staticFS embed.FS
+
+// tweakRunMux: single-flight cho các đường chạy tweak (POST /api/tweaks)
+var tweakRunMux sync.Mutex
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -73,6 +77,8 @@ func buildMux() http.Handler {
 			writeErr(w, 400, "Tối đa 200 tinh chỉnh mỗi lần chạy")
 			return
 		}
+		tweakRunMux.Lock() // v3.4.0: chặn chạy song song — reg.exe/sc.exe xen kẽ nhau là KQ không xác định
+		defer tweakRunMux.Unlock()
 		results := make([]TweakRunResult, 0, len(body.IDs))
 		for _, id := range body.IDs {
 			if body.Action == "apply" {
@@ -197,7 +203,7 @@ func buildMux() http.Handler {
 		}
 		appState.SetWebhookURL(url)
 		writeJSON(w, 200, map[string]any{
-			"ok": true,
+			"ok":      true,
 			"webhook": map[string]any{"configured": url != "", "masked": maskWebhook(url)},
 		})
 	})

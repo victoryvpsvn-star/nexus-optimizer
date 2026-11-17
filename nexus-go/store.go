@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,10 +19,11 @@ type UISettings struct {
 	CustomBgURL string  `json:"customBgUrl"`
 	Radius      float64 `json:"radius"`
 	Petals      bool    `json:"petals"`
+	Lang        string  `json:"lang"`
 }
 
 func defaultUISettings() UISettings {
-	return UISettings{Accent: "sakura-pink", Background: "sakura", CustomBgURL: "", Radius: 1.25, Petals: true}
+	return UISettings{Accent: "sakura-pink", Background: "sakura", CustomBgURL: "", Radius: 1.25, Petals: true, Lang: "vi"}
 }
 
 type TweakState struct {
@@ -169,6 +171,9 @@ var accentKeys = map[string]bool{
 var backgroundKeys = map[string]bool{
 	"sakura": true, "wall-sakura": true, "gradient": true, "glow": true,
 	"mesh": true, "wall-default": true, "wall-gaming": true, "custom": true,
+	// v3.4.0: key hình nền mới (wallpaper.js) — ảnh có sẵn + 3 ảnh AI gen
+	"sakura-bg": true, "sakura-bg2": true, "sakura-gaming": true, "sakura-hero": true,
+	"bg-ai-night": true, "bg-ai-sunset": true, "bg-ai-petals": true,
 }
 
 // ValidateSettings kiểm tra giá trị — trả lỗi nếu không hợp lệ (giữ hành vi route cũ)
@@ -181,6 +186,13 @@ func (s *Store) ValidateSettings(u UISettings) error {
 	}
 	if u.Radius < 0 || u.Radius > 2.5 {
 		return fmt.Errorf("radius phải từ 0 đến 2.5")
+	}
+	if u.Lang != "vi" && u.Lang != "en" {
+		return fmt.Errorf("lang chỉ hỗ trợ vi/en")
+	}
+	if u.CustomBgURL != "" && !strings.HasPrefix(u.CustomBgURL, "http://") &&
+		!strings.HasPrefix(u.CustomBgURL, "https://") && !strings.HasPrefix(u.CustomBgURL, "data:image/") {
+		return fmt.Errorf("customBgUrl chỉ chấp nhận http(s):// hoặc data:image/")
 	}
 	return nil
 }

@@ -37,13 +37,11 @@ func splitCompound(ts []tableTweak) []tableTweak {
 			continue
 		}
 		for i := range t.ApplySteps {
-			nt := tableTweak{
-				Def:         t.Def,
-				ApplySteps:  []step{t.ApplySteps[i]},
-				ApplyMsg:    t.ApplyMsg,
-				RevertSteps: []step{t.RevertSteps[i]},
-				RevertMsg:   t.RevertMsg,
-			}
+			nt := t // v3.4.0 fix: copy nguyên struct — không làm rơi field (ApplyOnly...)
+			nt.ApplySteps = []step{t.ApplySteps[i]}
+			nt.RevertSteps = []step{t.RevertSteps[i]}
+			nt.ApplyMsg = fmt.Sprintf("Đã áp dụng: %s\\%s", t.ApplySteps[i].Key, t.ApplySteps[i].Name)
+			nt.RevertMsg = "Đã hoàn tác về mặc định (xóa value registry)"
 			nt.Def.ID = fmt.Sprintf("%s-p%d", t.Def.ID, i+1)
 			nt.Def.Name = fmt.Sprintf("%s — %s", t.Def.Name, t.ApplySteps[i].Name)
 			nt.Def.Description = fmt.Sprintf("%s (mục %d/%d: %s\\%s)", t.Def.Description, i+1, n, t.ApplySteps[i].Key, t.ApplySteps[i].Name)

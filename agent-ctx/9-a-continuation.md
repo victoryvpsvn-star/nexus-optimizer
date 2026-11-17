@@ -346,3 +346,31 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   runTweaks chunk 100/lô (server limit 200), progress "1–100/1000".
 - Cảnh báo: DO NOT trust PowerShell multi-";" trong TSV PX. curl beacon test → dùng đúng cổng beacon
   (beacon đã XÓA). Verify: API 1000, dup 0, high-risk 37, rec 189, node --check OK.
+
+
+## Bổ sung 10-m: v3.4.0 — i18n EN/VI + wallpaper AI + fix 24 bugs (user giao đội agent)
+- ORG (user yêu cầu 30 slot — gộp 5 agent chạy thật, manager=tôi): 2 coder [i18n.js 257 cặp+17
+  pattern động; wallpaper.js 9 option+overlay+random] + 2 bug finder (Go 12 issue, UI 12 issue)
+  + 1 feature suggester (7 tính năng: presets 1-click, startup manager, restore point, uninstaller,
+  task scheduler, hosts editor, export/import profile). Coder chỉ viết file MỚI (không đụng chéo).
+- FIX CAO: selftest deriveTableDeps dùng s.Name (không phải Args[0]); GUID PROCTHROTTLEMIN
+  893dee8e-2bef-41e0-89c6-b55d0929964c trong gen-d TSV; welcome overlay chết vì script tag đứng
+  TRƯỚC markup (dời cuối body + i18n.js/wallpaper.js trước app.js). FIX TRUNG: esc() escape nháy;
+  settingsSave echo uiSettingsCache (không hardcode background); runTweaks guard double-run +
+  toast progress; selAll chỉ chọn mục hiển thị (≤tweakLimit); applyUiSettings petals + boot apply;
+  splitCompound copy struct (không rơi ApplyOnly) + msg per-value; gaming revert đối xứng apply;
+  single-flight mutex POST /api/tweaks + updater mutex; PUT settings validate Lang vi/en +
+  CustomBgURL scheme whitelist; truncateShort/shortDetail runeCut (không vỡ UTF-8); runSteps
+  báo bước fail N/M. UI: .tweak-body min-width:0 + overflow-wrap anywhere; procSearch debounce;
+  dead chip block xóa. XÓA ext-key.pem sót.
+- ASSET CACHE-BUST: script/link tag có ?v=3.4.0 (trước đây browser cache JS cũ sau update).
+- i18n: dict VI→EN phủ 100% UI chrome + 28 nhóm tinh chỉnh; MutationObserver addedNodes +
+  placeholder sweep cho void element (input không text node); WeakMap restore VI; persist
+  localStorage sakura-lang + PUT /api/settings lang (server validate vi/en).
+- Wallpaper: UISettings.Background whitelist +7 key (sakura-bg/bg2/gaming/hero, bg-ai-night/
+  sunset/petals = 3 ảnh z-ai gen 1440x736 JPEG trong static/img/); CustomBgURL validate;
+  localStorage sakura-wallpaper là truth hiển thị; body.sakura-wp-on::before + --wp-img/--wp-op.
+- VERIFY thật (agent-browser): welcome overlay hiện (fix#1 works), 🌐 toggle EN↔VI 2 chiều
+  (nav/chips/tags/toast + placeholder roundtrip), AI Night áp background + overlay 45%,
+  VI khôi phục chuẩn. go vet sạch, test pass, API 1000.
+- ROADMAP từ suggester (làm tiếp): presets 1-click → startup manager → restore point button.
