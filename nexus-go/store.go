@@ -68,6 +68,7 @@ type storeData struct {
 		Effects   []GamingEffect `json:"effects"`
 	} `json:"gaming"`
 	TweakStates       map[string]TweakState `json:"tweakStates"`
+	AppOptStates      map[string]TweakState `json:"appoptStates"`
 	CleanupLogs       []CleanupLogEntry     `json:"cleanupLogs"`
 	CleanupTotalFreed int64                 `json:"cleanupTotalFreed"`
 	NextLogID         int                   `json:"nextLogId"`
@@ -87,6 +88,7 @@ func NewStore(dir string) *Store {
 	s.data = storeData{
 		Settings:    defaultUISettings(),
 		TweakStates: map[string]TweakState{},
+		AppOptStates: map[string]TweakState{},
 		CleanupLogs: []CleanupLogEntry{},
 		Scripts:     []ScriptRecord{},
 	}
@@ -114,6 +116,9 @@ func (s *Store) Load() error {
 	}
 	if d.TweakStates == nil {
 		d.TweakStates = map[string]TweakState{}
+	}
+	if d.AppOptStates == nil {
+		d.AppOptStates = map[string]TweakState{}
 	}
 	if d.CleanupLogs == nil {
 		d.CleanupLogs = []CleanupLogEntry{}
@@ -251,6 +256,24 @@ func (s *Store) PutTweakState(id string, st TweakState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.TweakStates[id] = st
+	_ = s.saveLocked()
+}
+
+// v3.7.0: trạng thái App Optimizer — map riêng để không đụng TweakStates của catalog
+func (s *Store) GetAppOptStates() map[string]TweakState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]TweakState, len(s.data.AppOptStates))
+	for k, v := range s.data.AppOptStates {
+		out[k] = v
+	}
+	return out
+}
+
+func (s *Store) PutAppOptState(id string, st TweakState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data.AppOptStates[id] = st
 	_ = s.saveLocked()
 }
 

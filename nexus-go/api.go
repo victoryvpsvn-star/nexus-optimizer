@@ -54,6 +54,9 @@ func buildMux() http.Handler {
 
 	// ---------- Hiệu năng (v3.5.0): timer resolution / ép xung / FPS ----------
 	registerPerfRoutes(mux)
+	// v3.7.0: App Optimizer + Fixes
+	registerAppOptRoutes(mux)
+	registerFixRoutes(mux)
 
 	// ---------- Stats ----------
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {

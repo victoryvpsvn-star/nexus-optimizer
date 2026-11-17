@@ -7,6 +7,8 @@ const SECTION_META = {
   cleanup: ['Dọn dẹp', 'Giải phóng RAM + Disk chỉ với một cú nhấp'],
   gaming: ['Gaming Mode', 'Tăng hiệu năng tối đa khi chơi game'],
   tweaks: ['Tinh chỉnh', 'Danh sách tối ưu xếp hạng theo độ ưu tiên'],
+  appopt: ['App Optimizer', 'Tối ưu riêng từng app phổ biến — phát hiện app đã cài thật trên máy'],
+  fixes: ['Fixes', 'Sửa nhanh các lỗi Windows thường gặp — 1 nút bấm'],
   processes: ['Tiến trình', 'Quản lý tiến trình đang chạy'],
   network: ['Mạng', 'Giao diện + cổng đang lắng nghe'],
   script: ['Script nâng cao', 'Tự viết và chạy script tùy chỉnh — Advanced'],
@@ -83,6 +85,8 @@ function showSection(name) {
   } else if (name === 'cleanup') refreshCleanup();
   else if (name === 'gaming') refreshGaming();
   else if (name === 'tweaks') refreshTweaks();
+  else if (name === 'appopt') refreshAppOpt();
+  else if (name === 'fixes') refreshFixes();
   else if (name === 'processes') refreshProcesses();
   else if (name === 'network') refreshNetwork();
   else if (name === 'script') refreshScripts();
@@ -400,6 +404,135 @@ $('tweaksSelNone').addEventListener('click', () => {
   selectedTweaks.clear();
   renderTweaks();
 });
+
+// ---------- App Optimizer (v3.7.0) ----------
+async function refreshAppOpt() {
+  const el = $('appoptGrid');
+  try {
+    const cards = await api('/api/appopt');
+    el.innerHTML = cards.map((c) => `
+      <div class="acard ${c.applied ? 'on' : ''}">
+        <div class="acard-head"><span class="acard-ico">${c.icon}</span><b>${esc(c.name)}</b></div>
+        <p class="muted small">${esc(c.desc)}</p>
+        ${c.warning ? `<div class="acard-warn">⚠️ ${esc(c.warning)}</div>` : ''}
+        <div class="acard-foot">
+          <span class="chip ${c.applied ? 'ok' : 'mut'}">${c.applied ? '✅ Đã tối ưu' : c.installed ? '⚪ Chưa tối ưu' : '—'}</span>
+          <button class="btn ${c.applied ? '' : 'primary'}" data-appopt="${c.id}" data-enabled="${c.applied ? '0' : '1'}" data-name="${esc(c.name)}" ${!c.installed && c.needsAdmin ? 'disabled' : ''}>${c.applied ? '↩ Hoàn tác' : '⚡ Tối ưu'}</button>
+        </div>
+      </div>`).join('');
+    el.querySelectorAll('[data-appopt]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const id = b.dataset.appopt, on = b.dataset.enabled === '1';
+        if (!on && !confirm(`Hoàn tác tối ưu "${b.dataset.name}" về mặc định?`)) return;
+        if (on && !confirm(`Tối ưu "${b.dataset.name}" ngay? Tác dụng và hoàn tác đều được ghi rõ trong kết quả.`)) return;
+        b.disabled = true; b.textContent = 'Đang chạy…';
+        try {
+          const r = await api('/api/appopt', { method: 'POST', body: JSON.stringify({ id, enabled: on }) });
+          toast(r.message || 'Xong', r.success ? 'ok' : 'err');
+        } catch (e) { toast(e.message, 'err'); }
+        refreshAppOpt();
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="acard"><b>Lỗi</b><p class="muted">${esc(e.message)}</p></div>`;
+  }
+}
+
+// ---------- Fixes (v3.7.0) ----------
+async function refreshFixes() {
+  const el = $('fixesGrid');
+  try {
+    const defs = await api('/api/fixes');
+    el.innerHTML = defs.map((f) => `
+      <div class="acard">
+        <div class="acard-head"><span class="acard-ico">${f.icon}</span><b>${esc(f.name)}</b></div>
+        <p class="muted small">${esc(f.desc)}</p>
+        <div class="acard-foot">
+          <span class="chip mut">${f.needsAdmin ? '🛡️ cần Admin' : '👤 không cần'}</span>
+          <button class="btn primary" data-fix="${f.id}" data-name="${esc(f.name)}">🔧 Sửa ngay</button>
+        </div>
+        <div class="fix-result" id="fixres-${f.id}"></div>
+      </div>`).join('');
+    el.querySelectorAll('[data-fix]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (!confirm(`Chạy fix "${b.dataset.name}" ngay bây giờ?`)) return;
+        const id = b.dataset.fix;
+        const res = $('fixres-' + id);
+        b.disabled = true; b.textContent = 'Đang sửa…';
+        try {
+          const r = await api('/api/fixes', { method: 'POST', body: JSON.stringify({ id }) });
+          res.innerHTML = (r.steps || []).map((s) => `<div>${s.ok ? '✅' : '❌'} ${esc(s.name)} — <span class="muted">${esc(s.detail || '')}</span></div>`).join('') +
+            `<div style="margin-top:6px"><b>${esc(r.message || '')}</b></div>`;
+          toast(r.message || 'Xong', r.success ? 'ok' : 'err');
+        } catch (e) { res.textContent = '❌ ' + e.message; }
+        b.disabled = false; b.textContent = '🔧 Sửa ngay';
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="acard"><b>Lỗi</b><p class="muted">${esc(e.message)}</p></div>`;
+  }
+}
+
+// ---------- Network test — Speed & Bufferbloat (v3.7.0, client-side qua Cloudflare) ----------
+let netTestBusy = false;
+const netMedian = (arr) => [...arr].sort((a, b) => a - b)[Math.floor(arr.length / 2)];
+async function netFetchRTT() {
+  const t0 = performance.now();
+  await fetch('https://speed.cloudflare.com/__down?bytes=0&r=' + Math.random(), { cache: 'no-store' });
+  return performance.now() - t0;
+}
+async function netDownloadMbps() {
+  const t0 = performance.now();
+  const resp = await fetch('https://speed.cloudflare.com/__down?bytes=12000000&r=' + Math.random(), { cache: 'no-store' });
+  const reader = resp.body.getReader();
+  let bytes = 0;
+  for (;;) { const { done, value } = await reader.read(); if (done) break; bytes += value.length; }
+  return (bytes * 8) / ((performance.now() - t0) / 1000) / 1e6;
+}
+function netGrade(ms) { return ms < 5 ? 'A+' : ms < 20 ? 'A' : ms < 40 ? 'B' : ms < 80 ? 'C' : ms < 150 ? 'D' : 'F'; }
+
+async function runNetTest() {
+  if (netTestBusy) return;
+  const btn = $('netTestRun'), out = $('netTestResult'), table = $('netTestTable');
+  netTestBusy = true; btn.disabled = true; btn.textContent = 'Đang test…';
+  try {
+    out.textContent = '⏱️ Đang đo độ trễ khi mạng rảnh…';
+    const idle = [];
+    for (let i = 0; i < 8; i++) { try { idle.push(await netFetchRTT()); } catch (_) {} }
+    if (!idle.length) throw new Error('Không kết nối được Cloudflare — máy chưa có mạng?');
+    const idleMs = netMedian(idle);
+    out.textContent = '📥 Đang đo tốc độ tải + độ trễ khi mạng đang bận… (~12 MB, khoảng 10 giây)';
+    const speedP = netDownloadMbps();
+    await new Promise((r) => setTimeout(r, 800));
+    const load = [];
+    for (let i = 0; i < 8; i++) { try { load.push(await netFetchRTT()); } catch (_) {} }
+    const mbps = await speedP;
+    const loadMs = load.length ? netMedian(load) : idleMs;
+    const bloat = Math.max(0, loadMs - idleMs);
+    const g = netGrade(bloat);
+    out.innerHTML = `<div class="net-res">
+      <div class="net-stat"><b>${mbps.toFixed(1)}</b><span>Mbps tải</span></div>
+      <div class="net-stat"><b>${Math.round(idleMs)}</b><span>ms ping rảnh</span></div>
+      <div class="net-stat"><b>+${Math.round(bloat)}</b><span>ms ping khi bận</span></div>
+      <div class="net-grade"><b>${g}</b><span>Bufferbloat</span></div>
+    </div>`;
+    const rows = [
+      ['Duyệt web nhẹ', mbps >= 5],
+      ['Gọi audio / video call', bloat < 150 && idleMs < 250],
+      ['Xem phim 4K', mbps >= 25],
+      ['Gaming online', bloat < 80 && idleMs < 120],
+    ];
+    table.innerHTML = `<table class="nettable"><thead><tr><th>Việc cần mạng</th><th>Kết luận trên mạng hiện tại</th></tr></thead><tbody>
+      ${rows.map(([n, ok]) => `<tr><td>${n}</td><td>${ok ? '✅ Oke' : '⚠️ Khó chịu — tốc độ thấp hoặc bufferbloat cao'}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="muted small">Bufferbloat = mức ping tăng khi mạng đang tải đầy: càng thấp càng tốt. Cao → bật QoS trên router hoặc hạn chế tải khi chơi game.</p>`;
+  } catch (e) {
+    out.textContent = '⚠️ ' + e.message;
+    table.innerHTML = '';
+  }
+  netTestBusy = false; btn.disabled = false; btn.textContent = '▶️ Chạy test mạng';
+}
+$('netTestRun').addEventListener('click', runNetTest);
 
 // ---------- Processes ----------
 // v3.6.0: retry 1 lần khi fetch lỗi (tool vừa relaunch / network hiccup) — báo lỗi inline, không chỉ toast

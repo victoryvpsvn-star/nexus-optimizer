@@ -234,3 +234,16 @@ func registerPerfRoutes(mux *http.ServeMux) {
 }
 
 func fmtMs(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) + " ms" }
+
+// firstLine — rút gọn output của lệnh hệ thống thành 1 dòng ≤120 ký tự (dùng chung
+// perf + fixes + appopt trên mọi nền tảng — trước đây nằm ở perf_windows.go, v3.7.0 chuyển)
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	if len(s) > 120 {
+		s = s[:120]
+	}
+	return s
+}

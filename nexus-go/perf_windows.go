@@ -314,16 +314,7 @@ func perfGameGPUList() GameGpuList {
 	return lst
 }
 
-func firstLine(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i]
-	}
-	if len(s) > 120 {
-		s = s[:120]
-	}
-	return s
-}
+// firstLine đã chuyển sang perf.go dùng chung (v3.7.0: fixes.go cũng cần ở bản Linux)
 
 func firstGUID(s string) string {
 	for _, f := range strings.Fields(s) {

@@ -197,6 +197,27 @@ try {
     ok(`Gaming Mode ${en ? 'BẬT' : 'TẮT'}: ${g.effects.filter((x) => x.success).length}/${g.effects.length} bước OK (nền không-Windows sẽ báo trung thực)`);
   }
 
+  // ---- Bước 7 (v3.7.0): App Optimizer + Fixes — shape trung thực trên nền không-Windows ----
+  const apps = await (await fetch(BASE + '/api/appopt')).json();
+  if (!Array.isArray(apps) || apps.length !== 6) fail(`appopt phải trả 6 app: ${apps ? apps.length : 'null'}`);
+  if (apps.some((a) => a.installed !== false)) fail('trên Linux không được báo app đã cài (detect đường dẫn Windows)');
+  if (!apps.every((a) => typeof a.id === 'string' && typeof a.desc === 'string' && a.warning)) fail('mỗi app phải có id/desc/warning');
+  const appRun = await (await fetch(BASE + '/api/appopt', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: 'edge', enabled: true }),
+  })).json();
+  if (appRun.success !== false) fail('appopt trên Linux phải báo trung thực success=false');
+  ok('App Optimizer: 6 app detect trung thực (0 cài trên Linux) + POST báo "chỉ Windows" đúng');
+  const fixes = await (await fetch(BASE + '/api/fixes')).json();
+  if (!Array.isArray(fixes) || fixes.length !== 6) fail(`fixes phải trả 6 fix: ${fixes ? fixes.length : 'null'}`);
+  const fixRun = await (await fetch(BASE + '/api/fixes', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: 'fix-internet' }),
+  })).json();
+  if (!Array.isArray(fixRun.steps) || fixRun.steps.length < 1) fail('fixes POST phải trả steps');
+  if (fixRun.success !== false || fixRun.mode !== 'không-Windows') fail('fixes trên Linux phải trung thực (mode=không-Windows)');
+  ok(`Fixes: 6 fix catalog OK + POST fix-internet trả steps trung thực (mode=${fixRun.mode})`);
+
   summary.pass = true;
   ok(`FPS TĂNG (giữ nhịp): ${base.fps} → ${after.fps} (mục tiêu 120) • năng lực thật: ${base.max} → ${after.max} FPS — ảnh test FPS oke`);
   writeSummary();

@@ -438,3 +438,22 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
 - Fix gốc: job `release` riêng needs [build-go, perf-test] (chỉ cắt khi cả 2 xanh),
   download-artifact exe → softprops cut go-v{run_number} + asset. Push e5f94b9 → run #35
   (44083775053): 3/3 job xanh, go-v35 TỰ SINH ✓. Từ giờ mọi push xanh = release mới tự có.
+
+
+## 13-a: v3.6.0 (SHA 350f3ca, run 44097394724 #36) — 4 yêu cầu của user trong 1 bản
+1. FIX lỗi đổi màu: root cause = ~30 chỗ style.css hardcode hồng rgba(255,126,182/…)/#ffb7d5
+   trong khi chỉ 17 chỗ dùng var(--accent) → đổi accent chỉ ăn ít chỗ, nhìn như không đổi.
+   Fix: thêm --accent-rgb/--accent2-rgb cho cả 6 theme, đổi hết sang rgba(var(--accent-rgb),a)
+   (scripts/fix_accent.py, tương thích mọi WebView2 — không dùng color-mix). Smoke UI:
+   chọn Cyan Violet → accent #4fd1c5 + border/glow/nav/slider toàn UI theo accent ✓.
+2. Bỏ badge "100% FREE": topbar badge, hero Tổng quan, brand-sub, i18n entries.
+3. Game/CPU/GPU: (a) endpoint /api/perf/game-gpu — UserGpuPreferences "GpuPreference=2;"
+   cho exe game (HKCU, KHÔNG cần admin) + UI card trong Hiệu năng + list/clear;
+   (b) preset Gaming 17→20 mục: +win-nagle, +win-gpu-tdr-delay, +win-cpu-dynamic-tick-off
+   (test TestGamingPresetIdsExist enforce id tồn tại + đủ revert, one-shot ram-clean/flush-dns
+   được miễn); (c) ép xung: CPU min state 100% mở rộng từ "max" sang cả "cân bằng".
+4. Chống lỗi máy thật: go test ./... vào CI (catalog integrity: Apply/Revert non-nil, risk hợp lệ,
+   unique id, name/category/desc đủ) + CI perf-test: game-gpu set→list→clear OK + gaming
+   BẬT/TẮT shape 20 effects; FPS test 2 pha vẫn xanh (60→120, max thật 2039→1419).
+- Process "Failed to fetch" (user screenshot): thêm retry 1 lần + báo lỗi inline trong bảng.
+- release go-v36 tự cắt ✓ (job auto), exe đã về download/Sakura-Tool-x64.exe (buildNumber=36).
