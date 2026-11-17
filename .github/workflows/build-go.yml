@@ -123,12 +123,19 @@ jobs:
           done
           curl -sf http://127.0.0.1:32199/api/health
 
+      - name: Lấy token phiên (v3.9.0 tokenGuard - audit P1-07)
+        run: |
+          TOK=$(curl -sf http://127.0.0.1:32199/ | grep -o '__nexus_token="[a-f0-9]*"' | cut -d'"' -f2)
+          [ -n "$TOK" ] || { echo "❌ Không lấy được token phiên từ UI"; exit 1; }
+          echo "API_TOKEN=$TOK" >> "$GITHUB_ENV"
+          echo "Token phiên: ${TOK:0:8}…"
+
       - name: Bước 1 — Test ép xung qua API (trước khi test FPS)
         run: |
-          OC=$(curl -sf -X POST http://127.0.0.1:32199/api/perf/overclock -H 'Content-Type: application/json' -d '{"level":"balanced"}')
+          OC=$(curl -sf -X POST http://127.0.0.1:32199/api/perf/overclock -H 'Content-Type: application/json' -H "X-Nexus-Token: $API_TOKEN" -d '{"level":"balanced"}')
           echo "$OC"
           echo "$OC" | jq -e '.success == true' > /dev/null || { echo "❌ Ép xung FAIL"; exit 1; }
-          TR=$(curl -sf -X POST http://127.0.0.1:32199/api/perf/timer-resolution -H 'Content-Type: application/json' -d '{"action":"auto"}')
+          TR=$(curl -sf -X POST http://127.0.0.1:32199/api/perf/timer-resolution -H 'Content-Type: application/json' -H "X-Nexus-Token: $API_TOKEN" -d '{"action":"auto"}')
           echo "$TR"
           echo "$TR" | jq -e '.success == true' > /dev/null || { echo "❌ Timer resolution FAIL"; exit 1; }
           echo "✅ Ép xung + timer resolution OK (chế độ mô phỏng CI — Windows sẽ gọi nvidia-smi/powercfg/ntdll thật)"
