@@ -6,7 +6,17 @@
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const api = (p, opt) => fetch(p, opt).then((r) => r.json());
+  // v3.9.0 (audit P1-07 + CI #40): local api cũ shadow global api() của app.js và gọi
+  // fetch KHÔNG token → mọi POST /api/perf/* bị tokenGuard 403. Giữ nguyên semantics
+  // (trả JSON, không throw) nhưng gắn token phiên + merge headers đúng cách.
+  const api = (p, opt) => fetch(p, {
+    ...(opt || {}),
+    headers: {
+      'Content-Type': 'application/json',
+      ...(window.__nexus_token ? { 'X-Nexus-Token': window.__nexus_token } : {}),
+      ...((opt && opt.headers) || {}),
+    },
+  }).then((r) => r.json());
   const JSON_HDR = { 'Content-Type': 'application/json' };
 
   let perfSet = { fpsTarget: 60, timerRes: 'auto', ocLevel: 'balanced' };

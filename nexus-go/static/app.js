@@ -31,11 +31,17 @@ let statsTimer = null;
 // ---------- helpers ----------
 async function api(path, opts = {}) {
   // v3.9.0 (audit P1-07): token phiên sinh từ server, inject vào UI — mọi route
-  // POST/PUT/DELETE bắt buộc kèm header này (chặn CSRF/local-web từ tiến trình khác)
+  // POST/PUT/DELETE bắt buộc kèm header này (chặn CSRF/local-web từ tiến trình khác).
+  // Merge headers ĐÚNG CÁCH: opts.headers không được đè mất token (CI #40 đã dính).
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(window.__nexus_token ? { 'X-Nexus-Token': window.__nexus_token } : {}) },
     ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(window.__nexus_token ? { 'X-Nexus-Token': window.__nexus_token } : {}),
+      ...(opts.headers || {}),
+    },
+    // body có thể là object (chuẩn) hoặc đã là JSON string (perf.js) — không stringify 2 lần
+    body: opts.body === undefined ? undefined : (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)),
   });
   let data = {};
   try { data = await res.json(); } catch { /* body rỗng */ }

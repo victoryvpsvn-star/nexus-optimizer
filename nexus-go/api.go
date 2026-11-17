@@ -449,6 +449,9 @@ func buildMux() http.Handler {
 	sub, _ := fs.Sub(staticFS, "static")
 	fileServer := http.FileServer(http.FS(sub))
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		// v3.9.0: static luôn no-store — sau tự cập nhật exe, UI cũ trong cache WebView2
+		// không được gọi API thiếu token (403 loang loang)
+		w.Header().Set("Cache-Control", "no-store")
 		if r.URL.Path != "/" && !strings.HasPrefix(r.URL.Path, "/index.html") {
 			fileServer.ServeHTTP(w, r)
 			return
