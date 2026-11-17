@@ -57,6 +57,8 @@ func buildMux() http.Handler {
 	// v3.7.0: App Optimizer + Fixes
 	registerAppOptRoutes(mux)
 	registerFixRoutes(mux)
+	// v3.8.0: Dịch vụ (Services) — nhóm dịch vụ + preset
+	registerServicesRoutes(mux)
 
 	// ---------- Stats ----------
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {

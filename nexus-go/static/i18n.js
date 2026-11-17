@@ -105,6 +105,23 @@
     'thiếu': 'missing',
 
     /* ---- v3.6.0: GPU ưu tiên cao cho game ---- */
+    /* ---- v3.7.0: App Optimizer + Fixes + Mạng ---- */
+    'Tối ưu riêng từng app phổ biến — phát hiện app đã cài thật trên máy': 'Optimize popular apps individually — real install detection',
+    'Sửa nhanh các lỗi Windows thường gặp — 1 nút bấm': 'Quick fixes for common Windows issues — one click',
+    /* ---- v3.8.0: Dịch vụ ---- */
+    'Tắt dịch vụ nền theo nhóm — preset Off / Minimum / Medium / Extreme': 'Disable background services by group — Off / Minimum / Medium / Extreme presets',
+    '🗂️ Dịch vụ': '🗂️ Services',
+    '🔍 Lọc dịch vụ…': '🔍 Filter services…',
+    '⚡ Tắt realtime': '⚡ Disable realtime',
+    '↩ Bật lại realtime': '↩ Re-enable realtime',
+    '🚫 Realtime đang TẮT': '🚫 Realtime is OFF',
+    '🛡️ Realtime đang BẬT': '🛡️ Realtime is ON',
+    '⚡ Tắt cả nhóm': '⚡ Disable group',
+    '🚫 Đã tắt': '🚫 Disabled',
+    '◐ Một phần': '◐ Partial',
+    '⚪ Mặc định': '⚪ Default',
+    'N/A — không có trên máy': 'N/A — not present on this PC',
+    '↩ Khôi phục': '↩ Restore',
     'Tối ưu riêng từng app phổ biến — phát hiện app đã cài thật trên máy': 'Optimize popular apps individually — real install detection',
     'Sửa nhanh các lỗi Windows thường gặp — 1 nút bấm': 'Quick fixes for common Windows issues — one click',
     'Đo tốc độ tải, độ trễ (ping) và mức tăng ping khi mạng đang bận (bufferbloat) — chỉ báo mạng có ổn cho gaming/gọi video không. Test qua Cloudflare, không cài gì thêm.': 'Measures download speed, latency, and ping increase under load (bufferbloat) — tells if your connection is fit for gaming or calls. Runs via Cloudflare.',

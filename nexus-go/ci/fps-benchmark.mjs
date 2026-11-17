@@ -218,6 +218,20 @@ try {
   if (fixRun.success !== false || fixRun.mode !== 'không-Windows') fail('fixes trên Linux phải trung thực (mode=không-Windows)');
   ok(`Fixes: 6 fix catalog OK + POST fix-internet trả steps trung thực (mode=${fixRun.mode})`);
 
+  // ---- Bước 8 (v3.8.0): Dịch vụ — 4 nhóm + preset trung thực trên nền không-Windows ----
+  const svcs = await (await fetch(BASE + '/api/services')).json();
+  if (!Array.isArray(svcs.groups) || svcs.groups.length !== 4) fail(`services phải trả 4 nhóm: ${svcs.groups ? svcs.groups.length : 'null'}`);
+  const nItems = svcs.groups.reduce((n, g) => n + g.items.length, 0);
+  if (nItems !== 9) fail(`tổng 9 mục dịch vụ, nhận ${nItems}`);
+  if (svcs.groups.some((g) => !['red', 'orange', 'teal', 'purple'].includes(g.tone))) fail('nhóm phải có tone glow');
+  if (!svcs.groups.every((g) => g.items.every((i) => typeof i.name === 'string' && typeof i.desc === 'string' && i.state))) fail('item thiếu name/desc/state');
+  const svcRun = await (await fetch(BASE + '/api/services', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'preset', level: 'minimum' }),
+  })).json();
+  if (svcRun.success !== false || svcRun.mode === 'windows') fail('preset trên Linux phải trung thực');
+  ok(`Dịch vụ: 4 nhóm / 9 mục (tone glow đủ) + POST preset minimum trung thực (mode=${svcRun.mode})`);
+
   summary.pass = true;
   ok(`FPS TĂNG (giữ nhịp): ${base.fps} → ${after.fps} (mục tiêu 120) • năng lực thật: ${base.max} → ${after.max} FPS — ảnh test FPS oke`);
   writeSummary();

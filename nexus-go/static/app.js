@@ -9,6 +9,7 @@ const SECTION_META = {
   tweaks: ['Tinh chỉnh', 'Danh sách tối ưu xếp hạng theo độ ưu tiên'],
   appopt: ['App Optimizer', 'Tối ưu riêng từng app phổ biến — phát hiện app đã cài thật trên máy'],
   fixes: ['Fixes', 'Sửa nhanh các lỗi Windows thường gặp — 1 nút bấm'],
+  services: ['Dịch vụ', 'Tắt dịch vụ nền theo nhóm — preset Off / Minimum / Medium / Extreme'],
   processes: ['Tiến trình', 'Quản lý tiến trình đang chạy'],
   network: ['Mạng', 'Giao diện + cổng đang lắng nghe'],
   script: ['Script nâng cao', 'Tự viết và chạy script tùy chỉnh — Advanced'],
@@ -87,6 +88,7 @@ function showSection(name) {
   else if (name === 'tweaks') refreshTweaks();
   else if (name === 'appopt') refreshAppOpt();
   else if (name === 'fixes') refreshFixes();
+  else if (name === 'services') refreshServices();
   else if (name === 'processes') refreshProcesses();
   else if (name === 'network') refreshNetwork();
   else if (name === 'script') refreshScripts();
@@ -533,6 +535,122 @@ async function runNetTest() {
   netTestBusy = false; btn.disabled = false; btn.textContent = '▶️ Chạy test mạng';
 }
 $('netTestRun').addEventListener('click', runNetTest);
+
+// ---------- Dịch vụ (Services, v3.8.0) ----------
+const SVC_STATE_LABEL = { off: ['🚫 Đã tắt', 'err'], partial: ['◐ Một phần', 'warn'], default: ['⚪ Mặc định', 'mut'], na: ['N/A — không có trên máy', 'mut'], unknown: ['—', 'mut'] };
+
+function svcStateChip(state) {
+  const [txt, cls] = SVC_STATE_LABEL[state] || SVC_STATE_LABEL.unknown;
+  return `<span class="chip ${cls === 'err' ? 'mut' : 'mut'}" style="${state === 'off' ? 'color:#ffb0c8' : ''}">${txt}</span>`;
+}
+
+async function refreshServices() {
+  const el = $('svcGroups');
+  try {
+    const v = await api('/api/services');
+    el.innerHTML = v.groups.map((g) => `
+      <div class="card svc-cat" data-tone="${g.tone}">
+        <div class="svc-banner">
+          <span class="svc-banner-ico">${g.icon}</span>
+          <button class="btn svc-master" data-svcgroup="${g.id}" data-name="${esc(g.name)}">⚡ Tắt cả nhóm</button>
+        </div>
+        <h3 style="margin:10px 4px 4px">${esc(g.name)}</h3>
+        <div class="svc-items">
+        ${g.items.map((it) => `
+          <div class="svc-item" data-search="${esc((it.name + ' ' + it.desc + ' ' + (it.services || []).map((s) => s.name).join(' ')).toLowerCase())}">
+            <div class="svc-item-main">
+              <b>${esc(it.name)}</b>
+              <p class="muted small">${esc(it.desc)}</p>
+              ${it.warning ? `<p class="svc-warn">⚠️ ${esc(it.warning)}</p>` : ''}
+              ${it.state === 'na' ? '<p class="muted small">Không có dịch vụ nào của nhóm này trên máy.</p>' : ''}
+            </div>
+            <div class="svc-item-side">
+              ${svcStateChip(it.state)}
+              ${it.state !== 'na' ? `<button class="btn" data-svcitem="${it.id}" data-name="${esc(it.name)}" data-state="${it.state}">${it.state === 'off' ? '↩ Khôi phục' : '⚡ Tắt'}</button>` : ''}
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>`).join('');
+    // Defender card
+    const d = v.defender || {};
+    $('svcDefenderState').textContent = !d.available ? '—' : d.applied ? '🚫 Realtime đang TẮT' : '🛡️ Realtime đang BẬT';
+    const db = $('svcDefenderBtn');
+    db.textContent = d.applied ? '↩ Bật lại realtime' : '⚡ Tắt realtime';
+    db.onclick = async () => {
+      const off = d.applied;
+      if (!off && !confirm('Tắt bảo vệ realtime của Defender ngay?\n(Windows Tamper Protection có thể chặn — tool sẽ báo thật)')) return;
+      if (off && !confirm('Bật lại bảo vệ realtime của Defender?')) return;
+      db.disabled = true;
+      try {
+        const r = await api('/api/services', { method: 'POST', body: JSON.stringify({ action: 'defender', level: off ? 'on' : 'off' }) });
+        toast(r.message || 'Xong', r.success ? 'ok' : 'err');
+      } catch (e) { toast(e.message, 'err'); }
+      db.disabled = false;
+      refreshServices();
+    };
+    // toggle từng mục
+    el.querySelectorAll('[data-svcitem]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const off = b.dataset.state === 'off';
+        if (!off && !confirm(`Tắt "${b.dataset.name}"?\nCác dịch vụ nền của mục này sẽ bị vô hiệu — hoàn tác được mọi lúc.`)) return;
+        if (off && !confirm(`Khôi phục "${b.dataset.name}" về mặc định Windows?`)) return;
+        b.disabled = true;
+        try {
+          const r = await api('/api/services', { method: 'POST', body: JSON.stringify({ action: 'item', item: b.dataset.svcitem, level: off ? 'default' : 'off' }) });
+          toast(r.message || 'Xong', r.success ? 'ok' : 'err');
+        } catch (e) { toast(e.message, 'err'); }
+        refreshServices();
+      });
+    });
+    // master toggle cả nhóm
+    el.querySelectorAll('[data-svcgroup]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (!confirm(`Tắt TOÀN BỘ dịch vụ của nhóm "${b.dataset.name}"?\nHoàn tác được mọi lúc bằng nút khôi phục.`)) return;
+        b.disabled = true;
+        try {
+          const r = await api('/api/services', { method: 'POST', body: JSON.stringify({ action: 'group', item: b.dataset.svcgroup }) });
+          toast(r.message || 'Xong', r.success ? 'ok' : 'err');
+        } catch (e) { toast(e.message, 'err'); }
+        b.disabled = false;
+        refreshServices();
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="card"><b>Lỗi</b><p class="muted">${esc(e.message)}</p></div>`;
+  }
+}
+
+// preset bar
+document.querySelectorAll('.preset-btn').forEach((b) => {
+  b.addEventListener('click', async () => {
+    const lv = b.dataset.preset;
+    const warns = {
+      off: 'Khôi phục TOÀN BỘ dịch vụ về cấu hình mặc định Windows?',
+      minimum: 'Áp dụng preset Minimum — tắt các dịch vụ vô dụng + telemetry nhẹ?',
+      medium: 'Áp dụng preset Medium — tắt thêm dò LAN, cảm biến, Xbox, Hyper-V?',
+      extreme: '⚠️ EXTREME: tắt TOÀN BỘ dịch vụ trong danh mục (in ấn, RDP, Windows Update, Store, Xbox, tìm kiếm…)!\nChỉ nên dùng cho máy chơi game thuần — hoàn tác bằng preset Off. Tiếp tục?',
+    };
+    if (!confirm(warns[lv])) return;
+    document.querySelectorAll('.preset-btn').forEach((x) => (x.disabled = true));
+    try {
+      const r = await api('/api/services', { method: 'POST', body: JSON.stringify({ action: 'preset', level: lv }) });
+      toast(r.message || 'Xong', r.success ? 'ok' : 'err');
+    } catch (e) { toast(e.message, 'err'); }
+    document.querySelectorAll('.preset-btn').forEach((x) => (x.disabled = false));
+    refreshServices();
+  });
+});
+// search filter
+$('svcFilter').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('#svcGroups .svc-item').forEach((row) => {
+    row.style.display = !q || (row.dataset.search || '').includes(q) ? '' : 'none';
+  });
+  document.querySelectorAll('#svcGroups .svc-cat').forEach((cat) => {
+    const any = [...cat.querySelectorAll('.svc-item')].some((r) => r.style.display !== 'none');
+    cat.style.display = any ? '' : 'none';
+  });
+});
 
 // ---------- Processes ----------
 // v3.6.0: retry 1 lần khi fetch lỗi (tool vừa relaunch / network hiccup) — báo lỗi inline, không chỉ toast

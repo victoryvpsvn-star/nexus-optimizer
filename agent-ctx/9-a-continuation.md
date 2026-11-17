@@ -457,3 +457,22 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
    BẬT/TẮT shape 20 effects; FPS test 2 pha vẫn xanh (60→120, max thật 2039→1419).
 - Process "Failed to fetch" (user screenshot): thêm retry 1 lần + báo lỗi inline trong bảng.
 - release go-v36 tự cắt ✓ (job auto), exe đã về download/Sakura-Tool-x64.exe (buildNumber=36).
+
+
+## 14-a: v3.7.0 (SHA 74dc2ba, run 44101683034 #37) — App Optimizer + Fixes + Bufferbloat (theo 5 ảnh tham chiếu user gửi)
+- **App Optimizer** (apps_opt.go + tab mới): 6 app Edge/Chrome/Brave/Firefox/Discord/Spotify —
+  detect THẬT qua đường dẫn chuẩn (Program Files/APPDATA), apply/revert riêng từng app:
+  trình duyệt = chính sách HKLM (StartupBoost/BackgroundMode/DisableTelemetry, gateWrap admin),
+  Discord = settings.json HardwareAcceleration=false (user) + IFEO CpuPriorityClass=16384 (admin),
+  Spotify = xóa HKCU Run. Trạng thái lưu store AppOptStates; app chưa cài → warning
+  "App not found" trung thực; UI grid card (.acard + icon + warn vàng) giống app tham chiếu.
+- **Fixes** (fixes.go + tab mới): 6 fix — internet (flushdns/winsock/tcprenew), Windows Update
+  (wuauserv/bits/dosvc), audio (Audiosrv/AudioEndpointBuilder), Explorer, printer spooler,
+  Store wsreset. Mỗi fix trả steps[] trung thực từng bước; không-Windows → mode="không-Windows".
+- **Mạng — Bufferbloat & Speed** (client-side app.js): fetch speed.cloudflare.com __down 12MB
+  đo Mbps + RTT rảnh 8 lần + RTT khi bận → bloat delta → grade A+..F + bảng kết luận
+  web/call/4K/gaming. Smoke thật trong browser: 404 Mbps, 43ms, +0ms → A+.
+- CI thêm bước 7: appopt 6 app shape (Linux → installed=false + warning) + fixes shape
+  trung thực. go test vẫn xanh; CI #37 3/3 xanh, go-v37 tự cắt, exe buildNumber=37 về download/.
+- Ghi chú: firstLine chuyển perf_windows.go → perf.go (dùng chung); step() đổi tên fixStep
+  (trùng `step` type trong tweaks_table.go — build tag 2 nền bắt được).
