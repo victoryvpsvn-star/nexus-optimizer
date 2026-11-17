@@ -412,3 +412,17 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
 - KẾT QUẢ CI run 44062955472 (SHA 5ec2bb5, run #33): cả 2 job SUCCESS —
   JSON {"baseline":60,"after":120,"pass":true}, log "FPS TĂNG: 60 → 120". 4 ảnh artifact OK.
 - exe chuẩn build #33 tải từ CI artifact về download/Sakura-Tool-x64.exe; ảnh đặt download/fps-test-photos/.
+
+
+## Bổ sung 12-o: v3.5.1 — FPS test 2 pha chống fake (user bắt lỗi "fake fps à")
+- User质疑 đúng: bản 3.5.0 chỉ là paced test (đặt 120 thì nhắm nhịp 120 — frame vẽ thật nhưng
+  không ĐO năng lực). Sửa thành 2 pha trong perf.js startBench():
+  PHA 1 giữ nhịp 4s (paced, test ngưỡng timer) → PHA 2 MessageChannel loop KHÔNG GIỚI HẠN 3s
+  (không qua setTimeout → không clamp 4ms) = throughput render thật, không đặt trước số.
+- Verdict gắn dataset paced/max (#benchVerdict data-done/paced/max); 3 nhánh: đủ nhịp+đủ năng lực
+  (xanh) / thiếu năng lực thật (đỏ, ghi rõ giới hạn phần cứng) / đủ năng lực thiếu nhịp (vàng).
+- CI: assert max ≥ 120 (không khoe 120 khi máy không đủ) + max ≥ paced; KQ run 44073019147 (#34,
+  SHA ac41ec2): baseline paced 60/max 1249 → sau Tối ưu paced 119/max 964, pass:true — số có
+  jitter (119/120, max dao động) = dấu hiệu đo thật. exe #34 + 4 ảnh đã về download/.
+- Lưu ý trung thực cho user: trong game thật, FPS vẫn cap bởi engine/vsync/màn hình — timer
+  resolution giúp nhịp frame mượt (stutter) + màn 120Hz+; tool không đội FPS game vượt cap.
