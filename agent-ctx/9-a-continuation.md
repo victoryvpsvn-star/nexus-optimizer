@@ -567,3 +567,23 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   (lần này: gaming effects 19→18 sau khi bỏ win-sysresp — CI fail 1 round rồi fix).
 - Remote có commit của chủ repo (upload LICENSE qua web) → pull --rebase rồi push, KHÔNG force.
 - Verify cuối: sha256sum exe tải về == assets[].digest GitHub (luồng verify updater mới đúng).
+
+
+## 17-b: v4.2.0 (go-v47, run 44338043813) — "học" audit #2 (upload/`Pasted Content_1795015682358.txt`, P1×8+P2×10)
+- Audit #2 là STATIC REVIEW trên main sau v4.1.0 — nêu tiêu chí 8 trạng thái (success/partial/
+  failed/pending/unsupported/conflict/unknown). Triage: 9 findings hợp lệ Go-edition, sửa hết:
+  perf snapshot ĐỦ (HAGS strict kể cả exists=false + CPU MIN AC/DC trên plan bị thao tác +
+  ultimateGUID) + restore đầy đủ verify + chỉ clear khi trọn (P1-01); Success tổng hợp đúng,
+  planOK/HAGS-fail/Ultimate-fail/CPU-min-fail đều fail tổng thể (P1-02); self-test FULL chặn
+  Appx qua tweakHasAppx (P1-03); CPU restore không setactive khi user đổi plan giữa chừng
+  (P1-04); GPU restore PENDING khi snapshot còn + nvidia-smi mất (P1-05); GPU clock read-back
+  verify + wording SM-only (P1-06); nvSmi() + runSysExe chuẩn hóa (P2-01/02); wording trần xung
+  (P2-03); fixServicesRestart + fixPrinter bỏ OR + verify STOPPED/RUNNING (P2-04/05); fixSearch
+  chỉ STOPPED rõ — output rỗng = UNKNOWN (P2-06); sysOpMu coordinator 409 cho 7 route mutation
+  (P2-08); job CI đổi tên Render benchmark (P2-10).
+- P1-07: Go edition đã bind 127.0.0.1 cứng sẵn (main.go) — đạt. Caddyfile/proxy.ts/backup.ts/
+  electron main.js DB migration (P2-07) thuộc LEGACY Electron — BACKLOG chưa sửa.
+- Bài học: test tự viết phải khớp semantics an toàn đã chọn (exit lỗi → UNKNOWN kể cả output
+  rõ — sửa test, không nới code). Anchor patch python phải lấy text SAU các replace trước đó
+  (runExe→nvSmi đổi text anchor — CI round trip tránh được nếu check thứ tự).
+- Verify: CI 3/3; exe go-v47 buildNumber=47; SHA-256 exe tải về == digest release khớp 100%.

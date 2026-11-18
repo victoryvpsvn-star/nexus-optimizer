@@ -206,12 +206,17 @@ func scanTargets() CleanupScanResponse {
 }
 
 /** Xóa NỘI DUNG thư mục (giữ nguyên thư mục) — tôn trọng FilePattern nếu có */
-func emptyDirContents(path string, only *regexp.Regexp) (int64, int) {
+/** v4.3.0 (P2-05): phân biệt "folder không tồn tại" (bình thường → coi như sạch) với
+ * lỗi thật (access denied/locked) — không được báo Success=true giả khi không đọc được. */
+func emptyDirContents(path string, only *regexp.Regexp) (int64, int, error) {
 	var freed int64
 	n := 0
 	ents, err := os.ReadDir(path)
 	if err != nil {
-		return 0, 0
+		if os.IsNotExist(err) {
+			return 0, 0, nil // folder chưa tồn tại = không có gì để dọn
+		}
+		return 0, 0, err // access denied / lỗi I/O — caller phải báo trung thực
 	}
 	for _, e := range ents {
 		full := filepath.Join(path, e.Name())
@@ -224,19 +229,23 @@ func emptyDirContents(path string, only *regexp.Regexp) (int64, int) {
 			n++
 		}
 	}
-	return freed, n
+	return freed, n, nil
 }
 
 /** Clean browser cache: xóa Cache/Code Cache/GPUCache của các profile thật */
-func cleanBrowserRoot(root string) (int64, int) {
+func cleanBrowserRoot(root string) (int64, int, error) {
 	var freed int64
 	n := 0
+	var firstErr error
 	for _, c := range browserCacheDirs(root) {
-		f, cnt := emptyDirContents(c, nil)
+		f, cnt, err := emptyDirContents(c, nil)
 		freed += f
 		n += cnt
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return freed, n
+	return freed, n, firstErr
 }
 
 /** Recycle bin: Clear-RecycleBin -Force (PS); Delivery Optimization: Delete-DeliveryOptimizationCache */
@@ -269,20 +278,32 @@ func cleanTargetWin(t targetDef) CleanupResult {
 	}
 	var freed int64
 	n := 0
+	var firstErr error
 	if t.BrowserRoot != "" {
 		for _, root := range t.Paths {
-			f, c := cleanBrowserRoot(root)
+			f, c, err := cleanBrowserRoot(root)
 			freed += f
 			n += c
+			if err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	} else {
 		for _, p := range t.Paths {
-			f, c := emptyDirContents(p, t.FilePattern)
+			f, c, err := emptyDirContents(p, t.FilePattern)
 			freed += f
 			n += c
+			if err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 	name := targetNameByID(t.ID)
+	if firstErr != nil {
+		// v4.3.0 (P2-05): không đọc được folder là FAIL thật, không nuốt thành "không có gì để dọn"
+		return CleanupResult{ID: t.ID, Name: name, Kind: "disk", Success: false,
+			Message: truncateShort("Không truy cập được thư mục (cần Administrator hoặc file bị khóa): " + firstErr.Error() + " — đã dọn được " + fmt.Sprint(n) + " mục trước đó")}
+	}
 	if n == 0 && freed == 0 {
 		return CleanupResult{ID: t.ID, Name: name, Kind: "disk", Success: true, FreedBytes: 0,
 			Message: "Không có gì để dọn (hoặc file đang bị khóa bởi app khác)"}
@@ -316,32 +337,49 @@ func humanBytes(b int64) string {
 
 /** POST /api/cleanup {action: disk|ram|all, targets?: [id,...]} — targets rỗng = dọn hết;
  * có targets thì chỉ dọn đúng các mục user tick chọn trên UI */
+/** v4.3.0 (P1-01): gate của Disk worker — action=ram TUYỆT ĐỐI không được spawn worker
+ * xóa disk (bug cũ: goroutine chạy ngầm xóa Temp/Recycle Bin dù user chỉ chọn RAM). */
+func shouldRunDiskWorkers(action string) bool {
+	return action == "disk" || action == "all"
+}
+
 func runCleanup(action string, ids []string) CleanupRunResponse {
 	out := CleanupRunResponse{Results: []CleanupResult{}}
 	sel := map[string]bool{}
 	for _, id := range ids {
 		sel[id] = true
 	}
+	// v4.3.0 (P1-01): BUG NGUY HIỂM — goroutine Disk trước đây spawn VÔ ĐIỀU KIỆN,
+	// action=ram thì kết quả bị bỏ nhưng worker VẪN XÓA FILE ngầm (Temp/Prefetch/
+	// Recycle Bin...). Giờ chỉ spawn worker khi action thật sự cần Disk.
+	runDisk := shouldRunDiskWorkers(action)
+	if !runDisk && action != "ram" {
+		out.Results = append(out.Results, CleanupResult{ID: "invalid", Name: "Hành động", Kind: "disk",
+			Success: false, Message: "Action không hợp lệ — chỉ nhận disk / ram / all"})
+		return out
+	}
 	doneDisk := make(chan []CleanupResult, 1)
-	go func() {
-		var rs []CleanupResult
-		if runtimeIsWindows {
-			for _, t := range cleanupTargetsWin() {
-				if len(sel) > 0 && !sel[t.ID] {
-					continue
+	if runDisk {
+		go func() {
+			var rs []CleanupResult
+			if runtimeIsWindows {
+				for _, t := range cleanupTargetsWin() {
+					if len(sel) > 0 && !sel[t.ID] {
+						continue
+					}
+					rs = append(rs, cleanTargetWin(t))
 				}
-				rs = append(rs, cleanTargetWin(t))
+				if len(sel) > 0 && len(rs) == 0 {
+					rs = append(rs, CleanupResult{ID: "none", Name: "Mục đã chọn", Kind: "disk", Success: false,
+						Message: "Không có mục nào khớp lựa chọn — hãy tick ít nhất 1 mục"})
+				}
+			} else {
+				rs = append(rs, CleanupResult{ID: "unsupported", Name: "Disk", Kind: "disk", Success: false,
+					Message: "Dọn disk chỉ hỗ trợ trên Windows (bản .exe)"})
 			}
-			if len(sel) > 0 && len(rs) == 0 {
-				rs = append(rs, CleanupResult{ID: "none", Name: "Mục đã chọn", Kind: "disk", Success: false,
-					Message: "Không có mục nào khớp lựa chọn — hãy tick ít nhất 1 mục"})
-			}
-		} else {
-			rs = append(rs, CleanupResult{ID: "unsupported", Name: "Disk", Kind: "disk", Success: false,
-				Message: "Dọn disk chỉ hỗ trợ trên Windows (bản .exe)"})
-		}
-		doneDisk <- rs
-	}()
+			doneDisk <- rs
+		}()
+	}
 	if action == "disk" {
 		out.Results = <-doneDisk
 		for _, r := range out.Results {

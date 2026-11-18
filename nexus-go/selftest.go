@@ -279,6 +279,13 @@ func tweakHasAppx(id string) bool {
 	return false
 }
 
+/** v4.3.0 (P1-02): revert chỉ chạy khi apply THÀNH CÔNG hoặc PARTIAL (đã ghi được
+ * một phần) — apply fail hoàn toàn thì KHÔNG revert, tránh ghi giá trị mặc định đoán
+ * lên cấu hình thật. Partial được đánh dấu qua message marker của runSteps. */
+func shouldRevertAfterApply(applyOK bool, applyMsg string) bool {
+	return applyOK || strings.Contains(applyMsg, "MỘT PHẦN ĐÃ ÁP DỤNG")
+}
+
 func runFull(deadline time.Duration) []SelftestFullEntry {
 	var entries []SelftestFullEntry
 	t0 := time.Now()
@@ -299,11 +306,22 @@ func runFull(deadline time.Duration) []SelftestFullEntry {
 			continue
 		}
 		ap := applyTweakById(a.Def.ID)
-		rv := revertTweakById(a.Def.ID)
-		entries = append(entries, SelftestFullEntry{
+		// v4.3.0 (P1-02): apply thất bại → KHÔNG revert (không ghi đè config hiện tại bằng
+		// giá trị mặc định đoán); apply partial → vẫn revert để trả phần đã áp dụng
+		var rv TweakRunResult
+		revertRan := false
+		if shouldRevertAfterApply(ap.Success, ap.Message) {
+			rv = revertTweakById(a.Def.ID)
+			revertRan = true
+		}
+		e := SelftestFullEntry{
 			ID: a.Def.ID, Name: a.Def.Name, ApplyOK: ap.Success, ApplyMsg: shortDetail(ap.Message),
 			RevertOK: rv.Success, RevertMsg: shortDetail(rv.Message), Skipped: false,
-		})
+		}
+		if !revertRan {
+			e.RevertMsg = "Apply thất bại — KHÔNG revert (tránh ghi giá trị mặc định đoán lên cấu hình thật của máy)"
+		}
+		entries = append(entries, e)
 	}
 	return entries
 }

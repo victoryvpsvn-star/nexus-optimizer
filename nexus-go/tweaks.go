@@ -81,17 +81,36 @@ type RegValue struct {
 	Data string
 }
 
+/** v4.3.0 (P1-08): output của bcdedit xác nhận value KHÔNG CÒN — phân biệt với
+ * access denied/BCD lỗi; chỉ các pattern này mới được coi là "đã ở trạng thái mặc định". */
+func bcdValueAbsentOutput(out string) bool {
+	out = strings.ToLower(out)
+	return strings.Contains(out, "could not be found") || strings.Contains(out, "cannot find") ||
+		strings.Contains(out, "not found") || strings.Contains(out, "unable to find")
+}
+
 func regAddValues(key string, values []RegValue, okMsg string) ActionResult {
 	reg := findSysExe("reg.exe")
 	if reg == "" {
 		return ActionResult{false, noRegExeMsg}
 	}
+	okN := 0
+	var firstErr string
 	for _, v := range values {
 		r := runExe(reg, []string{"add", key, "/v", v.Name, "/t", v.Type, "/d", v.Data, "/f"}, 15*time.Second)
 		if !r.OK {
-			return ActionResult{false, truncateShort(fmt.Sprintf(
-				"reg.exe add %s\\%s thất bại (exit %d): %s", key, v.Name, r.Code, orDefault(r.Stderr, r.Stdout, "không rõ lý do")))}
+			if firstErr == "" {
+				firstErr = truncateShort(fmt.Sprintf(
+					"reg.exe add %s\\%s thất bại (exit %d): %s", key, v.Name, r.Code, orDefault(r.Stderr, r.Stdout, "không rõ lý do")))
+			}
+			if okN > 0 {
+				// v4.3.0 (P2-03): đã ghi được một phần trước khi lỗi → đánh dấu PARTIAL để
+				// UI/state biết máy đã bị thay đổi một phần (revert vẫn có nghĩa)
+				return ActionResult{false, fmt.Sprintf("MỘT PHẦN ĐÃ ÁP DỤNG (%d/%d value) — dừng tại: %s; bấm Khôi phục để trả phần đã ghi", okN, len(values), firstErr)}
+			}
+			return ActionResult{false, firstErr}
 		}
+		okN++
 	}
 	return ActionResult{true, okMsg}
 }
@@ -526,7 +545,12 @@ func tweakCatalog() []TweakAction {
 				if r.OK {
 					return ActionResult{true, "Đã xóa disabledynamictick khỏi BCD — quay về tick động mặc định (khởi động lại để có hiệu lực)"}
 				}
-				return ActionResult{true, fmt.Sprintf("Đã ở trạng thái mặc định (disabledynamictick không còn trong BCD — exit %d); khởi động lại để có hiệu lực", r.Code)}
+				// v4.3.0 (P1-08): phân biệt "value không còn" (hợp lệ) với lỗi thật
+				// (access denied/BCD hỏng) — KHÔNG báo success mù như trước
+				if bcdValueAbsentOutput(r.Stdout + r.Stderr) {
+					return ActionResult{true, "Đã ở trạng thái mặc định (disabledynamictick không còn trong BCD — exit " + fmt.Sprint(r.Code) + "); khởi động lại để có hiệu lực"}
+				}
+				return ActionResult{false, truncateShort("bcdedit /deletevalue thất bại và KHÔNG xác nhận được value đã vắng — BCD vẫn có thể còn disabledynamictick (exit " + fmt.Sprint(r.Code) + "): " + orDefault(r.Stderr, r.Stdout, "không rõ lý do"))}
 			}),
 		},
 		{

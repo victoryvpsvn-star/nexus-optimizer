@@ -4,12 +4,14 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -78,6 +80,8 @@ type storeData struct {
 }
 
 type Store struct {
+	// v4.3.0 (P2-02): lỗi persist gần nhất — surface qua /api/health
+	persistErr atomic.Value
 	mu     sync.Mutex
 	dir    string
 	data   storeData
@@ -165,7 +169,22 @@ func (s *Store) saveLocked() error {
 func (s *Store) Save() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.saveLocked()
+	err := s.saveLocked()
+	if err != nil { // v4.3.0 (P2-02): không nuốt lỗi — ghi lại để UI/health hiển thị
+		s.persistErr.Store(err.Error())
+		log.Printf("[store] LƯU CONFIG THẤT BẠI: %v — thay đổi chỉ nằm trong RAM", err)
+	} else {
+		s.persistErr.Store("")
+	}
+	return err
+}
+
+// LastPersistErr trả lỗi persist gần nhất ("" = OK) — GET /api/health + UI banner
+func (s *Store) LastPersistErr() string {
+	if v := s.persistErr.Load(); v != nil {
+		return v.(string)
+	}
+	return ""
 }
 
 // StartAutosave ghi định kỳ — hạn chế mất dữ liệu khi app bị tắt đột ngột
@@ -178,7 +197,9 @@ func (s *Store) StartAutosave(every time.Duration) {
 			case <-s.stopCh:
 				return
 			case <-t.C:
-				_ = s.Save()
+				if err := s.Save(); err != nil {
+					log.Printf("[store] autosave thất bại: %v — sẽ thử lại chu kỳ sau", err)
+				}
 			}
 		}
 	}()
@@ -230,7 +251,9 @@ func (s *Store) PutSettings(u UISettings) {
 		u.Lang = "vi"
 	}
 	s.data.Settings = u
-	_ = s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.persistErr.Store(err.Error())
+	}
 }
 
 // GetWebhookURL: URL người dùng cấu hình ưu tiên, dự phòng env DISCORD_WEBHOOK_URL
@@ -251,7 +274,9 @@ func (s *Store) SetWebhookURL(url string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.WebhookURL = url
-	_ = s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.persistErr.Store(err.Error())
+	}
 }
 
 func (s *Store) GetTweakState(id string) TweakState {
@@ -264,7 +289,9 @@ func (s *Store) PutTweakState(id string, st TweakState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.TweakStates[id] = st
-	_ = s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.persistErr.Store(err.Error())
+	}
 }
 
 // v3.7.0: trạng thái App Optimizer — map riêng để không đụng TweakStates của catalog

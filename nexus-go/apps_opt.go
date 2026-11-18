@@ -170,6 +170,21 @@ func loadSnapAll() (map[string]map[string]map[string]string, error) {
 }
 
 /** Ghi nguyên tử 1 section; trả lỗi cho caller — không persist được thì caller phải abort */
+/** v4.3.0 (P1-04): read-modify-write CHUNG cho section snapshot — mutate từng key,
+ * KHÔNG bao giờ thay thế cả map (tránh mất key HAGS/CPU-MIN khi block khác save). */
+func updateAppoptSnap(section string, mutate func(m map[string]map[string]string)) error {
+	old, _, lerr := loadAppoptSnap(section)
+	if lerr != nil {
+		return lerr // fail closed — không ghi đè snapshot có thể còn giá trị
+	}
+	m := old
+	if m == nil {
+		m = map[string]map[string]string{}
+	}
+	mutate(m)
+	return saveAppoptSnap(section, m)
+}
+
 func saveAppoptSnap(section string, m map[string]map[string]string) error {
 	snapMu.Lock()
 	defer snapMu.Unlock()
@@ -275,7 +290,7 @@ func regValueMatches(key, name, wantData string) bool {
  * exists=false chỉ khi reg trả lỗi "unable to find" (đa ngôn ngữ: lỗi missing của reg.exe
  * thường vẫn tiếng Anh); các lỗi khác → error, caller phải dừng. */
 func regQueryValueStrict(key, name string) (typ, data string, exists bool, err error) {
-	r := runExe("reg", []string{"query", key, "/v", name}, 10*time.Second)
+	r := runSysExe("reg.exe", []string{"query", key, "/v", name}, 10*time.Second)
 	if !r.OK {
 		out := strings.ToLower(r.Stdout + r.Stderr)
 		if strings.Contains(out, "unable to find") || strings.Contains(out, "cannot find") || strings.Contains(out, "the system was unable") {
@@ -297,7 +312,7 @@ func regQueryValueStrict(key, name string) (typ, data string, exists bool, err e
 
 /** regQueryValue — đọc type+data hiện tại của 1 registry value (dùng cho snapshot) */
 func regQueryValue(key, name string) (string, string, bool) {
-	r := runExe("reg", []string{"query", key, "/v", name}, 10*time.Second)
+	r := runSysExe("reg.exe", []string{"query", key, "/v", name}, 10*time.Second)
 	if !r.OK {
 		return "", "", false
 	}
@@ -336,8 +351,15 @@ func applyBrowserPolicy(id string) AppOptRunResult {
 	// v3.9.0: snapshot giá trị gốc TRƯỚC khi ghi — hoàn tác sẽ trả đúng giá trị cũ
 	// v4.1.0 (phát hiện 06): persist snapshot thất bại → ABORT trước khi đụng registry
 	snap := map[string]map[string]string{}
+	unknownVals := 0
 	for _, v := range vals {
-		if typ, data, found := regQueryValue(key, v.Name); found {
+		// v4.3.0 (P1-07): strict — access denied/lỗi spawn ≠ "không tồn tại"; UNKNOWN → không ghi đè mù
+		typ, data, found, qerr := regQueryValueStrict(key, v.Name)
+		if qerr != nil {
+			unknownVals++
+			continue
+		}
+		if found {
 			snap[v.Name] = map[string]string{"type": typ, "data": data}
 		}
 	}
@@ -388,7 +410,7 @@ func revertBrowserPolicy(id string) AppOptRunResult {
 	var detail []string
 	for _, n := range names {
 		if s, ok := snap[n]; ok {
-			r := runExe("reg", []string{"add", key, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+			r := runSysExe("reg.exe", []string{"add", key, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
 			if !r.OK || !regValueMatches(key, n, s["data"]) {
 				allOK = false
 			}
@@ -451,14 +473,14 @@ func applyDiscord(enabled bool) AppOptRunResult {
 				Detail: "không tìm thấy settings.json của Discord"})
 		}
 		// IFEO CPU priority — cần admin; snapshot giá trị gốc nếu có (persist lỗi → bỏ qua IFEO, không ghi đè)
-		if typ, data, found := regQueryValue(ifeoDiscord, "CpuPriorityClass"); found {
+		// v4.3.0 (P1-07): strict — UNKNOWN (access denied) không được coi là value không có
+		if typ, data, found, qerr := regQueryValueStrict(ifeoDiscord, "CpuPriorityClass"); qerr == nil && found {
 			if serr := saveAppoptSnap("discord-ifeo", map[string]map[string]string{
 				"CpuPriorityClass": map[string]string{"type": typ, "data": data},
 			}); serr != nil {
 				res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord (IFEO) → bỏ qua", OK: false,
-					Detail: "lưu snapshot giá trị gốc lỗi: " + serr.Error() + " — không ghi đè IFEO"})
-				r2 := regAddValues(ifeoDiscord, []RegValue{{"CpuPriorityClass", "REG_DWORD", "16384"}}, "")
-				_ = r2 // không chạy — luôn báo lỗi cho phần IFEO
+					Detail: "lưu snapshot giá trị gốc lỗi: " + serr.Error() + " — KHÔNG ghi IFEO (fail-closed: ghi mà không có snapshot thì không hoàn tác được)"})
+				// v4.3.0 (P1-06): BỎ hẳn lệnh ghi — trước đây vẫn regAddValues rồi bỏ kết quả
 				res.Success = hwOK
 				res.Message = map[bool]string{true: "Đã tắt HW accel Discord — RIÊNG IFEO bị bỏ qua vì không lưu được snapshot gốc (an toàn hơn ghi đè mù)",
 					false: "Không tắt được Hardware Acceleration — settings.json Discord không tìm thấy/không ghi được"}[hwOK]
@@ -540,7 +562,7 @@ func applyDiscord(enabled bool) AppOptRunResult {
 			res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → hoàn tác", OK: false, Detail: snapErr.Error()})
 		} else if snapFound && snap["CpuPriorityClass"] != nil {
 			s := snap["CpuPriorityClass"]
-			r := runExe("reg", []string{"add", ifeoDiscord, "/v", "CpuPriorityClass", "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+			r := runSysExe("reg.exe", []string{"add", ifeoDiscord, "/v", "CpuPriorityClass", "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
 			ifeoOK = r.OK && regValueMatches(ifeoDiscord, "CpuPriorityClass", s["data"])
 			if ifeoOK {
 				if err := clearAppoptSnap("discord-ifeo"); err != nil {
@@ -569,7 +591,9 @@ func applySpotify(enabled bool) AppOptRunResult {
 		// v4.1.0 (phát hiện 06): persist lỗi → abort an toàn (máy chưa bị thay đổi)
 		snap := map[string]map[string]string{}
 		for _, n := range []string{"Spotify", "Spotify Web Helper"} {
-			if typ, data, found := regQueryValue(runKey, n); found {
+			// v4.3.0 (P1-07): strict snapshot
+			typ, data, found, qerr := regQueryValueStrict(runKey, n)
+			if qerr == nil && found {
 				snap[n] = map[string]string{"type": typ, "data": data}
 			}
 		}
@@ -597,7 +621,7 @@ func applySpotify(enabled bool) AppOptRunResult {
 		if snapFound && len(snap) > 0 {
 			allOK := true
 			for n, s := range snap {
-				r := runExe("reg", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+				r := runSysExe("reg.exe", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
 				if !r.OK || !regValueMatches(runKey, n, s["data"]) {
 					allOK = false
 				}
@@ -665,7 +689,9 @@ func applyRunEntryOpt(id string, enabled bool, label string, valueNames []string
 		// Persist lỗi → abort TRƯỚC khi xóa value (không mất chuỗi command gốc)
 		snap := map[string]map[string]string{"existed": {"v": "0"}}
 		for _, n := range valueNames {
-			if typ, data, found := regQueryValue(runKey, n); found {
+			// v4.3.0 (P1-07): strict snapshot
+			typ, data, found, qerr := regQueryValueStrict(runKey, n)
+			if qerr == nil && found {
 				snap[n] = map[string]string{"type": typ, "data": data}
 				snap["existed"] = map[string]string{"v": "1"}
 			}
@@ -714,7 +740,7 @@ func applyRunEntryOpt(id string, enabled bool, label string, valueNames []string
 		if n == "existed" {
 			continue
 		}
-		r := runExe("reg", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+		r := runSysExe("reg.exe", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
 		ok := r.OK && regValueMatches(runKey, n, s["data"])
 		if !ok {
 			allOK = false

@@ -151,6 +151,12 @@ func dataTweaks() ([]tableTweak, int, []string) {
 				tt.RevertMsg = "Hành động tức thời — không cần hoàn tác"
 			} else {
 				tt.RevertSteps = parseSpec(revertSpec, true)
+				// v4.3.0 (P3-01): revertSpec có nội dung mà parse ra 0 steps = dữ liệu lỗi —
+				// không nạp (revert rỗng sẽ bị coi là "hoàn tác thành công" oan)
+				if len(tt.RevertSteps) == 0 {
+					skipped = append(skipped, fmt.Sprintf("%s:%d revertSpec không parse được step nào (spec=%q)", e.Name(), ln+1, revertSpec))
+					continue
+				}
 				tt.RevertMsg = "Đã hoàn tác về mặc định: " + name
 			}
 			out = append(out, tt)

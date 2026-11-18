@@ -148,6 +148,11 @@ func registerPerfRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, st)
 	})
 	mux.HandleFunc("POST /api/perf/timer-resolution", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("timer resolution") { // v4.3.0 (P2-01)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			Action string  `json:"action"` // auto | apply | off
 			Ms     float64 `json:"ms"`     // khi action=apply
@@ -208,13 +213,24 @@ func registerPerfRoutes(mux *http.ServeMux) {
 			return
 		}
 		defer doneSysOp()
-		writeJSON(w, 200, perfRestore())
+		res := perfRestore()
+		// v4.3.0 (P2-06): status nhất quán với body Success — 200 chỉ khi restore đạt
+		code := 200
+		if !res.Success {
+			code = 500
+		}
+		writeJSON(w, code, res)
 	})
 	// v3.6.0: GPU ưu tiên cao cho game (UserGpuPreferences)
 	mux.HandleFunc("GET /api/perf/game-gpu", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, perfGameGPUList())
 	})
 	mux.HandleFunc("POST /api/perf/game-gpu", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("GPU ưu tiên cho game") { // v4.3.0 (P2-01)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			Path   string `json:"path"`
 			Action string `json:"action"` // set | clear

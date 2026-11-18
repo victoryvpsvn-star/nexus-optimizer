@@ -81,7 +81,7 @@ func perfStatus() PerfStatus {
 			st.GPUClocks = strings.TrimSpace(parts[1]) + " / " + strings.TrimSpace(parts[2]) + " MHz"
 		}
 	} else {
-		r := runExe("powershell", []string{"-NoProfile", "-Command",
+		r := runSysExe("powershell.exe", []string{"-NoProfile", "-Command",
 			"(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name"}, 8*time.Second)
 		if r.OK && strings.TrimSpace(r.Stdout) != "" {
 			st.GPU = strings.TrimSpace(r.Stdout)
@@ -181,7 +181,7 @@ func perfOverclock(level string) OcResult {
 		}
 	}
 	if gpu == "" {
-		r := runExe("powershell", []string{"-NoProfile", "-Command",
+		r := runSysExe("powershell.exe", []string{"-NoProfile", "-Command",
 			"(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name"}, 8*time.Second)
 		if r.OK {
 			gpu = strings.TrimSpace(r.Stdout)
@@ -196,6 +196,19 @@ func perfOverclock(level string) OcResult {
 	// v4.1.1 (P1-02): bước bắt buộc trên NVIDIA — fail → tổng thể fail; (P2-03) không hứa
 	// "giữ boost tối đa liên tục" — xung thực tế phụ thuộc nhiệt/điện/driver/tải
 	if clockMax != "" {
+		// v4.3.0 (P1-09): snapshot CUSTOM LOCK người dùng có TRƯỚC khi ghi đè —
+		// Applications Clocks SM ≠ Default → có lock; restore sẽ trả đúng lock đó thay vì -rgc mù
+		if q := runExe(nvSmi(), []string{"-q", "-d", "CLOCK"}, 8*time.Second); q.OK {
+			appSM := nvClockField(q.Stdout, "Applications Clocks", "SM")
+			defSM := nvClockField(q.Stdout, "Default Applications Clocks", "SM")
+			if appSM != "" && defSM != "" && appSM != defSM {
+				_ = updateAppoptSnap("perf", func(m map[string]map[string]string) {
+					if m["gpuLockBefore"] == nil {
+						m["gpuLockBefore"] = map[string]string{"v": appSM}
+					}
+				})
+			}
+		}
 		r := runExe(nvSmi(), []string{"-lgc", "0," + clockMax}, 8*time.Second)
 		if r.OK {
 			oc.Steps = append(oc.Steps, PerfStep{Name: "Trần xung lõi GPU " + clockMax + " MHz (NVIDIA)", OK: true,
@@ -221,21 +234,18 @@ func perfOverclock(level string) OcResult {
 		const hagsKey = `HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers`
 		hagsTyp, hagsData, hagsExists, hagsErr := regQueryValueStrict(hagsKey, "HwSchMode")
 		if hagsErr == nil {
-			if old, found, lerr := loadAppoptSnap("perf"); lerr == nil {
-				m := old
-				if !found {
-					m = map[string]map[string]string{}
-				}
+			// v4.3.0 (P1-04): fail closed — load/snapshot lỗi thì KHÔNG ghi HAGS;
+			// update qua read-modify-write để không mất schemeGUID/CPU-MIN đã lưu
+			if lerr := updateAppoptSnap("perf", func(m map[string]map[string]string) {
 				if m["hagsExists"] == nil { // giữ snapshot lần đầu
 					m["hagsExists"] = map[string]string{"v": map[bool]string{true: "1", false: "0"}[hagsExists]}
 					if hagsExists {
 						m["hagsType"] = map[string]string{"v": hagsTyp}
 						m["hagsData"] = map[string]string{"v": hagsData}
 					}
-					if serr := saveAppoptSnap("perf", m); serr != nil {
-						hagsErr = powerErr("persist snapshot HAGS thất bại: " + serr.Error())
-					}
 				}
+			}); lerr != nil {
+				hagsErr = powerErr("snapshot perf không đọc/ghi được (P1-04 fail-closed): " + lerr.Error() + " — BỎ QUA bước HAGS")
 			}
 		}
 		if hagsErr != nil {
@@ -258,10 +268,16 @@ func perfOverclock(level string) OcResult {
 	schemeBefore, schemeErr := activeSchemeGUID()
 	planOK := false
 	if schemeErr == nil {
+		// v4.3.0 (P1-04): đọc qua update-helper — giữ nguyên HAGS/CPU-MIN đã lưu;
+		// persist lỗi → KHÔNG đổi plan (fail closed)
 		if old, found, lerr := loadAppoptSnap("perf"); lerr == nil && found && old["schemeGUID"] != nil {
 			schemeBefore = old["schemeGUID"]["v"] // giữ scheme của lần ép xung đầu
 		} else if lerr == nil {
-			if serr := saveAppoptSnap("perf", map[string]map[string]string{"schemeGUID": {"v": schemeBefore}}); serr != nil {
+			if serr := updateAppoptSnap("perf", func(m map[string]map[string]string) {
+				if m["schemeGUID"] == nil {
+					m["schemeGUID"] = map[string]string{"v": schemeBefore}
+				}
+			}); serr != nil {
 				schemeErr = powerErr("persist snapshot scheme thất bại: " + serr.Error())
 			}
 		} else {
@@ -272,7 +288,7 @@ func perfOverclock(level string) OcResult {
 		oc.Steps = append(oc.Steps, PerfStep{Name: "Power plan High Performance", OK: false,
 			Detail: schemeErr.Error() + " — BỎ QUA bước đổi plan (không áp dụng thứ không hoàn tác được)"})
 	} else {
-		r := runExe("powercfg", []string{"/setactive", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"}, 5*time.Second)
+		r := runSysExe("powercfg.exe", []string{"/setactive", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"}, 5*time.Second)
 		planOK = r.OK
 		if r.OK {
 		oc.Steps = append(oc.Steps, PerfStep{Name: "Power plan High Performance", OK: true,
@@ -290,17 +306,22 @@ func perfOverclock(level string) OcResult {
 				oc.Steps = append(oc.Steps, PerfStep{Name: "CPU min state 100%", OK: false,
 					Detail: berr.Error() + " — không snapshot được MIN gốc, BỎ QUA (không áp dụng thứ không trả được)"})
 			} else {
-				if old, found, lerr := loadAppoptSnap("perf"); lerr == nil {
-					m := old
-					if !found {
-						m = map[string]map[string]string{}
-					}
+				// v4.3.0 (P1-04 C): persist MIN gốc là ĐIỀU KIỆN — lỗi thì không set 100%
+				var persistErr error
+				if lerr := updateAppoptSnap("perf", func(m map[string]map[string]string) {
 					if m["cpuMinAC"] == nil { // giữ snapshot lần đầu
 						m["cpuMinAC"] = map[string]string{"v": bac}
 						m["cpuMinDC"] = map[string]string{"v": bdc}
-						_ = saveAppoptSnap("perf", m)
 					}
+				}); lerr != nil {
+					persistErr = lerr
 				}
+				if persistErr != nil {
+					oc.Steps = append(oc.Steps, PerfStep{Name: "CPU min state 100%", OK: false,
+						Detail: persistErr.Error() + " — không persist được MIN gốc → BỎ QUA (không áp dụng thứ không trả được)"})
+					oc.Success = false
+					persistErr = nil
+				} else {
 				r := runSysExe("powercfg.exe", []string{"/setacvalueindex", "SCHEME_CURRENT", "SUB_PROCESSOR", "PROCTHROTTLEMIN", "100"}, 5*time.Second)
 				dc := runSysExe("powercfg.exe", []string{"/setdcvalueindex", "SCHEME_CURRENT", "SUB_PROCESSOR", "PROCTHROTTLEMIN", "100"}, 5*time.Second)
 				dcOK := dc.OK
@@ -325,24 +346,27 @@ func perfOverclock(level string) OcResult {
 				if !ok {
 					oc.Success = false
 				}
+				}
 			}
 			if level == "max" {
 				r2 := runSysExe("powercfg.exe", []string{"/duplicatescheme", "e9a42b02-d5df-448d-aa00-03f14749eb61"}, 6*time.Second)
 				if r2.OK {
 					if guid := firstGUID(r2.Stdout); guid != "" {
-						// v4.1.1 (P1-01): ghi nhận plan do app tạo — restore sẽ xóa đúng plan này
-						if old, found, lerr := loadAppoptSnap("perf"); lerr == nil {
-							m := old
-							if !found {
-								m = map[string]map[string]string{}
+						// v4.1.1 (P1-01) + v4.3.0 (P1-04 D): persist ultimateGUID là ĐIỀU KIỆN —
+						// load/persist lỗi → KHÔNG activate scheme mới (không để plan không quản lý được)
+						var ultErr error
+						if lerr := updateAppoptSnap("perf", func(m map[string]map[string]string) {
+							if m["ultimateGUID"] == nil {
+								m["ultimateGUID"] = map[string]string{"v": guid}
 							}
-							m["ultimateGUID"] = map[string]string{"v": guid}
-							if serr := saveAppoptSnap("perf", m); serr != nil {
-								oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: false,
-									Detail: serr.Error() + " — persist snapshot plan tạo thêm thất bại → không bật Ultimate (không để rác plan không hoàn tác được)"})
-								oc.Success = false
-								return oc
-							}
+						}); lerr != nil {
+							ultErr = lerr
+						}
+						if ultErr != nil {
+							oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: false,
+								Detail: ultErr.Error() + " — persist snapshot plan tạo thêm thất bại → không bật Ultimate (không để rác plan không hoàn tác được)"})
+							oc.Success = false
+							return oc
 						}
 						r3 := runSysExe("powercfg.exe", []string{"/setactive", guid}, 5*time.Second)
 						oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: r3.OK,
@@ -376,7 +400,10 @@ func perfOverclock(level string) OcResult {
 // Success chỉ true khi các bước bắt buộc (power plan, timer) đã thành công.
 func perfRestore() OcResult {
 	res := OcResult{Mode: perfMode, Level: "restore", Success: true, Steps: []PerfStep{}}
-	r := runExe("nvidia-smi", []string{"-rgc"}, 8*time.Second)
+	// v4.3.0: load snapshot perf ĐẦU HÀM — GPU block (P1-09) dùng trước các block khác
+	snap, snapFound, snapErr := loadAppoptSnap("perf")
+	var restAll = false // v4.3.0: dùng ở cả GPU block (P1-09) lẫn block snapshot
+	r := runExe(nvSmi(), []string{"-rgc"}, 8*time.Second)
 	if r.OK {
 		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ khóa xung GPU", OK: true, Detail: "xung lõi trả về điều khiển động"})
 	} else if _, lookErr := exec.LookPath("nvidia-smi"); lookErr == nil {
@@ -384,17 +411,47 @@ func perfRestore() OcResult {
 		res.Success = false
 	} // không có nvidia-smi → máy không phải GPU NVIDIA — không tính là lỗi
 	if _, lookErr := exec.LookPath(nvSmi()); lookErr == nil || nvidiaSmiPath() != "" {
-		// v4.1.0 (13.2): -rmc bỏ qua kết quả → giờ ghi trung thực từng bước
-		rmc := runExe(nvSmi(), []string{"-rmc"}, 8*time.Second)
-		res.Steps = append(res.Steps, PerfStep{Name: "Reset app clocks GPU (-rmc)", OK: rmc.OK,
-			Detail: map[bool]string{true: "xung ứng dụng về mặc định driver", false: firstLine(rmc.Stdout + rmc.Stderr)}[rmc.OK]})
-		if !rmc.OK {
-			res.Success = false
+		// v4.3.0 (P1-09): người dùng có custom lock TRƯỚC khi ép xung → trả đúng lock đó
+		// (verify read-back); chỉ -rgc/-rmc khi snapshot xác nhận trước đó driver-managed
+		if snapErr == nil && snapFound && snap["gpuLockBefore"] != nil {
+			want := snap["gpuLockBefore"]["v"]
+			rl := runExe(nvSmi(), []string{"-lgc", "0," + want}, 10*time.Second)
+			verified := false
+			if rl.OK {
+				if q := runExe(nvSmi(), []string{"-q", "-d", "CLOCK"}, 8*time.Second); q.OK {
+					verified = nvClockField(q.Stdout, "Applications Clocks", "SM") == want+"MHz"
+				}
+			}
+			lockOK := rl.OK && verified
+			res.Steps = append(res.Steps, PerfStep{Name: "Trả custom lock GPU " + want + "MHz (mức bạn có trước khi ép xung)", OK: lockOK,
+				Detail: map[bool]string{true: "verify read-back khớp — không mất cấu hình lock của bạn",
+					false: firstLine(rl.Stdout + rl.Stderr) + " — snapshot GIỮ để retry"}[lockOK]})
+			if !lockOK {
+				res.Success = false
+				restAll = false
+			}
+		} else {
+			rgc := runExe(nvSmi(), []string{"-rgc"}, 8*time.Second)
+			if rgc.OK {
+				res.Steps = append(res.Steps, PerfStep{Name: "Gỡ khóa xung GPU (-rgc)", OK: true,
+					Detail: "trước khi ép xung GPU ở driver-managed — đúng trạng thái gốc"})
+			} else {
+				res.Steps = append(res.Steps, PerfStep{Name: "Gỡ khóa xung GPU (-rgc)", OK: false,
+					Detail: firstLine(rgc.Stdout + rgc.Stderr)})
+				res.Success = false
+				restAll = false
+			}
+			// v4.1.0 (13.2): -rmc ghi trung thực từng bước
+			rmc := runExe(nvSmi(), []string{"-rmc"}, 8*time.Second)
+			res.Steps = append(res.Steps, PerfStep{Name: "Reset app clocks GPU (-rmc)", OK: rmc.OK,
+				Detail: map[bool]string{true: "xung ứng dụng về mặc định driver", false: firstLine(rmc.Stdout + rmc.Stderr)}[rmc.OK]})
+			if !rmc.OK {
+				res.Success = false
+			}
 		}
 	}
 	// v4.1.0 (13.2) + v4.1.1 (P1-01): trả ĐÚNG scheme gốc + HAGS + CPU MIN + xóa plan app tạo;
 	// CHỈ clear snapshot khi mọi mục restore thành công (P1-01 mục 9)
-	snap, snapFound, snapErr := loadAppoptSnap("perf")
 	r2OK, schemeDetail := false, ""
 	if snapErr == nil && snapFound && snap["schemeGUID"] != nil {
 		want := snap["schemeGUID"]["v"]
@@ -428,7 +485,7 @@ func perfRestore() OcResult {
 		res.Steps = append(res.Steps, PerfStep{Name: "Power plan → trạng thái gốc", OK: false, Detail: schemeDetail})
 		res.Success = false
 	}
-	restAll := r2OK
+	restAll = r2OK
 	if snapErr == nil && snapFound {
 		// (P1-01) CPU MIN trả đúng giá trị gốc trên plan High Performance (plan bị thao tác)
 		if snap["cpuMinAC"] != nil {
@@ -445,8 +502,9 @@ func perfRestore() OcResult {
 					}
 				}
 			}
-			_ = runSysExe("powercfg.exe", []string{"/setactive", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"}, 5*time.Second)
-			// verify read-back trên plan bị thao tác
+			// v4.3.0 (P1-03): KHÔNG setactive High Perf sau khi trả MIN — setacvalueindex
+			// đã lưu giá trị vào plan; activate sẽ đẩy plan active cuối về High Perf thay vì
+			// plan gốc (bug audit #3). Verify read-back trực tiếp trên plan bị thao tác.
 			if nac, _, nerr := powercfgQueryIndices("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c", procThrottleGUIDMin); nerr != nil || nac != snap["cpuMinAC"]["v"] {
 				minOK = false // desktop đọc DC khác gốc là bình thường (DC không áp dụng) — verify AC là đủ
 			}
@@ -488,6 +546,18 @@ func perfRestore() OcResult {
 			}
 		}
 		if restAll {
+			// v4.3.0 (P1-03): verify CUỐI — plan đang active phải là plan gốc từ snapshot
+			// (không thể "restore thành công" trong khi máy vẫn đang chạy High/Ultimate)
+			if snap["schemeGUID"] != nil {
+				if cur, cerr := activeSchemeGUID(); cerr != nil || cur != snap["schemeGUID"]["v"] {
+					res.Success = false
+					restAll = false
+					res.Steps = append(res.Steps, PerfStep{Name: "Verify plan active cuối", OK: false,
+						Detail: "máy đang dùng scheme " + cur + " ≠ gốc " + snap["schemeGUID"]["v"] + " — giữ snapshot để Restore lại"})
+				}
+			}
+		}
+		if restAll {
 			if err := clearAppoptSnap("perf"); err != nil {
 				res.Success = false
 				restAll = false
@@ -513,7 +583,7 @@ func perfGameGPUSet(path, action string) GameGpuResult {
 	res := GameGpuResult{Mode: perfMode, Action: action, Path: path}
 	switch action {
 	case "clear":
-		r := runExe("reg", []string{"delete", gpuPrefKey, "/v", path, "/f"}, 5*time.Second)
+		r := runSysExe("reg.exe", []string{"delete", gpuPrefKey, "/v", path, "/f"}, 5*time.Second)
 		res.Success = r.OK
 		if r.OK {
 			res.Message = "Đã gỡ ưu tiên GPU cho " + path + " — Windows tự chọn lại GPU"
@@ -521,7 +591,7 @@ func perfGameGPUSet(path, action string) GameGpuResult {
 			res.Message = firstLine(r.Stdout + r.Stderr) + " (chưa đặt hoặc thiếu quyền?)"
 		}
 	default:
-		r := runExe("reg", []string{"add", gpuPrefKey, "/v", path, "/t", "REG_SZ", "/d", gpuPrefValue, "/f"}, 5*time.Second)
+		r := runSysExe("reg.exe", []string{"add", gpuPrefKey, "/v", path, "/t", "REG_SZ", "/d", gpuPrefValue, "/f"}, 5*time.Second)
 		res.Success = r.OK
 		if r.OK {
 			res.Message = "Đã đặt GPU Ưu tiên cao (hiệu năng cao) cho " + path + " — hiệu lực ngay, không cần khởi động lại"
@@ -534,7 +604,7 @@ func perfGameGPUSet(path, action string) GameGpuResult {
 
 func perfGameGPUList() GameGpuList {
 	lst := GameGpuList{Mode: perfMode, Entries: []GameGpuEntry{}}
-	r := runExe("reg", []string{"query", gpuPrefKey}, 5*time.Second)
+	r := runSysExe("reg.exe", []string{"query", gpuPrefKey}, 5*time.Second)
 	if !r.OK {
 		return lst // key chưa tồn tại = chưa có entry nào
 	}

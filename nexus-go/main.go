@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const AppVersion = "4.2.0"
+const AppVersion = "4.3.0"
 
 // buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
 var buildNumber = "0"

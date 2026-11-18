@@ -68,6 +68,9 @@ func buildMux() http.Handler {
 	mux.HandleFunc("GET /api/update", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, updateCheck(false)) })
 	mux.HandleFunc("POST /api/update", handleUpdatePost)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		if pe := appState.LastPersistErr(); pe != "" { // v4.3.0 (P2-02): persist lỗi phải nhìn thấy được
+			w.Header().Set("X-Nexus-Persist-Err", truncateShort(pe))
+		}
 		writeJSON(w, 200, map[string]any{"ok": true, "version": AppVersion, "platform": runtime.GOOS})
 	})
 
@@ -129,6 +132,11 @@ func buildMux() http.Handler {
 		writeJSON(w, 200, scanTargets())
 	})
 	mux.HandleFunc("POST /api/cleanup", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("dọn dẹp") { // v4.3.0 (P2-01): coordinator bao phủ mọi route thay đổi hệ thống
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			Action  string   `json:"action"`
 			Targets []string `json:"targets"`
@@ -248,6 +256,11 @@ func buildMux() http.Handler {
 		})
 	})
 	mux.HandleFunc("POST /api/selftest", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("self-test") { // v4.3.0 (P2-01): FULL mode đụng registry thật
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			Mode    string `json:"mode"`
 			Webhook bool   `json:"webhook"`
@@ -340,7 +353,15 @@ func buildMux() http.Handler {
 			writeErr(w, 400, "Cần name (≤120) + language hợp lệ: "+strings.Join(supportedLanguages(), ", "))
 			return
 		}
+		if len(rec.Code) > maxCodeChars { // v4.3.0 (P3-05): cùng giới hạn với runScriptCode
+			writeErr(w, 400, fmt.Sprintf("Code quá dài (tối đa %d ký tự) — script không thể chạy được nếu vượt giới hạn", maxCodeChars))
+			return
+		}
 		saved := appState.UpsertScript(rec)
+		if saved.ID == 0 && saved.Name == "" {
+			writeErr(w, 500, "Lưu script thất bại — dữ liệu chưa được ghi đĩa, thử lại")
+			return
+		}
 		writeJSON(w, 200, map[string]any{"script": saved})
 	})
 	mux.HandleFunc("PUT /api/script", func(w http.ResponseWriter, r *http.Request) {
@@ -357,6 +378,11 @@ func buildMux() http.Handler {
 		}
 		if body.Run {
 			// chạy trực tiếp code gửi lên (không cần lưu)
+			if !trySysOp("chạy script") { // v4.3.0 (P2-01): script đụng hệ thống → coordinator
+				writeErr(w, 409, sysOpBusyErr())
+				return
+			}
+			defer doneSysOp()
 			res := runScriptCode(body.Language, body.Code, body.TimeoutMs)
 			writeJSON(w, 200, res)
 			return
@@ -442,6 +468,11 @@ func buildMux() http.Handler {
 	})
 	// v3.9.0 (theo audit P0-02): khôi phục backup .reg — reg import, cần admin
 	mux.HandleFunc("POST /api/backup/restore", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("phục hồi backup") { // v4.3.0 (P2-01)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			Name string `json:"name"`
 		}
