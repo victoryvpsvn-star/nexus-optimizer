@@ -86,6 +86,7 @@ jobs:
             - UI nhúng sẵn (WebView2 Win10/11); thiếu runtime sẽ tự mở trình duyệt mặc định
             - Đủ tính năng: Tổng quan realtime, 35 tinh chỉnh Windows, Dọn dẹp disk+RAM, Gaming Mode, Tiến trình, Mạng, Script, Tự kiểm tra + webhook Discord, Ảnh chụp, Sao lưu registry, Giao diện
             - Hiệu năng: Timer Resolution tự động, ép xung an toàn, FPS test 2 pha (giữ nhịp mục tiêu + đo TỐI ĐA thật không giới hạn)
+            - **v4.0.0 mới:** 🔓 Unlock giới hạn CPU/GPU (bỏ trần throttle power plan + Power Throttling, mở power limit NVIDIA tối đa, khóa xung GPU tối đa — snapshot gốc + hoàn tác đúng trạng thái), 4 fix mới (DISM+SFC phục hồi file hệ thống, xây lại chỉ mục Windows Search, cập nhật Defender, đồng bộ đồng hồ), App Optimizer thêm Steam + OneDrive (gỡ tự khởi động, hoàn tác trả chuỗi gốc)
             - Dữ liệu lưu `%APPDATA%\NEXUS Optimizer\config.json`
 
             > File chưa ký số (no code signing) — Windows SmartScreen có thể hỏi "More info → Run anyway".

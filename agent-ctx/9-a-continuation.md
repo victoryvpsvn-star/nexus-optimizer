@@ -497,3 +497,27 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   Lưu ý: `pkill -f nexus-v380` tự giết shell vì cmdline chứa chuỗi đó → dùng `pkill -x`.
 - CI bước 8: 4 nhóm/9 mục/tone đủ + preset minimum trung thực trên Linux (mode=ci-sim).
   go-v38 tự cắt, exe buildNumber=38, FPS 2 pha 60→120 xanh (năng lực thật 2106→2069).
+
+
+## 16-a: v3.9.0 (go-v41, run 44117296084) — bản vá theo audit GPT (54 phát hiện đối chứng 100%)
+- User gửi báo cáo audit GPT (BAO_CAO_AUDIT...txt 1.678 dòng, audit ZIP v3.7.0-era). Đối chứng
+  từng claim với code thật: A=20 đúng+còn→đã vá; B=22 đúng nhưng edition không phát hành
+  (src/, electron/, nexus-rust/, s3 sidecar còn trong repo, Go-only là bản ship); C=2 sai/outdated
+  (P1-13 gaming revert đã fix v3.4.0, P2-20 README path); D=3 suy luận có điều kiện GPT tự ghi;
+  E=7 đúng+lộ trình. go.mod "go 1.27.4" GPT nói ĐÚNG. Báo cáo đối chứng docx 11 trang:
+  download/Bao_cao_doi_chung_audit_GPT.docx (postcheck 9/9, script scripts/gen_baocao_docx.mjs).
+- Đã vá (Go): P0-02 backup .reg = reg export thật + merge nguyên văn + đếm value + route
+  restore (admin+traversal guard) + nút UI; P0-03 selftest full bắt confirm; P1-04
+  CommandContext + taskkill /T; P1-05 bỏ NEXUS_SANDBOX; P1-06 cappedWriter; P1-07 token
+  phiên 128-bit inject </head> + tokenGuard (POST/PUT/DELETE /api/*) + UI api() gắn token;
+  P1-10 updater /releases?per_page=15 lọc go-vN; P1-11 .old xóa sau 2 phút; P2-01 skipped
+  names vào message; P2-02/03/04/16 appopt snapshot (dataDir/appopt-snap.json) + Discord
+  aggregate; P2-06 wording RAM quan sát; P2-09/21 quarantine config hỏng + 0600/0700;
+  P2-15 gaming Partial/Failed; P2-26 gitignore pycache; P2-29 perfRestore aggregate;
+  P2-31 kill verify tên tiến trình (tasklist PID eq).
+- Diễn biến CI: #39 fail (workflow curl thiếu token → thêm step lấy token từ UI);
+  #40 fail (perf.js local api() shadow global api() — fetch KHÔNG token, lỗi ẩn token guard
+  lộ ra) → perf.js local api gắn token + api() app.js không double-stringify body (perf.js
+  truyền body đã stringify) + static no-store; #41 3/3 xanh, FPS 60→120, token guard 403 ✓.
+- Bai học: token guard mới phải scan TOÀN BỘ caller HTTP client-side (perf.js local api
+  shadow) — grep `const api =` toàn static trước khi ship auth change. pkill -x (không -f).

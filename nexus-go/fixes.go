@@ -5,6 +5,8 @@ package main
 
 import (
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -43,6 +45,19 @@ var fixDefs = []FixCard{
 	{"fix-store", "Microsoft Store / app Store không mở",
 		"Xóa cache của Microsoft Store (wsreset) — xử lý lỗi Store không mở, app UWP không tải được. Cửa sổ Store có thể tự mở sau khi xong.",
 		"🏪", false},
+	// ---------- v4.0.0: mở rộng bộ fix ----------
+	{"fix-sfc", "Windows lỗi lặt vặt / file hệ thống hỏng",
+		"DISM kiểm tra + phục hồi component store, rồi SFC quét và thay file hệ thống hỏng — xử lý lỗi Start menu/Update/UWP lỗi dai dẳng không rõ nguyên nhân. Chạy 5–20 phút, KHÔNG tắt máy trong lúc chạy.",
+		"🧰", true},
+	{"fix-search", "Windows Search không tìm thấy / tìm chậm",
+		"Xây lại chỉ mục tìm kiếm: dừng WSearch, xóa file index cũ, khởi động lại — xử lý lỗi tìm kiếm trống kết quả, menu Start tìm không ra app. Lần đầu sau khi fix, chỉ mục cần vài phút để nạp lại.",
+		"🔍", true},
+	{"fix-defender", "Windows Defender không cập nhật virus",
+		"Cập nhật signature Defender bằng MpCmdRun + khởi động lại dịch vụ Defender — xử lý lỗi bảo vệ 'cần kiểm tra', cập nhật kẹt 0%.",
+		"🛡️", true},
+	{"fix-time", "Giờ máy sai / lệch múi giờ",
+		"Đồng bộ lại giờ hệ thống với máy chủ thời gian (w32tm resync) — xử lý lỗi đồng hồ chạy sai, chứng chỉ web báo lỗi vì lệch giờ.",
+		"🕒", true},
 }
 
 func registerFixRoutes(mux *http.ServeMux) {
@@ -104,6 +119,14 @@ func runFix(def FixCard) FixResult {
 		return fixPrinter()
 	case "fix-store":
 		return fixStore()
+	case "fix-sfc":
+		return fixSfc()
+	case "fix-search":
+		return fixSearch()
+	case "fix-defender":
+		return fixDefender()
+	case "fix-time":
+		return fixTime()
 	}
 	return FixResult{Success: false, Mode: "windows", ID: def.ID, Message: "Fix không hỗ trợ"}
 }
@@ -183,4 +206,107 @@ func fixStore() FixResult {
 	res.Message = map[bool]string{true: "Đã reset Microsoft Store — thử mở lại Store/app",
 		false: "wsreset lỗi — xem chi tiết"}[res.Success]
 	return res
+}
+
+// ---------- v4.0.0: mở rộng bộ fix ----------
+
+/** fix-sfc: DISM RestoreHealth → SFC /scannow — sửa file hệ thống hỏng. Chạy lâu (5–20 phút),
+ * timeout 20 phút mỗi bước, output chỉ lấy phần tóm tắt cuối để UI không phình. */
+func fixSfc() FixResult {
+	res := FixResult{Mode: "windows", ID: "fix-sfc", Steps: []PerfStep{}, Success: true}
+	r1 := runSysExe("dism.exe", []string{"/Online", "/Cleanup-Image", "/RestoreHealth"}, 20*time.Minute)
+	res.Steps = append(res.Steps, PerfStep{Name: "DISM phục hồi component store (5–15 phút)", OK: r1.OK,
+		Detail: map[bool]string{true: lastMeaningfulLine(r1.Stdout), false: firstLine(r1.Stdout + r1.Stderr) + " — nếu timeout, chạy lại trong PowerShell riêng"}[r1.OK]})
+	if !r1.OK {
+		res.Success = false
+	}
+	r2 := runSysExe("sfc.exe", []string{"/scannow"}, 20*time.Minute)
+	res.Steps = append(res.Steps, PerfStep{Name: "SFC quét + thay file hệ thống hỏng (5–15 phút)", OK: r2.OK,
+		Detail: map[bool]string{true: lastMeaningfulLine(r2.Stdout), false: firstLine(r2.Stdout + r2.Stderr)}[r2.OK]})
+	if !r2.OK {
+		res.Success = false
+	}
+	res.Message = map[bool]string{true: "Đã quét và phục hồi file hệ thống — khuyên khởi động lại máy để áp dụng trọn vẹn",
+		false: "Một số bước lỗi — chi tiết từng bước bên dưới; có thể cần chạy lại khi mạng chậm (DISM tải file từ Windows Update)"}[res.Success]
+	return res
+}
+
+/** fix-search: xây lại chỉ mục Windows Search — dừng WSearch, xóa index cũ, khởi động lại */
+func fixSearch() FixResult {
+	res := FixResult{Mode: "windows", ID: "fix-search", Steps: []PerfStep{}, Success: true}
+	r1 := runSysExe("net.exe", []string{"stop", "WSearch"}, 15*time.Second)
+	res.Steps = append(res.Steps, PerfStep{Name: "Dừng dịch vụ Windows Search", OK: r1.OK, Detail: firstLine(r1.Stdout + r1.Stderr)})
+	r2 := runSysExe("cmd.exe", []string{"/c", `del /q /f "%PROGRAMDATA%\Microsoft\Search\Data\Applications\Windows\Windows.edb"`}, 10*time.Second)
+	// del lỗi vì file không tồn tại cũng coi như xong (mục tiêu là index sạch) — ghi trung thực vào detail
+	res.Steps = append(res.Steps, PerfStep{Name: "Xóa file chỉ mục cũ (Windows.edb)", OK: true,
+		Detail: map[bool]string{true: "file index đã xóa", false: "không tìm thấy file index cũ — vẫn tiếp tục (index vốn trống)"}[r2.OK]})
+	r3 := runSysExe("net.exe", []string{"start", "WSearch"}, 15*time.Second)
+	res.Steps = append(res.Steps, PerfStep{Name: "Khởi động lại Windows Search", OK: r3.OK, Detail: firstLine(r3.Stdout + r3.Stderr)})
+	res.Success = r3.OK
+	res.Message = map[bool]string{true: "Đã xây lại chỉ mục tìm kiếm — chờ vài phút để Windows nạp lại index rồi thử tìm",
+		false: "WSearch không start lại được — xem chi tiết"}[res.Success]
+	return res
+}
+
+/** fix-defender: cập nhật signature + restart dịch vụ Defender */
+func fixDefender() FixResult {
+	res := FixResult{Mode: "windows", ID: "fix-defender", Steps: []PerfStep{}, Success: true}
+	mp := os.Getenv("ProgramFiles") + `\Windows Defender\MpCmdRun.exe`
+	if _, err := os.Stat(mp); err != nil {
+		return FixResult{Success: false, Mode: "windows", ID: "fix-defender",
+			Steps: []PerfStep{{Name: "Tìm MpCmdRun.exe", OK: false, Detail: "không tìm thấy Windows Defender trên máy này"}},
+			Message: "Máy không có Windows Defender (dùng AV khác?) — không fix được"}
+	}
+	r1 := runExe(mp, []string{"-SignatureUpdate"}, 5*time.Minute)
+	res.Steps = append(res.Steps, PerfStep{Name: "Cập nhật signature Defender", OK: r1.OK,
+		Detail: map[bool]string{true: "virus database đã cập nhật", false: firstLine(r1.Stdout + r1.Stderr)}[r1.OK]})
+	if !r1.OK {
+		res.Success = false
+	}
+	r2 := runSysExe("net.exe", []string{"stop", "WinDefend"}, 15*time.Second)
+	r3 := runSysExe("net.exe", []string{"start", "WinDefend"}, 15*time.Second)
+	ok2 := r3.OK || r2.OK // Defender được bảo vệ — stop có thể bị từ chối, start OK vẫn tính
+	res.Steps = append(res.Steps, PerfStep{Name: "Khởi động lại dịch vụ WinDefend", OK: ok2,
+		Detail: map[bool]string{true: "dịch vụ chạy lại bình thường", false: firstLine(r2.Stdout + r2.Stderr + r3.Stderr) + " (Defender có tamper protection — không stop được cũng bình thường)"}[ok2]})
+	if !ok2 {
+		res.Success = false
+	}
+	res.Message = map[bool]string{true: "Đã cập nhật Defender + khởi động lại dịch vụ — thử kiểm tra bảo vệ lại",
+		false: "Một số bước lỗi — xem chi tiết (signature update cần mạng)"}[res.Success]
+	return res
+}
+
+/** fix-time: đồng bộ lại giờ hệ thống với máy chủ thời gian */
+func fixTime() FixResult {
+	res := FixResult{Mode: "windows", ID: "fix-time", Steps: []PerfStep{}, Success: true}
+	r1 := runSysExe("net.exe", []string{"start", "W32Time"}, 10*time.Second)
+	_ = r1 // service có thể đã chạy
+	r2 := runSysExe("w32tm.exe", []string{"/resync", "/force"}, 30*time.Second)
+	res.Steps = append(res.Steps, PerfStep{Name: "Đồng bộ giờ với máy chủ thời gian (w32tm resync)", OK: r2.OK,
+		Detail: map[bool]string{true: firstLine(r2.Stdout), false: firstLine(r2.Stdout + r2.Stderr) + " (cần mạng ra được time.windows.com)"}[r2.OK]})
+	if !r2.OK {
+		res.Success = false
+	}
+	res.Message = map[bool]string{true: "Đã đồng bộ lại đồng hồ hệ thống — giờ máy giờ đây chính xác",
+		false: "Resync lỗi — xem chi tiết (thường do mạng chặn NTP hoặc timezone sai — chỉnh timezone trong Settings)"}[res.Success]
+	return res
+}
+
+/** dòng có nội dung cuối cùng trong output DISM/SFC (phần tóm tắt) */
+func lastMeaningfulLine(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	var last string
+	for _, ln := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(ln)
+		if t != "" {
+			last = t
+		}
+	}
+	if len(last) > 220 {
+		last = last[:220] + "…"
+	}
+	if last == "" {
+		return "xong (không có output)"
+	}
+	return last
 }

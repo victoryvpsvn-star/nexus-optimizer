@@ -73,6 +73,8 @@ func buildMux() http.Handler {
 
 	// ---------- Hiệu năng (v3.5.0): timer resolution / ép xung / FPS ----------
 	registerPerfRoutes(mux)
+	// v4.0.0: Unlock giới hạn phần cứng (CPU throttle / GPU power & clock)
+	registerUnlocksRoutes(mux)
 	// v3.7.0: App Optimizer + Fixes
 	registerAppOptRoutes(mux)
 	registerFixRoutes(mux)

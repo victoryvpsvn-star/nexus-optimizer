@@ -304,6 +304,72 @@
     $('benchOverlay').style.display = 'none';
   });
 
+  /* ---------- v4.0.0: Unlock giới hạn CPU / GPU ---------- */
+  function fmtUnlockStep(s) {
+    return (s.ok ? '✅ ' : '❌ ') + s.name + (s.detail ? ' — ' + s.detail : '');
+  }
+  function renderUnlockResult(lines, ok, headline) {
+    const el = $('unlockResult');
+    el.innerHTML = '<b style="color:' + (ok ? '#8ff0a4' : '#ffb3c8') + '">' + headline + '</b>' +
+      lines.map((l) => '<div style="font-size:13px;margin-top:4px">' + l + '</div>').join('');
+    el.dataset.done = '1';
+    el.dataset.ok = ok ? '1' : '0';
+  }
+  function renderUnlockStatus(st) {
+    const cpu = st.cpu || {};
+    const gpu = st.gpu || {};
+    $('unlockCpuNow').textContent = 'Throttle ' + (cpu.throttleMin || '?') + ' → ' + (cpu.throttleMax || '?') +
+      ' • Power Throttling: ' + (cpu.powerThrottlingOff || 'mặc định');
+    if (gpu.available) {
+      $('unlockGpuPowerNow').textContent = (gpu.name ? gpu.name + ' • ' : '') +
+        'Power: ' + (gpu.powerNow || '?') + (gpu.powerMax ? ' / tối đa ' + gpu.powerMax : '') +
+        (gpu.powerDefault ? ' (mặc định ' + gpu.powerDefault + ')' : '');
+      $('unlockGpuClockNow').textContent = gpu.clockNote || ('SM: ' + (gpu.clockSm || '?') + ' / ' + (gpu.clockSmMax || '?'));
+    } else {
+      $('unlockGpuPowerNow').textContent = 'Không có NVIDIA GPU (nvidia-smi) trên máy này';
+      $('unlockGpuClockNow').textContent = '—';
+    }
+    $('unlockStatusLine').textContent = st.mode === 'windows'
+      ? 'Trạng thái thật của máy — snapshot gốc được lưu trước khi unlock để hoàn tác an toàn'
+      : 'Chế độ mô phỏng CI (không phải Windows) — các nút sẽ báo trung thực';
+    $('unlockNote').textContent = st.note || '';
+  }
+  async function loadUnlocks() {
+    try {
+      renderUnlockStatus(await api('/api/unlocks'));
+    } catch (e) {
+      $('unlockStatusLine').textContent = 'Không đọc được trạng thái unlock: ' + e.message;
+    }
+  }
+  const UNLOCK_BTN_IDS = ['unlockCpuBtn', 'unlockGpuPowerBtn', 'unlockGpuClockBtn', 'unlockRestoreBtn'];
+  function unlockDisable(dis) {
+    UNLOCK_BTN_IDS.forEach((id) => { $(id).disabled = dis; });
+  }
+  async function runUnlockAction(action, headline, confirmText) {
+    if (confirmText && !confirm(confirmText)) return;
+    unlockDisable(true);
+    renderUnlockResult(['⏳ Đang chạy…'], true, headline);
+    try {
+      const r = await api('/api/unlocks', { method: 'POST', headers: JSON_HDR, body: JSON.stringify({ action }) });
+      const steps = (r.steps || []).map(fmtUnlockStep);
+      renderUnlockResult(steps.length ? steps : ['(không có bước nào)'], !!r.success, (r.success ? '✅ ' : '⚠️ ') + (r.message || headline));
+      await loadUnlocks();
+    } catch (e) {
+      renderUnlockResult(['❌ ' + e.message], false, 'Unlock lỗi');
+    } finally {
+      unlockDisable(false);
+    }
+  }
+  $('unlockCpuBtn').addEventListener('click', () => runUnlockAction('cpu-full', 'Đang bỏ trần throttle CPU…',
+    'Bỏ trần throttle CPU sẽ ghi power plan của máy (MIN=MAX 100% AC+DC, tắt Power Throttling) — cần quyền admin, snapshot gốc được lưu để hoàn tác. Tiếp tục?'));
+  $('unlockGpuPowerBtn').addEventListener('click', () => runUnlockAction('gpu-power', 'Đang mở power limit GPU…',
+    'Mở power limit GPU lên mức tối đa driver cho phép (nvidia-smi -pl) — cần quyền admin; laptop/driver khóa firmware sẽ báo lỗi trung thực. Tiếp tục?'));
+  $('unlockGpuClockBtn').addEventListener('click', () => runUnlockAction('gpu-clock', 'Đang khóa xung GPU tối đa…',
+    'Khóa xung SM GPU ở mức tối đa card hỗ trợ (nvidia-smi -lgc) — cần quyền admin, reset về động sau khi khởi động lại máy. Tiếp tục?'));
+  $('unlockRestoreBtn').addEventListener('click', () => runUnlockAction('restore', 'Đang hoàn tác unlock…',
+    'Khôi phục CPU/GPU về đúng trạng thái trước khi unlock (theo snapshot gốc). Tiếp tục?'));
+
   loadSettings();
   loadStatus();
+  loadUnlocks();
 })();

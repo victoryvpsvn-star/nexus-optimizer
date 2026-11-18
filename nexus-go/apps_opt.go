@@ -59,6 +59,13 @@ var appDefs = []appDef{
 	{"spotify", "Spotify Optimization",
 		"Gỡ Spotify khỏi danh sách tự khởi động cùng Windows — máy bật nhanh hơn, Spotify chỉ mở khi bạn cần nghe nhạc.",
 		"🎵", false},
+	// ---------- v4.0.0: mở rộng App Optimizer ----------
+	{"steam", "Steam Optimization",
+		"Gỡ Steam khỏi danh sách tự khởi động cùng Windows — Steam không còn tự mở + tự cập nhật khi bật máy, game bật nhanh hơn.",
+		"🕹️", false},
+	{"onedrive", "OneDrive Optimization",
+		"Gỡ OneDrive khỏi danh sách tự khởi động cùng Windows — dừng đồng bộ nền ngầm ăn băng thông/CPU khi game chạy (file vẫn giữ nguyên, chỉ không tự đồng bộ nữa).",
+		"☁️", false},
 }
 
 // ---------- phát hiện cài đặt (đường dẫn chuẩn, không đoán mò) ----------
@@ -102,6 +109,14 @@ func detectApp(id string) (bool, string) {
 		return pick(firstExists(filepath.Join(localdata, "Discord", "Update.exe")))
 	case "spotify":
 		return pick(firstExists(filepath.Join(appdata, "Spotify", "Spotify.exe")))
+	case "steam":
+		return pick(firstExists(
+			filepath.Join(pf86, `Steam\steam.exe`),
+			filepath.Join(pf, `Steam\steam.exe`)))
+	case "onedrive":
+		return pick(firstExists(
+			filepath.Join(localdata, `Microsoft\OneDrive\OneDrive.exe`),
+			filepath.Join(pf86, `Microsoft OneDrive\OneDrive.exe`)))
 	}
 	return false, ""
 }
@@ -437,8 +452,60 @@ func runAppOpt(id string, enabled bool) AppOptRunResult {
 		return applyDiscord(enabled)
 	case "spotify":
 		return applySpotify(enabled)
+	case "steam":
+		return applyRunEntryOpt(id, enabled, "Steam", []string{"Steam"})
+	case "onedrive":
+		return applyRunEntryOpt(id, enabled, "OneDrive", []string{"OneDrive"})
 	}
 	return AppOptRunResult{Mode: "windows", ID: id, Success: false, Message: "app không hỗ trợ"}
+}
+
+// ---------- v4.0.0: generic autostart optimizer — dùng chung cơ chế snapshot v3.9 ----------
+// Gỡ entry khỏi HKCU Run (tự khởi động cùng Windows) với snapshot chuỗi gốc để hoàn tác
+// trả đúng nguyên văn — tái dùng pattern Spotify (audit P2-04) cho mọi app mới.
+
+func applyRunEntryOpt(id string, enabled bool, label string, valueNames []string) AppOptRunResult {
+	res := AppOptRunResult{Mode: "windows", ID: id, Steps: []PerfStep{}}
+	runKey := `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+	if enabled {
+		snap := map[string]map[string]string{}
+		for _, n := range valueNames {
+			if typ, data, found := regQueryValue(runKey, n); found {
+				snap[n] = map[string]string{"type": typ, "data": data}
+			}
+		}
+		if len(snap) > 0 {
+			saveAppoptSnap("run:"+id, snap)
+		}
+		r := regDeleteValues(runKey, valueNames, "")
+		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ " + label + " khỏi tự khởi động (HKCU Run)", OK: r.Success,
+			Detail: map[bool]string{true: "app chỉ mở khi bạn cần — máy bật nhanh hơn, không còn tiến trình nền âm thầm", false: r.Message}[r.Success]})
+		res.Success = r.Success
+		res.Message = map[bool]string{true: "Đã gỡ " + label + " khỏi khởi động Windows", false: r.Message}[r.Success]
+		return res
+	}
+	// hoàn tác: trả nguyên chuỗi gốc nếu có snapshot
+	snap := loadAppoptSnap("run:" + id)
+	if len(snap) > 0 {
+		allOK := true
+		for n, s := range snap {
+			r := runExe("reg", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+			if !r.OK {
+				allOK = false
+			}
+			res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + n + " (nguyên chuỗi gốc)", OK: r.OK, Detail: s["data"]})
+		}
+		clearAppoptSnap("run:" + id)
+		res.Success = allOK
+		res.Message = map[bool]string{true: "Đã hoàn tác — " + label + " quay lại khởi động như cấu hình gốc của bạn", false: "Một số value lỗi — xem chi tiết"}[allOK]
+		return res
+	}
+	// không có snapshot (tối ưu trước khi cài v4.0.0) — báo trung thực: không đoán lại path
+	res.Success = false
+	res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + label + " trong khởi động", OK: false,
+		Detail: "không có snapshot chuỗi gốc (bản tối ưu trước v4.0.0) — tự bật lại trong Settings của " + label + " nếu cần"})
+	res.Message = "Không tìm thấy snapshot cấu hình gốc — không khôi phục mò được"
+	return res
 }
 
 // ---------- routes ----------

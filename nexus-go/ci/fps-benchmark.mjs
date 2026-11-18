@@ -249,6 +249,33 @@ try {
   if (!bkr.error) fail('backup restore phải báo trung thực lỗi, nhận: ' + JSON.stringify(bkr));
   ok('Backup restore endpoint có shape trung thực (audit P0-02) ✓');
 
+  // ---- Bước 10 (v4.0.0): Unlock CPU/GPU + fixes/appopt mở rộng ----
+  const unl = await (await fetch(BASE + '/api/unlocks')).json();
+  if (!unl.cpu || !unl.gpu || !unl.mode) fail('GET /api/unlocks thiếu shape (cpu/gpu/mode): ' + JSON.stringify(unl).slice(0, 120));
+  ok('Unlocks status: mode=' + unl.mode + ' • CPU throttle ' + unl.cpu.throttleMin + '→' + unl.cpu.throttleMax + ' • GPU available=' + unl.gpu.available);
+  const ucpu = await (await fetch(BASE + '/api/unlocks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ action: 'cpu-full' }) })).json();
+  if (!ucpu.success || !(ucpu.steps || []).length) fail('POST unlocks cpu-full phải success + có steps: ' + JSON.stringify(ucpu).slice(0, 160));
+  ok('Unlock CPU (mô phỏng CI): success=true, ' + ucpu.steps.length + ' bước, thông báo trung thực ✓');
+  const urestore = await (await fetch(BASE + '/api/unlocks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ action: 'restore' }) })).json();
+  if (!urestore.success) fail('POST unlocks restore phải success trên CI-sim: ' + JSON.stringify(urestore).slice(0, 120));
+  ok('Unlock restore (hoàn tác snapshot) shape ✓');
+  const fixSfc = await (await fetch(BASE + '/api/fixes', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ id: 'fix-sfc' }) })).json();
+  if (fixSfc.success !== false || !(fixSfc.message || '').includes('Windows')) fail('fix-sfc trên CI phải trung thực thất bại (chỉ Windows): ' + JSON.stringify(fixSfc).slice(0, 140));
+  ok('Fix mới fix-sfc: báo trung thực "chỉ chạy trên Windows" ✓');
+  const defs = await (await fetch(BASE + '/api/fixes')).json();
+  for (const need of ['fix-sfc', 'fix-search', 'fix-defender', 'fix-time']) {
+    if (!defs.some((d) => d.id === need)) fail('Thiếu fix mới ' + need + ' trong /api/fixes');
+  }
+  ok('Bộ Fixes giờ có ' + defs.length + ' mục (thêm fix-sfc/search/defender/time) ✓');
+  const apps = await (await fetch(BASE + '/api/appopt')).json();
+  for (const need of ['steam', 'onedrive']) {
+    if (!apps.some((d) => d.id === need)) fail('Thiếu app mới ' + need + ' trong /api/appopt');
+  }
+  ok('App Optimizer giờ có ' + apps.length + ' app (thêm steam + onedrive) ✓');
+  const steamRun = await (await fetch(BASE + '/api/appopt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ id: 'steam', enabled: true }) })).json();
+  if (steamRun.success !== false || !(steamRun.message || '').includes('Windows')) fail('appopt steam trên CI phải trung thực: ' + JSON.stringify(steamRun).slice(0, 140));
+  ok('Appopt steam: mode không-Windows báo trung thực ✓');
+
   summary.pass = true;
   ok(`FPS TĂNG (giữ nhịp): ${base.fps} → ${after.fps} (mục tiêu 120) • năng lực thật: ${base.max} → ${after.max} FPS — ảnh test FPS oke`);
   writeSummary();
