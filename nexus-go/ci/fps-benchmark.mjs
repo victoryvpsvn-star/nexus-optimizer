@@ -203,7 +203,7 @@ try {
 
   // ---- Bước 7 (v3.7.0): App Optimizer + Fixes — shape trung thực trên nền không-Windows ----
   const apps = await (await fetch(BASE + '/api/appopt')).json();
-  if (!Array.isArray(apps) || apps.length !== 6) fail(`appopt phải trả 6 app: ${apps ? apps.length : 'null'}`);
+  if (!Array.isArray(apps) || apps.length !== 8) fail(`appopt phải trả 8 app (v4.0.0 thêm steam+onedrive): ${apps ? apps.length : 'null'}`);
   if (apps.some((a) => a.installed !== false)) fail('trên Linux không được báo app đã cài (detect đường dẫn Windows)');
   if (!apps.every((a) => typeof a.id === 'string' && typeof a.desc === 'string' && a.warning)) fail('mỗi app phải có id/desc/warning');
   const appRun = await (await fetch(BASE + '/api/appopt', {
@@ -213,7 +213,7 @@ try {
   if (appRun.success !== false) fail('appopt trên Linux phải báo trung thực success=false');
   ok('App Optimizer: 6 app detect trung thực (0 cài trên Linux) + POST báo "chỉ Windows" đúng');
   const fixes = await (await fetch(BASE + '/api/fixes')).json();
-  if (!Array.isArray(fixes) || fixes.length !== 6) fail(`fixes phải trả 6 fix: ${fixes ? fixes.length : 'null'}`);
+  if (!Array.isArray(fixes) || fixes.length !== 10) fail(`fixes phải trả 10 fix (v4.0.0 thêm sfc/search/defender/time): ${fixes ? fixes.length : 'null'}`);
   const fixRun = await (await fetch(BASE + '/api/fixes', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
     body: JSON.stringify({ id: 'fix-internet' }),
