@@ -538,3 +538,32 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
 - CI: #42 fail (bước 10 khai báo trùng const apps/defs → fixesV4/appsV4); #43 fail (assertion
   cũ kén 6 app/6 fix → 8/10); #44 xanh 3/3, exe buildNumber=44, 10.86MB, FPS 60→120 pass.
 - Bài học: thêm item mới phải quét assertion số lượng CŨ trong fps-benchmark (grep "length !=").
+
+
+## 17-a: v4.1.0 (go-v46, run 44328671231) — "học" audit v4.0.0 139KB upload/`Pasted Content_1795011852017.txt`
+- Báo cáo audit bên ngoài xác minh 10 phát hiện P1×9+P2×1 từ source — ĐỌC HẾT rồi sửa TOÀN BỘ:
+  01 CPU unlock snapshot đủ (scheme GUID + MIN/MAX AC/DC riêng qua powercfgQueryIndices
+  parse 2 hex CUỐI — AC trước DC ổn mọi locale; PT qua regQueryValueStrict phân biệt
+  "unable to find" vs access-denied); 02 GPU power snapshot Current không Default + verify
+  read-back; 03 GPU clock hadLock → exact restore custom lock; 04 Defender bỏ stop OR start
+  (không stop mù, verify `sc query` RUNNING) + resolver platform/<ver>; 05 Search tổng hợp
+  stop/delete/start + phân loại del not-found vs denied + verify; 06 snapshot layer viết lại
+  (sync.Mutex + temp/Sync/rename + trả error + JSON corrupt CÁCH LY .corrupt-<ts>), mọi caller
+  persist-fail → ABORT trước khi đụng máy, restore fail → GIỮ snapshot retry được, sentinel
+  existed=false cho run entries; 07 Gaming bỏ win-sysresp + test revert⊆apply + setGaming(false)
+  partial; 08 Tweak engine: query-error ≠ NotFound (stepRegDel/DelKey/Task), sc revert start
+  fail = fail (1056 exempt), stepPc DC "not support" = NotApplicable, regDeleteValues phân loại
+  + verify read-back, TweakState.Partial + revert fail giữ Applied=true (UI badge "⚠️ một phần");
+  09 Services: snapshot StartType+wasRunning từng service trước disable (persist fail ABORT
+  batch), restore CHỈ service có snapshot, delayed-auto giữ nguyên, start lại + verify RUNNING;
+  10 Updater: releases/tags/<tag> exact asset (url/size/digest) + SHA-256 BẮT BUỘC khớp
+  (fail-closed khi thiếu digest) + size khớp + Authenticode (updateRequireSigned=false khi
+  chưa ký) + health-check PID 6s + rollback .old.
+- Backlog đã đưa vào: 13.2 perf OC/restore snapshot scheme gốc (không còn Balanced mù) +
+  -rmc báo kết quả; 13.4 fix-time desc; 13.5 Defender platform path; 13.12 genAPIToken
+  fail-closed (log.Fatalf thay fallback timestamp). Chưa làm: 13.11 runExe cap output
+  during-run, Windows VM test tier (Phase 4), code signing.
+- Bài học CI lần nữa: assertion số lượng CŨ trong fps-benchmark phải quét khi đổi danh sách
+  (lần này: gaming effects 19→18 sau khi bỏ win-sysresp — CI fail 1 round rồi fix).
+- Remote có commit của chủ repo (upload LICENSE qua web) → pull --rebase rồi push, KHÔNG force.
+- Verify cuối: sha256sum exe tải về == assets[].digest GitHub (luồng verify updater mới đúng).

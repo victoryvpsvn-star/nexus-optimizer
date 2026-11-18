@@ -585,6 +585,11 @@ func registerServicesRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, servicesStateView())
 	})
 	mux.HandleFunc("POST /api/services", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("dịch vụ") { // v4.1.1 (P2-08)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			Action string `json:"action"`
 			Item   string `json:"item"`

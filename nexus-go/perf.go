@@ -187,7 +187,12 @@ func registerPerfRoutes(mux *http.ServeMux) {
 			writeErr(w, 400, "Mức ép xung chỉ nhận safe/balanced/max")
 			return
 		}
+		if !trySysOp("ép xung") { // v4.1.1 (P2-08)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
 		res := perfOverclock(body.Level)
+		doneSysOp()
 		if res.Level == "" {
 			res.Level = body.Level
 		}
@@ -198,6 +203,11 @@ func registerPerfRoutes(mux *http.ServeMux) {
 		writeJSON(w, code, res)
 	})
 	mux.HandleFunc("POST /api/perf/restore", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("khôi phục ép xung") { // v4.1.1 (P2-08)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		writeJSON(w, 200, perfRestore())
 	})
 	// v3.6.0: GPU ưu tiên cao cho game (UserGpuPreferences)

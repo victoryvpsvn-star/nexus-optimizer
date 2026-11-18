@@ -15,10 +15,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 )
 
-const AppVersion = "4.1.0"
+const AppVersion = "4.2.0"
 
 // buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
 var buildNumber = "0"
@@ -29,6 +30,29 @@ var appState *Store
 // index.html; mọi route POST/PUT/DELETE /api/* bắt buộc kèm header X-Nexus-Token → chặn
 // CSRF/local-web từ tiến trình khác trên máy (server vẫn bind 127.0.0.1).
 var apiToken = genAPIToken()
+
+// v4.1.1 (P2-08): System Operation Coordinator — chặn hai thao tác sửa hệ thống chạy
+// song song (Registry/Power Plan/Service/GPU đụng nhau). Non-blocking: bận → trả lỗi
+// trung thực thay vì xếp hàng âm thầm (UI biết ngay là đang có thao tác khác).
+var sysOpMu sync.Mutex
+var sysOpName string
+
+func trySysOp(op string) bool {
+	if sysOpMu.TryLock() {
+		sysOpName = op
+		return true
+	}
+	return false
+}
+
+func doneSysOp() {
+	sysOpName = ""
+	sysOpMu.Unlock()
+}
+
+func sysOpBusyErr() string {
+	return "Đang có thao tác hệ thống khác chạy (" + sysOpName + ") — đợi xong rồi thử lại, không chạy chồng để tránh ghi đè trạng thái"
+}
 
 func genAPIToken() string {
 	b := make([]byte, 16)

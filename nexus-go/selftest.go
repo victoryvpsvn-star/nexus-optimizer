@@ -258,6 +258,27 @@ func runCheck() []SelftestItem {
 }
 
 /** Chế độ full: apply → revert từng tweak, đúng thứ tự, có deadline 120s */
+// v4.1.1 (P1-03): tweak chứa thao tác Appx removal là KHÓ ĐẢO NGƯỢC (revert phụ thuộc
+// package còn được tìm thấy + InstallLocation) — self-test FULL không tự chạy, báo skip
+// trung thực kèm lý do. Tweak one-shot (chạy-lần-một) vẫn giữ vì vô hại tự phục hồi.
+func tweakHasAppx(id string) bool {
+	tt := tableMap[id]
+	if tt == nil {
+		return false
+	}
+	for _, st := range tt.ApplySteps {
+		if st.Kind == stepAppx {
+			return true
+		}
+	}
+	for _, st := range tt.RevertSteps {
+		if st.Kind == stepAppx {
+			return true
+		}
+	}
+	return false
+}
+
 func runFull(deadline time.Duration) []SelftestFullEntry {
 	var entries []SelftestFullEntry
 	t0 := time.Now()
@@ -266,6 +287,14 @@ func runFull(deadline time.Duration) []SelftestFullEntry {
 			entries = append(entries, SelftestFullEntry{
 				ID: a.Def.ID, Name: a.Def.Name, ApplyOK: false, ApplyMsg: "Bỏ qua do vượt thời gian kiểm tra",
 				RevertOK: false, RevertMsg: "Bỏ qua do vượt thời gian kiểm tra", Skipped: true,
+			})
+			continue
+		}
+		if tweakHasAppx(a.Def.ID) {
+			entries = append(entries, SelftestFullEntry{
+				ID: a.Def.ID, Name: a.Def.Name, ApplyOK: false,
+				ApplyMsg: "BỎ QUA tự động: gỡ app Windows (Appx) khó đảo ngược chắc chắn — không chạy trong self-test, bấm thủ công trong tab Tinh chỉnh nếu muốn",
+				RevertOK: false, RevertMsg: "không chạy cùng apply-bỏ-qua", Skipped: true,
 			})
 			continue
 		}

@@ -754,6 +754,11 @@ func registerAppOptRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, cards)
 	})
 	mux.HandleFunc("POST /api/appopt", func(w http.ResponseWriter, r *http.Request) {
+		if !trySysOp("appopt") { // v4.1.1 (P2-08): coordinator chung — không đụng registry khi đang có thao tác khác
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			ID      string `json:"id"`
 			Enabled bool   `json:"enabled"`

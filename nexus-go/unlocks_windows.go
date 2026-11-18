@@ -38,7 +38,7 @@ var (
 /** Query 1 setting powercfg → TRẢ CẢ AC và DC (2 dòng Current Index cuối cùng, thứ tự
  * AC trước DC ổn định mọi locale vì output có thể bị localize nhưng hex thì không) */
 func powercfgQueryIndices(schemeGUID, settingGUID string) (string, string, error) {
-	r := runExe("powercfg", []string{"/q", schemeGUID, subProcessorGUID, settingGUID}, 10*time.Second)
+	r := runSysExe("powercfg.exe", []string{"/q", schemeGUID, subProcessorGUID, settingGUID}, 10*time.Second)
 	if !r.OK {
 		return "", "", powerErr("powercfg /q thất bại (exit " + strconv.Itoa(r.Code) + ")")
 	}
@@ -57,7 +57,7 @@ func powercfgQueryIndices(schemeGUID, settingGUID string) (string, string, error
 
 /** active scheme GUID hiện tại (/getactivescheme — GUID universal dù output localize) */
 func activeSchemeGUID() (string, error) {
-	r := runExe("powercfg", []string{"/getactivescheme"}, 10*time.Second)
+	r := runSysExe("powercfg.exe", []string{"/getactivescheme"}, 10*time.Second)
 	if !r.OK {
 		return "", powerErr("powercfg /getactivescheme thất bại")
 	}
@@ -99,16 +99,16 @@ func getUnlocksStatus() UnlockStatus {
 	}
 	if _, err := os.Stat(nvidiaSmiPath()); err == nil {
 		st.GPU.Available = true
-		if n := runExe("nvidia-smi", []string{"--query-gpu=name", "--format=csv,noheader"}, 6*time.Second); n.OK {
+		if n := runExe(nvSmi(), []string{"--query-gpu=name", "--format=csv,noheader"}, 6*time.Second); n.OK {
 			st.GPU.Name = firstLine(n.Stdout)
 		}
-		if q := runExe("nvidia-smi", []string{"-q", "-d", "POWER"}, 8*time.Second); q.OK {
+		if q := runExe(nvSmi(), []string{"-q", "-d", "POWER"}, 8*time.Second); q.OK {
 			st.GPU.PowerNow = nvPowerField(q.Stdout, "Power Limit")
 			st.GPU.PowerMin = nvPowerField(q.Stdout, "Min Power Limit")
 			st.GPU.PowerMax = nvPowerField(q.Stdout, "Max Power Limit")
 			st.GPU.PowerDefault = nvPowerField(q.Stdout, "Default Power Limit")
 		}
-		if q := runExe("nvidia-smi", []string{"-q", "-d", "CLOCK"}, 8*time.Second); q.OK {
+		if q := runExe(nvSmi(), []string{"-q", "-d", "CLOCK"}, 8*time.Second); q.OK {
 			st.GPU.ClockSM = nvClockField(q.Stdout, "Applications Clocks", "SM")
 			st.GPU.ClockSMMax = nvClockField(q.Stdout, "Max Clocks", "SM")
 			if st.GPU.ClockSM != "" && st.GPU.ClockSMMax != "" {
@@ -120,6 +120,15 @@ func getUnlocksStatus() UnlockStatus {
 		st.Note = unlockNoteWin + " Máy này không có nvidia-smi (không phải NVIDIA GPU CUDA) — phần GPU sẽ báo trung thực."
 	}
 	return st
+}
+
+/** v4.1.1 (P2-01): resolver thống nhất — mọi lệnh NVIDIA chạy qua đường dẫn tuyệt đối
+ * nvidiaSmiPath() tìm được; nếu không tìm thấy file thì fallback tên thường chạy LookPath. */
+func nvSmi() string {
+	if p := nvidiaSmiPath(); p != "" {
+		return p
+	}
+	return "nvidia-smi"
 }
 
 func nvidiaSmiPath() string {
@@ -249,7 +258,7 @@ func runUnlockCPU(res *UnlockRunResult) {
 		{"MAX (AC)", "/setacvalueindex", procThrottleGUIDMax},
 		{"MAX (DC)", "/setdcvalueindex", procThrottleGUIDMax},
 	} {
-		r := runExe("powercfg", []string{s.flag, scheme, subProcessorGUID, s.guid, "100"}, 8*time.Second)
+		r := runSysExe("powercfg.exe", []string{s.flag, scheme, subProcessorGUID, s.guid, "100"}, 8*time.Second)
 		ok := r.OK
 		if s.flag == "/setdcvalueindex" && !r.OK {
 			// phân biệt desktop không hỗ trợ DC (NotApplicable) với lỗi thật (Failed)
@@ -264,13 +273,13 @@ func runUnlockCPU(res *UnlockRunResult) {
 			okAll = false
 		}
 	}
-	if r := runExe("powercfg", []string{"/setactive", scheme}, 8*time.Second); r.OK {
+	if r := runSysExe("powercfg.exe", []string{"/setactive", scheme}, 8*time.Second); r.OK {
 		res.Steps = append(res.Steps, PerfStep{Name: "Áp dụng power plan (setactive)", OK: true, Detail: "thay đổi có hiệu lực ngay"})
 	} else {
 		res.Steps = append(res.Steps, PerfStep{Name: "Áp dụng power plan (setactive)", OK: false, Detail: firstLine(r.Stdout + r.Stderr)})
 		okAll = false
 	}
-	r := runExe("reg.exe", []string{"add", rePowerKey, "/v", "PowerThrottlingOff", "/t", "REG_DWORD", "/d", "1", "/f"}, 8*time.Second)
+	r := runSysExe("reg.exe", []string{"add", rePowerKey, "/v", "PowerThrottlingOff", "/t", "REG_DWORD", "/d", "1", "/f"}, 8*time.Second)
 	res.Steps = append(res.Steps, PerfStep{Name: "Tắt Power Throttling (registry)", OK: r.OK,
 		Detail: map[bool]string{true: "Windows không còn ép giảm tốc các app nền", false: firstLine(r.Stdout + r.Stderr)}[r.OK]})
 	if !r.OK {
@@ -289,7 +298,7 @@ func runUnlockGPUPower(res *UnlockRunResult) {
 		res.Message = "Không có nvidia-smi trên máy — không phải NVIDIA GPU CUDA; phần GPU unlock chỉ áp dụng cho NVIDIA"
 		return
 	}
-	q := runExe("nvidia-smi", []string{"-q", "-d", "POWER"}, 8*time.Second)
+	q := runExe(nvSmi(), []string{"-q", "-d", "POWER"}, 8*time.Second)
 	now, max := nvPowerField(q.Stdout, "Power Limit"), nvPowerField(q.Stdout, "Max Power Limit")
 	def := nvPowerField(q.Stdout, "Default Power Limit")
 	if max == "" {
@@ -325,7 +334,7 @@ func runUnlockGPUPower(res *UnlockRunResult) {
 		res.Steps = append(res.Steps, PerfStep{Name: "Snapshot GPU power", OK: true, Detail: "Current " + now + " • Default " + def + " • Max " + max})
 	}
 	maxW := strings.TrimSuffix(max, "W")
-	r := runExe("nvidia-smi", []string{"-pl", maxW}, 10*time.Second)
+	r := runExe(nvSmi(), []string{"-pl", maxW}, 10*time.Second)
 	res.Steps = append(res.Steps, PerfStep{Name: "Power limit GPU → tối đa " + maxW + "W", OK: r.OK,
 		Detail: map[bool]string{true: "trước: " + now + " (mặc định " + def + ") — restore sẽ trả về đúng mức người dùng đang chạy, không phải default",
 			false: firstLine(r.Stdout + r.Stderr) + " (laptop/driver thường chặn — không ép được là bình thường)"}[r.OK]})
@@ -342,7 +351,7 @@ func runUnlockGPUClock(res *UnlockRunResult) {
 		res.Message = "Không có nvidia-smi trên máy — không phải NVIDIA GPU CUDA"
 		return
 	}
-	q := runExe("nvidia-smi", []string{"-q", "-d", "CLOCK"}, 8*time.Second)
+	q := runExe(nvSmi(), []string{"-q", "-d", "CLOCK"}, 8*time.Second)
 	maxSM := nvClockField(q.Stdout, "Max Clocks", "SM")
 	appSM := nvClockField(q.Stdout, "Applications Clocks", "SM")
 	defAppSM := nvClockField(q.Stdout, "Default Applications Clocks", "SM")
@@ -373,12 +382,12 @@ func runUnlockGPUClock(res *UnlockRunResult) {
 				false: "driver-managed (không khóa) — restore sẽ -rgc về điều khiển động"}[hadLock]})
 	}
 	num := strings.TrimSuffix(maxSM, "MHz")
-	r := runExe("nvidia-smi", []string{"-lgc", "0," + num}, 10*time.Second)
+	r := runExe(nvSmi(), []string{"-lgc", "0," + num}, 10*time.Second)
 	res.Steps = append(res.Steps, PerfStep{Name: "Khóa xung SM GPU ở mức tối đa " + num + "MHz", OK: r.OK,
 		Detail: map[bool]string{true: "-lgc 0," + num + " — xung luôn giữ mức boost cao nhất", false: firstLine(r.Stdout + r.Stderr)}[r.OK]})
 	res.Success = r.OK
-	res.Message = map[bool]string{true: "Đã khóa xung GPU ở mức tối đa card hỗ trợ (" + num + "MHz) — không còn tụt xung khi tải nặng",
-		false: "Khóa xung lỗi — snapshot giữ nguyên, hoàn tác an toàn"}[r.OK]
+	res.Message = map[bool]string{true: "Đã đặt trần xung GPU theo mức tối đa driver cho phép (" + num + "MHz) — xung thực tế còn phụ thuộc nhiệt độ/điện/driver/tải",
+		false: "Đặt trần xung lỗi — snapshot giữ nguyên, hoàn tác an toàn"}[r.OK]
 }
 
 // ---------- Restore (phát hiện 01/02/03 + read-back verify) ----------
@@ -413,7 +422,7 @@ func restoreCPU(res *UnlockRunResult, okAll *bool) {
 		{"MAX (AC)", "/setacvalueindex", procThrottleGUIDMax, snap["maxAC"]["v"]},
 		{"MAX (DC)", "/setdcvalueindex", procThrottleGUIDMax, snap["maxDC"]["v"]},
 	} {
-		r := runExe("powercfg", []string{s.flag, scheme, subProcessorGUID, s.guid, s.val}, 8*time.Second)
+		r := runSysExe("powercfg.exe", []string{s.flag, scheme, subProcessorGUID, s.guid, s.val}, 8*time.Second)
 		if !r.OK {
 			cpuOK = false
 		}
@@ -438,24 +447,31 @@ func restoreCPU(res *UnlockRunResult, okAll *bool) {
 	}
 	// PowerThrottlingOff theo exists/type/data
 	if snap["ptExists"] != nil && snap["ptExists"]["v"] == "1" {
-		r := runExe("reg.exe", []string{"add", rePowerKey, "/v", "PowerThrottlingOff", "/t", snap["ptType"]["v"], "/d", snap["ptData"]["v"], "/f"}, 8*time.Second)
+		r := runSysExe("reg.exe", []string{"add", rePowerKey, "/v", "PowerThrottlingOff", "/t", snap["ptType"]["v"], "/d", snap["ptData"]["v"], "/f"}, 8*time.Second)
 		res.Steps = append(res.Steps, PerfStep{Name: "Power Throttling → trả giá trị gốc", OK: r.OK, Detail: snap["ptData"]["v"]})
 		if !r.OK {
 			cpuOK = false
 		}
 	} else {
-		r := runExe("reg.exe", []string{"delete", rePowerKey, "/v", "PowerThrottlingOff", "/f"}, 8*time.Second)
+		r := runSysExe("reg.exe", []string{"delete", rePowerKey, "/v", "PowerThrottlingOff", "/f"}, 8*time.Second)
 		res.Steps = append(res.Steps, PerfStep{Name: "Power Throttling → về mặc định Windows (xóa registry)", OK: r.OK, Detail: "key chưa từng có trước khi unlock (snapshot exists=false)"})
 		if !r.OK {
 			cpuOK = false
 		}
 	}
-	if r := runExe("powercfg", []string{"/setactive", scheme}, 8*time.Second); !r.OK {
-		cpuOK = false
-	}
-	if cur, err := activeSchemeGUID(); err == nil && cur != scheme {
-		res.Steps = append(res.Steps, PerfStep{Name: "Power scheme đang active khác scheme lúc unlock", OK: true,
-			Detail: "đã ghi snapshot về scheme gốc " + scheme + " — máy đang dùng scheme " + cur + " (không ép đổi scheme theo ý người dùng)"})
+	// v4.1.1 (P1-04): KHÔNG tự setactive scheme cũ nếu người dùng ĐỔI plan sau khi unlock —
+	// chỉ refresh active khi máy vẫn đang đúng scheme gốc; khác scheme → ghi giá trị về
+	// scheme gốc nhưng giữ nguyên lựa chọn mới của người dùng + báo rõ
+	cur, curErr := activeSchemeGUID()
+	if curErr == nil && cur == scheme {
+		if r := runSysExe("powercfg.exe", []string{"/setactive", scheme}, 8*time.Second); !r.OK {
+			cpuOK = false
+		}
+	} else if curErr != nil {
+		res.Steps = append(res.Steps, PerfStep{Name: "Đọc scheme đang active", OK: false, Detail: curErr.Error() + " — không refresh được plan, giá trị vẫn đã ghi vào scheme gốc"})
+	} else {
+		res.Steps = append(res.Steps, PerfStep{Name: "Power plan KHÔNG bị đổi lại", OK: true,
+			Detail: "bạn đang dùng scheme " + cur + " (đổi SAU khi unlock) — NEXUS đã trả MIN/MAX về scheme gốc " + scheme + " nhưng giữ nguyên plan bạn chọn; bật lại plan cũ nếu muốn áp dụng"})
 	}
 	if cpuOK {
 		if err := clearAppoptSnap("unlocks-cpu"); err != nil {
@@ -468,9 +484,8 @@ func restoreCPU(res *UnlockRunResult, okAll *bool) {
 }
 
 func restoreGPUPower(res *UnlockRunResult, okAll *bool) {
-	if nvidiaSmiPath() == "" {
-		return
-	}
+	// v4.1.1 (P1-05): snapshot còn mà GPU không truy cập được → PENDING + giữ snapshot +
+	// KHÔNG tính là OK; phân biệt "không có phiên nào" với "GPU đã đổi nhưng mất công cụ"
 	snap, found, err := loadAppoptSnap("unlocks-gpu")
 	if err != nil {
 		*okAll = false
@@ -478,14 +493,23 @@ func restoreGPUPower(res *UnlockRunResult, okAll *bool) {
 		return
 	}
 	if !found || snap["powerLimitBefore"] == nil {
-		res.Steps = append(res.Steps, PerfStep{Name: "GPU power — hoàn tác", OK: true, Detail: "không có phiên GPU power unlock nào đang lưu — không đụng card"})
+		if nvidiaSmiPath() != "" {
+			res.Steps = append(res.Steps, PerfStep{Name: "GPU power — hoàn tác", OK: true, Detail: "không có phiên GPU power unlock nào đang lưu — không đụng card"})
+		}
+		// không snapshot → không có gì để hoàn tác, kể cả khi GPU vắng (trạng thái gốc không đổi)
+		return
+	}
+	if nvSmi() == "" || nvidiaSmiPath() == "" {
+		*okAll = false
+		res.Steps = append(res.Steps, PerfStep{Name: "GPU power — PENDING (GPU không truy cập được)", OK: false,
+			Detail: "phiên unlock GPU còn đang lưu nhưng nvidia-smi/driver hiện không có — snapshot GIỮ NGUYÊN; cài lại driver hoặc kết nối GPU rồi Restore lần nữa"})
 		return
 	}
 	want := snap["powerLimitBefore"]["v"]
-	r := runExe("nvidia-smi", []string{"-pl", want}, 10*time.Second)
+	r := runExe(nvSmi(), []string{"-pl", want}, 10*time.Second)
 	verified := false
 	if r.OK {
-		if q := runExe("nvidia-smi", []string{"-q", "-d", "POWER"}, 8*time.Second); q.OK {
+		if q := runExe(nvSmi(), []string{"-q", "-d", "POWER"}, 8*time.Second); q.OK {
 			verified = nvPowerField(q.Stdout, "Power Limit") == want+"W"
 		}
 	}
@@ -504,9 +528,7 @@ func restoreGPUPower(res *UnlockRunResult, okAll *bool) {
 }
 
 func restoreGPUClock(res *UnlockRunResult, okAll *bool) {
-	if nvidiaSmiPath() == "" {
-		return
-	}
+	// v4.1.1 (P1-05): như GPU power — snapshot còn + GPU vắng → PENDING, giữ snapshot
 	snap, found, err := loadAppoptSnap("unlocks-gpu-clock")
 	if err != nil {
 		*okAll = false
@@ -514,19 +536,34 @@ func restoreGPUClock(res *UnlockRunResult, okAll *bool) {
 		return
 	}
 	if !found || snap["hadLock"] == nil {
-		res.Steps = append(res.Steps, PerfStep{Name: "GPU clock — hoàn tác", OK: true, Detail: "không có phiên GPU clock unlock nào đang lưu — không đụng card"})
+		if nvidiaSmiPath() != "" {
+			res.Steps = append(res.Steps, PerfStep{Name: "GPU clock — hoàn tác", OK: true, Detail: "không có phiên GPU clock unlock nào đang lưu — không đụng card"})
+		}
+		return
+	}
+	if nvSmi() == "" || nvidiaSmiPath() == "" {
+		*okAll = false
+		res.Steps = append(res.Steps, PerfStep{Name: "GPU clock — PENDING (GPU không truy cập được)", OK: false,
+			Detail: "phiên unlock GPU còn đang lưu nhưng nvidia-smi/driver hiện không có — snapshot GIỮ NGUYÊN; retry khi GPU khả dụng"})
 		return
 	}
 	var stepOK bool
 	if snap["hadLock"]["v"] == "1" {
 		want := snap["lockBefore"]["v"]
-		r := runExe("nvidia-smi", []string{"-lgc", "0," + want}, 10*time.Second)
-		stepOK = r.OK
+		r := runExe(nvSmi(), []string{"-lgc", "0," + want}, 10*time.Second)
+		// v4.1.1 (P1-06): read-back verify sau khi trả custom lock — không khớp thì không tính xong
+		verified := false
+		if r.OK {
+			if q := runExe(nvSmi(), []string{"-q", "-d", "CLOCK"}, 8*time.Second); q.OK {
+				verified = nvClockField(q.Stdout, "Applications Clocks", "SM") == want+"MHz"
+			}
+		}
+		stepOK = r.OK && verified
 		res.Steps = append(res.Steps, PerfStep{Name: "Trả custom lock SM GPU về mức gốc " + want + "MHz", OK: stepOK,
-			Detail: map[bool]string{true: "exact restore — đúng lock người dùng có trước (không reset mù về dynamic)",
+			Detail: map[bool]string{true: "restore lock SM (mức người dùng có trước) + verify read-back; giới hạn: chỉ mô tả được xung SM — GPC/Memory do driver quản",
 				false: firstLine(r.Stdout + r.Stderr) + " — snapshot giữ nguyên để thử lại"}[stepOK]})
 	} else {
-		r := runExe("nvidia-smi", []string{"-rgc"}, 10*time.Second)
+		r := runExe(nvSmi(), []string{"-rgc"}, 10*time.Second)
 		stepOK = r.OK
 		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ khóa xung GPU (-rgc) — về điều khiển động", OK: stepOK,
 			Detail: map[bool]string{true: "trước khi unlock GPU vốn ở driver-managed — đây là đúng trạng thái gốc",

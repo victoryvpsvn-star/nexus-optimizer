@@ -108,6 +108,11 @@ func buildMux() http.Handler {
 		}
 		tweakRunMux.Lock() // v3.4.0: chặn chạy song song — reg.exe/sc.exe xen kẽ nhau là KQ không xác định
 		defer tweakRunMux.Unlock()
+		if !trySysOp("tweaks") { // v4.1.1 (P2-08): coordinator chung với perf/unlock/services/fixes
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		results := make([]TweakRunResult, 0, len(body.IDs))
 		for _, id := range body.IDs {
 			if body.Action == "apply" {
@@ -150,7 +155,12 @@ func buildMux() http.Handler {
 			writeErr(w, 400, "Dữ liệu không hợp lệ (cần enabled: boolean)")
 			return
 		}
+		if !trySysOp("gaming") { // v4.1.1 (P2-08)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
 		effects := setGaming(*body.Enabled)
+		doneSysOp()
 		writeJSON(w, 200, map[string]any{"enabled": *body.Enabled, "effects": effects})
 	})
 

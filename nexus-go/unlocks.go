@@ -57,6 +57,11 @@ func registerUnlocksRoutes(mux *http.ServeMux) {
 			writeErr(w, 400, "Hành động không hợp lệ — cần action: cpu-full|gpu-power|gpu-clock|restore")
 			return
 		}
+		if !trySysOp("unlock CPU/GPU") { // v4.1.1 (P2-08)
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		res := runUnlock(body.Action)
 		code := 200
 		if !res.Success && res.Mode == "windows" {

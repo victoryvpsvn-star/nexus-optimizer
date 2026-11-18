@@ -66,6 +66,12 @@ func registerFixRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, fixDefs)
 	})
 	mux.HandleFunc("POST /api/fixes", func(w http.ResponseWriter, r *http.Request) {
+		// v4.1.1 (P2-08): operation coordinator — không chạy fix khi đang có thao tác khác
+		if !trySysOp("fix") {
+			writeErr(w, 409, sysOpBusyErr())
+			return
+		}
+		defer doneSysOp()
 		var body struct {
 			ID string `json:"id"`
 		}
@@ -159,13 +165,41 @@ func fixInternet() FixResult {
 func fixServicesRestart(id, name string, services []string, okMsg string) FixResult {
 	res := FixResult{Mode: "windows", ID: id, Steps: []PerfStep{}, Success: true}
 	for _, sv := range services {
-		r1 := runSysExe("net.exe", []string{"stop", sv}, 15*time.Second)
-		r2 := runSysExe("net.exe", []string{"start", sv}, 15*time.Second)
-		ok := r2.OK || r1.OK // service có thể chưa chạy — start thành công vẫn tính
-		res.Steps = append(res.Steps, PerfStep{Name: "Khởi động lại dịch vụ " + sv, OK: ok,
-			Detail: map[bool]string{true: "stop → start OK", false: firstLine(r1.Stdout + r1.Stderr + r2.Stderr)}[ok]})
-		if !ok {
+		// v4.1.1 (P2-04): BỎ OR — restart chỉ thành công khi trạng thái CUỐI verified RUNNING;
+		// service vốn đã STOPPED thì không cần stop; start fail là fail thật
+		st := runSysExe("sc.exe", []string{"query", sv}, 12*time.Second)
+		out := strings.ToUpper(st.Stdout)
+		switch {
+		case !st.OK && !strings.Contains(out, "RUNNING") && !strings.Contains(out, "STOPPED"):
+			res.Steps = append(res.Steps, PerfStep{Name: "Restart dịch vụ " + sv, OK: false,
+				Detail: "không đọc được trạng thái (exit " + firstLine(st.Stdout+st.Stderr) + ") — không restart mù"})
 			res.Success = false
+		case strings.Contains(out, "STOPPED") && !strings.Contains(out, "RUNNING"):
+			r2 := runSysExe("net.exe", []string{"start", sv}, 20*time.Second)
+			st2 := runSysExe("sc.exe", []string{"query", sv}, 12*time.Second)
+			running := strings.Contains(strings.ToUpper(st2.Stdout), "RUNNING") || strings.Contains(strings.ToUpper(st2.Stdout), "START_PENDING")
+			res.Steps = append(res.Steps, PerfStep{Name: "Start dịch vụ " + sv + " (vốn đã dừng)", OK: running,
+				Detail: map[bool]string{true: "verified RUNNING", false: firstLine(r2.Stdout + r2.Stderr)}[running]})
+			if !running {
+				res.Success = false
+			}
+		default:
+			r1 := runSysExe("net.exe", []string{"stop", sv}, 20*time.Second)
+			if !r1.OK && !strings.Contains(strings.ToLower(r1.Stdout+r1.Stderr), "not started") && !strings.Contains(strings.ToLower(r1.Stdout+r1.Stderr), "1062") {
+				res.Steps = append(res.Steps, PerfStep{Name: "Restart dịch vụ " + sv, OK: false,
+					Detail: "stop thất bại — không tiếp tục (không che lỗi bước trước): " + firstLine(r1.Stdout + r1.Stderr)})
+				res.Success = false
+				continue
+			}
+			r2 := runSysExe("net.exe", []string{"start", sv}, 20*time.Second)
+			st2 := runSysExe("sc.exe", []string{"query", sv}, 12*time.Second)
+			running := strings.Contains(strings.ToUpper(st2.Stdout), "RUNNING") || strings.Contains(strings.ToUpper(st2.Stdout), "START_PENDING")
+			res.Steps = append(res.Steps, PerfStep{Name: "Restart dịch vụ " + sv, OK: running,
+				Detail: map[bool]string{true: "stop → start → verified RUNNING",
+					false: "start: " + firstLine(r2.Stdout+r2.Stderr) + " — verify: " + firstLine(st2.Stdout)}[running]})
+			if !running {
+				res.Success = false
+			}
 		}
 	}
 	res.Message = map[bool]string{true: okMsg, false: "Một số dịch vụ không restart được — xem chi tiết"}[res.Success]
@@ -186,15 +220,44 @@ func fixExplorer() FixResult {
 
 func fixPrinter() FixResult {
 	res := FixResult{Mode: "windows", ID: "fix-printer", Steps: []PerfStep{}, Success: true}
-	r1 := runSysExe("net.exe", []string{"stop", "Spooler"}, 15*time.Second)
-	res.Steps = append(res.Steps, PerfStep{Name: "Dừng Print Spooler", OK: r1.OK, Detail: firstLine(r1.Stdout + r1.Stderr)})
+	// v4.1.1 (P2-05): precondition — Spooler phải STOPPED rõ ràng mới dọn queue;
+	// không dừng được → trả service về chạy + dừng trung thực (không dọn khi còn khóa)
+	st := runSysExe("sc.exe", []string{"query", "Spooler"}, 12*time.Second)
+	wasRunning := strings.Contains(strings.ToUpper(st.Stdout), "RUNNING")
+	if wasRunning {
+		r1 := runSysExe("net.exe", []string{"stop", "Spooler"}, 20*time.Second)
+		st2 := runSysExe("sc.exe", []string{"query", "Spooler"}, 12*time.Second)
+		stopped := strings.Contains(strings.ToUpper(st2.Stdout), "STOPPED") && !strings.Contains(strings.ToUpper(st2.Stdout), "RUNNING")
+		res.Steps = append(res.Steps, PerfStep{Name: "Dừng Print Spooler", OK: stopped,
+			Detail: map[bool]string{true: "verified STOPPED — queue không còn khóa",
+				false: "không dừng được — KHÔNG dọn queue mù: " + firstLine(r1.Stdout + r1.Stderr)}[stopped]})
+		if !stopped {
+			return FixResult{Success: false, Mode: "windows", ID: "fix-printer", Steps: res.Steps,
+				Message: "Không dừng được Print Spooler — chưa dọn hàng đợi (thử lại khi máy rảnh hoặc khởi động lại máy)"}
+		}
+	} else if !st.OK {
+		res.Steps = append(res.Steps, PerfStep{Name: "Đọc trạng thái Spooler", OK: false,
+			Detail: firstLine(st.Stdout + st.Stderr) + " — trạng thái UNKNOWN, không dọn mù"})
+		return FixResult{Success: false, Mode: "windows", ID: "fix-printer", Steps: res.Steps,
+			Message: "Không xác định được trạng thái Spooler — dừng an toàn, không đụng queue"}
+	} else {
+		res.Steps = append(res.Steps, PerfStep{Name: "Print Spooler vốn không chạy", OK: true, Detail: "đi thẳng bước dọn queue"})
+	}
 	r2 := runSysExe("cmd.exe", []string{"/c", `del /q /f "%WINDIR%\System32\spool\PRINTERS\*.*"`}, 10*time.Second)
-	res.Steps = append(res.Steps, PerfStep{Name: "Dọn hàng đợi in kẹt", OK: r2.OK, Detail: "các lệnh in kẹt đã bị xóa"})
-	r3 := runSysExe("net.exe", []string{"start", "Spooler"}, 15*time.Second)
-	res.Steps = append(res.Steps, PerfStep{Name: "Mở lại Print Spooler", OK: r3.OK, Detail: "in ấn hoạt động lại bình thường"})
-	res.Success = r3.OK
-	res.Message = map[bool]string{true: "Đã dọn hàng đợi in + restart Spooler — thử in lại",
-		false: "Spooler không start lại được — xem chi tiết"}[res.Success]
+	res.Steps = append(res.Steps, PerfStep{Name: "Dọn hàng đợi in kẹt", OK: r2.OK,
+		Detail: map[bool]string{true: "các lệnh in kẹt đã bị xóa", false: firstLine(r2.Stdout + r2.Stderr)}[r2.OK]})
+	if !r2.OK {
+		res.Success = false
+	}
+	r3 := runSysExe("net.exe", []string{"start", "Spooler"}, 20*time.Second)
+	st3 := runSysExe("sc.exe", []string{"query", "Spooler"}, 12*time.Second)
+	running := strings.Contains(strings.ToUpper(st3.Stdout), "RUNNING") || strings.Contains(strings.ToUpper(st3.Stdout), "START_PENDING")
+	res.Steps = append(res.Steps, PerfStep{Name: "Mở lại Print Spooler", OK: running,
+		Detail: map[bool]string{true: "verified RUNNING — in ấn hoạt động lại bình thường",
+			false: firstLine(r3.Stdout + r3.Stderr) + " — verify: " + firstLine(st3.Stdout)}[running]})
+	res.Success = res.Success && running
+	res.Message = map[bool]string{true: "Đã dọn hàng đợi in + restart Spooler (verified RUNNING) — thử in lại",
+		false: "Một phần thất bại — xem chi tiết từng bước"}[res.Success]
 	return res
 }
 
@@ -244,7 +307,9 @@ func fixSearch() FixResult {
 	if wasRunning {
 		r1 := runSysExe("net.exe", []string{"stop", "WSearch"}, 20*time.Second)
 		st2 := runSysExe("sc.exe", []string{"query", "WSearch"}, 12*time.Second)
-		stopped := strings.Contains(strings.ToUpper(st2.Stdout), "STOPPED") || !strings.Contains(strings.ToUpper(st2.Stdout), "RUNNING")
+		// v4.1.1 (P2-06): chỉ nhận STOPPED RÕ RÀNG — output rỗng/query lỗi là UNKNOWN,
+		// tuyệt đối không coi là đã dừng rồi đi xóa index
+		stopped := st2.OK && strings.Contains(strings.ToUpper(st2.Stdout), "STOPPED") && !strings.Contains(strings.ToUpper(st2.Stdout), "RUNNING")
 		res.Steps = append(res.Steps, PerfStep{Name: "Dừng dịch vụ Windows Search", OK: stopped,
 			Detail: map[bool]string{true: "service verified STOPPED — index không còn bị khóa",
 				false: "không dừng được — index còn khóa, KHÔNG xóa mù: " + firstLine(r1.Stdout + r1.Stderr)}[stopped]})

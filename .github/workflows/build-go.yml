@@ -86,6 +86,7 @@ jobs:
             - UI nhúng sẵn (WebView2 Win10/11); thiếu runtime sẽ tự mở trình duyệt mặc định
             - Đủ tính năng: Tổng quan realtime, 35 tinh chỉnh Windows, Dọn dẹp disk+RAM, Gaming Mode, Tiến trình, Mạng, Script, Tự kiểm tra + webhook Discord, Ảnh chụp, Sao lưu registry, Giao diện
             - Hiệu năng: Timer Resolution tự động, ép xung an toàn, FPS test 2 pha (giữ nhịp mục tiêu + đo TỐI ĐA thật không giới hạn)
+            - **v4.2.0 — audit #2 (P1×8/P2×10):** Performance ép xung giờ snapshot ĐỦ (HAGS kể cả exists=false + CPU MIN AC/DC + Ultimate plan do app tạo) và restore đầy đủ + verify read-back, Success tổng hợp đúng (planOK/HAGS/Ultimate/CPU-min fail đều được ghi); CPU restore KHÔNG đổi power plan người dùng đã chọn lại sau unlock; GPU restore PENDING khi driver mất (giữ snapshot retry); GPU clock read-back verify + wording đúng giới hạn driver; fix Services Restart + Printer bỏ OR — verify STOPPED/RUNNING thật; fixSearch chỉ nhận STOPPED rõ (output rỗng = UNKNOWN); Self-test FULL KHÔNG tự chạy Appx removal (khó đảo ngược); System Operation Coordinator chặn thao tác chồng (409); nvidia-smi dùng đường dẫn resolved + runSysExe chuẩn hóa
             - **v4.1.0 — 10 phát hiện audit đã sửa:** 🔒 Snapshot/Restore EXACT: CPU unlock snapshot đủ scheme+MIN/MAX+AC/DC, GPU power trả mức Current (không Default), GPU clock trả custom lock cũ; AppOpt/Unlock không xóa snapshot khi restore thất bại (retry được), persist lỗi → ABORT trước khi đụng máy; ❌ FALSE-SUCCESS hết: Defender bỏ điều kiện OR + verify sc query, Search tổng hợp stop/delete/start, Tweak engine phân biệt query-error ≠ not-found, sc start fail = fail, powercfg DC phân loại desktop/laptop; 🎮 Gaming không ghi đè ngoài preset (win-sysresp); 🛠️ Services restore theo snapshot StartType từng service (Manual→Manual, Delayed→Delayed) + start lại service vốn chạy; ⬇️ Updater pin đúng tag + SHA-256 bắt buộc khớp + health-check rollback
             - **v4.0.0 mới:** 🔓 Unlock giới hạn CPU/GPU (bỏ trần throttle power plan + Power Throttling, mở power limit NVIDIA tối đa, khóa xung GPU tối đa — snapshot gốc + hoàn tác đúng trạng thái), 4 fix mới (DISM+SFC phục hồi file hệ thống, xây lại chỉ mục Windows Search, cập nhật Defender, đồng bộ đồng hồ), App Optimizer thêm Steam + OneDrive (gỡ tự khởi động, hoàn tác trả chuỗi gốc)
             - Dữ liệu lưu `%APPDATA%\NEXUS Optimizer\config.json`
@@ -100,7 +101,7 @@ jobs:
   # v3.5.0: tự test Hiệu năng — ép xung TRƯỚC, rồi FPS test xem có tăng không (60 → 120),
   # tự chụp ảnh bằng chứng (đã chỉnh FPS, đã bấm Tối ưu, FPS đạt).
   perf-test:
-    name: Tự test ép xung + FPS (60 → 120)
+    name: Render benchmark + smoke CI (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
