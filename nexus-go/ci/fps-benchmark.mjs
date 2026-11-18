@@ -195,8 +195,8 @@ try {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
       body: JSON.stringify({ enabled: en }),
     })).json();
-    if (!Array.isArray(g.effects) || g.effects.length < 19) {
-      fail(`Gaming Mode ${en ? 'bật' : 'tắt'} phải trả ≥19 effects (v3.6.0 thêm nagle/tdr/dynamictick): ${g.effects ? g.effects.length : 'null'}`);
+    if (!Array.isArray(g.effects) || g.effects.length < 18) { // v4.1.0: tắt = 18 effects (bỏ win-sysresp), bật = 20
+      fail(`Gaming Mode ${en ? 'bật' : 'tắt'} phải trả đủ effects (bật ≥20 / tắt 18 — v4.1.0 bỏ win-sysresp khỏi Revert theo phát hiện 07): ${g.effects ? g.effects.length : 'null'}`);
     }
     ok(`Gaming Mode ${en ? 'BẬT' : 'TẮT'}: ${g.effects.filter((x) => x.success).length}/${g.effects.length} bước OK (nền không-Windows sẽ báo trung thực)`);
   }
