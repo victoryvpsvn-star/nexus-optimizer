@@ -262,16 +262,16 @@ try {
   const fixSfc = await (await fetch(BASE + '/api/fixes', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ id: 'fix-sfc' }) })).json();
   if (fixSfc.success !== false || !(fixSfc.message || '').includes('Windows')) fail('fix-sfc trên CI phải trung thực thất bại (chỉ Windows): ' + JSON.stringify(fixSfc).slice(0, 140));
   ok('Fix mới fix-sfc: báo trung thực "chỉ chạy trên Windows" ✓');
-  const defs = await (await fetch(BASE + '/api/fixes')).json();
+  const fixesV4 = await (await fetch(BASE + '/api/fixes')).json();
   for (const need of ['fix-sfc', 'fix-search', 'fix-defender', 'fix-time']) {
-    if (!defs.some((d) => d.id === need)) fail('Thiếu fix mới ' + need + ' trong /api/fixes');
+    if (!fixesV4.some((d) => d.id === need)) fail('Thiếu fix mới ' + need + ' trong /api/fixes');
   }
-  ok('Bộ Fixes giờ có ' + defs.length + ' mục (thêm fix-sfc/search/defender/time) ✓');
-  const apps = await (await fetch(BASE + '/api/appopt')).json();
+  ok('Bộ Fixes giờ có ' + fixesV4.length + ' mục (thêm fix-sfc/search/defender/time) ✓');
+  const appsV4 = await (await fetch(BASE + '/api/appopt')).json();
   for (const need of ['steam', 'onedrive']) {
-    if (!apps.some((d) => d.id === need)) fail('Thiếu app mới ' + need + ' trong /api/appopt');
+    if (!appsV4.some((d) => d.id === need)) fail('Thiếu app mới ' + need + ' trong /api/appopt');
   }
-  ok('App Optimizer giờ có ' + apps.length + ' app (thêm steam + onedrive) ✓');
+  ok('App Optimizer giờ có ' + appsV4.length + ' app (thêm steam + onedrive) ✓');
   const steamRun = await (await fetch(BASE + '/api/appopt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ id: 'steam', enabled: true }) })).json();
   if (steamRun.success !== false || !(steamRun.message || '').includes('Windows')) fail('appopt steam trên CI phải trung thực: ' + JSON.stringify(steamRun).slice(0, 140));
   ok('Appopt steam: mode không-Windows báo trung thực ✓');
