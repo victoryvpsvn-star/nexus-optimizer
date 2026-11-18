@@ -6,6 +6,7 @@ package main
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -55,8 +56,8 @@ var fixDefs = []FixCard{
 	{"fix-defender", "Windows Defender không cập nhật virus",
 		"Cập nhật signature Defender bằng MpCmdRun + khởi động lại dịch vụ Defender — xử lý lỗi bảo vệ 'cần kiểm tra', cập nhật kẹt 0%.",
 		"🛡️", true},
-	{"fix-time", "Giờ máy sai / lệch múi giờ",
-		"Đồng bộ lại giờ hệ thống với máy chủ thời gian (w32tm resync) — xử lý lỗi đồng hồ chạy sai, chứng chỉ web báo lỗi vì lệch giờ.",
+	{"fix-time", "Giờ máy sai / lệch giờ",
+		"Đồng bộ lại giờ hệ thống với máy chủ thời gian (w32tm resync) — xử lý đồng hồ chạy sai, chứng chỉ web báo lỗi vì lệch giờ. Lưu ý: chỉ đồng bộ GIỜ, KHÔNG sửa múi giờ — múi giờ sai thì chỉnh trong Settings > Time & Language.",
 		"🕒", true},
 }
 
@@ -231,49 +232,131 @@ func fixSfc() FixResult {
 	return res
 }
 
-/** fix-search: xây lại chỉ mục Windows Search — dừng WSearch, xóa index cũ, khởi động lại */
+/** fix-search v4.1.0 (phát hiện 05): tổng hợp TRUNG THỰC cả stop/delete/start —
+ * stop thất bại là thất bại (index còn khóa, không xóa được); delete phân biệt
+ * "file không tồn tại" (hợp lệ) với access denied/lock (thất bại); verify cuối. */
 func fixSearch() FixResult {
 	res := FixResult{Mode: "windows", ID: "fix-search", Steps: []PerfStep{}, Success: true}
-	r1 := runSysExe("net.exe", []string{"stop", "WSearch"}, 15*time.Second)
-	res.Steps = append(res.Steps, PerfStep{Name: "Dừng dịch vụ Windows Search", OK: r1.OK, Detail: firstLine(r1.Stdout + r1.Stderr)})
-	r2 := runSysExe("cmd.exe", []string{"/c", `del /q /f "%PROGRAMDATA%\Microsoft\Search\Data\Applications\Windows\Windows.edb"`}, 10*time.Second)
-	// del lỗi vì file không tồn tại cũng coi như xong (mục tiêu là index sạch) — ghi trung thực vào detail
-	res.Steps = append(res.Steps, PerfStep{Name: "Xóa file chỉ mục cũ (Windows.edb)", OK: true,
-		Detail: map[bool]string{true: "file index đã xóa", false: "không tìm thấy file index cũ — vẫn tiếp tục (index vốn trống)"}[r2.OK]})
-	r3 := runSysExe("net.exe", []string{"start", "WSearch"}, 15*time.Second)
-	res.Steps = append(res.Steps, PerfStep{Name: "Khởi động lại Windows Search", OK: r3.OK, Detail: firstLine(r3.Stdout + r3.Stderr)})
-	res.Success = r3.OK
-	res.Message = map[bool]string{true: "Đã xây lại chỉ mục tìm kiếm — chờ vài phút để Windows nạp lại index rồi thử tìm",
-		false: "WSearch không start lại được — xem chi tiết"}[res.Success]
+	edb := os.Getenv("PROGRAMDATA") + `\Microsoft\Search\Data\Applications\Windows\Windows.edb`
+	// trạng thái trước: query service state bằng sc query (không đoán từ net stop)
+	st := runSysExe("sc.exe", []string{"query", "WSearch"}, 12*time.Second)
+	wasRunning := strings.Contains(strings.ToUpper(st.Stdout), "RUNNING")
+	if wasRunning {
+		r1 := runSysExe("net.exe", []string{"stop", "WSearch"}, 20*time.Second)
+		st2 := runSysExe("sc.exe", []string{"query", "WSearch"}, 12*time.Second)
+		stopped := strings.Contains(strings.ToUpper(st2.Stdout), "STOPPED") || !strings.Contains(strings.ToUpper(st2.Stdout), "RUNNING")
+		res.Steps = append(res.Steps, PerfStep{Name: "Dừng dịch vụ Windows Search", OK: stopped,
+			Detail: map[bool]string{true: "service verified STOPPED — index không còn bị khóa",
+				false: "không dừng được — index còn khóa, KHÔNG xóa mù: " + firstLine(r1.Stdout + r1.Stderr)}[stopped]})
+		if !stopped {
+			_ = runSysExe("net.exe", []string{"start", "WSearch"}, 20*time.Second) // trả lại trạng thái cũ
+			return FixResult{Success: false, Mode: "windows", ID: "fix-search", Steps: res.Steps,
+				Message: "Không dừng được WSearch — index chưa xóa được, đã trả service về trạng thái chạy (thử lại khi ít tải hoặc khởi động lại máy)"}
+		}
+	} else {
+		res.Steps = append(res.Steps, PerfStep{Name: "Windows Search vốn không chạy", OK: true, Detail: "không cần stop — đi thẳng bước xóa index"})
+	}
+	// delete: phân biệt not-found (hợp lệ) với lỗi thật (access denied/lock)
+	_, statErr := os.Stat(edb)
+	if statErr != nil && os.IsNotExist(statErr) {
+		res.Steps = append(res.Steps, PerfStep{Name: "Xóa file chỉ mục cũ (Windows.edb)", OK: true, Detail: "không có file index — vốn đã sạch"})
+	} else {
+		r2 := runSysExe("cmd.exe", []string{"/c", `del /q /f "` + edb + `"`}, 10*time.Second)
+		_, stillThere := os.Stat(edb)
+		deleted := r2.OK && os.IsNotExist(stillThere)
+		res.Steps = append(res.Steps, PerfStep{Name: "Xóa file chỉ mục cũ (Windows.edb)", OK: deleted,
+			Detail: map[bool]string{true: "file index đã xóa (verify không còn)",
+				false: "KHÔNG xóa được — " + firstLine(r2.Stdout + r2.Stderr) + " (access denied/file lock?); không báo rebuild thành công khi index còn nguyên"}[deleted]})
+		if !deleted {
+			_ = runSysExe("net.exe", []string{"start", "WSearch"}, 20*time.Second)
+			return FixResult{Success: false, Mode: "windows", ID: "fix-search", Steps: res.Steps,
+				Message: "Không xóa được file index (bị khóa/quyền) — đã trả service về chạy; index cũ vẫn còn nên KHÔNG coi là rebuild thành công"}
+		}
+	}
+	r3 := runSysExe("net.exe", []string{"start", "WSearch"}, 20*time.Second)
+	st3 := runSysExe("sc.exe", []string{"query", "WSearch"}, 12*time.Second)
+	runningNow := strings.Contains(strings.ToUpper(st3.Stdout), "RUNNING")
+	res.Steps = append(res.Steps, PerfStep{Name: "Khởi động lại Windows Search", OK: runningNow,
+		Detail: map[bool]string{true: "service verified RUNNING — sẽ tự xây index mới trong vài phút",
+			false: firstLine(r3.Stdout + r3.Stderr) + " — service không start lại được"}[runningNow]})
+	res.Success = runningNow
+	res.Message = map[bool]string{true: "Đã xây lại chỉ mục tìm kiếm (stop verified + index xóa verified + start verified) — chờ vài phút nạp lại",
+		false: "Một phần thất bại — xem chi tiết từng bước"}[res.Success]
 	return res
 }
 
-/** fix-defender: cập nhật signature + restart dịch vụ Defender */
+/** fix-defender v4.1.0 (phát hiện 04): BỎ điều kiện stop OR start — restart là chuỗi có
+ * thứ tự, một lệnh thành công không chứng minh trạng thái cuối. Luồng mới:
+ * 1) resolve MpCmdRun (cả platform versioned path — 13.5); 2) SignatureUpdate;
+ * 3) KHÔNG stop mù: query WinDefend trước — đang chạy thì không đụng (tamper thường chặn
+ * stop anyway), đã dừng thì start + VERIFY trạng thái cuối bằng `sc query` RUNNING.
+ * Success chỉ khi signature OK (hoặc báo rõ lỗi) VÀ service verified chạy. */
 func fixDefender() FixResult {
 	res := FixResult{Mode: "windows", ID: "fix-defender", Steps: []PerfStep{}, Success: true}
-	mp := os.Getenv("ProgramFiles") + `\Windows Defender\MpCmdRun.exe`
-	if _, err := os.Stat(mp); err != nil {
+	mp := defenderMpCmdRun()
+	if mp == "" {
 		return FixResult{Success: false, Mode: "windows", ID: "fix-defender",
-			Steps: []PerfStep{{Name: "Tìm MpCmdRun.exe", OK: false, Detail: "không tìm thấy Windows Defender trên máy này"}},
+			Steps: []PerfStep{{Name: "Tìm MpCmdRun.exe", OK: false, Detail: "không tìm thấy Windows Defender platform binary (ProgramFiles + platform/<ver>)"}},
 			Message: "Máy không có Windows Defender (dùng AV khác?) — không fix được"}
 	}
 	r1 := runExe(mp, []string{"-SignatureUpdate"}, 5*time.Minute)
 	res.Steps = append(res.Steps, PerfStep{Name: "Cập nhật signature Defender", OK: r1.OK,
-		Detail: map[bool]string{true: "virus database đã cập nhật", false: firstLine(r1.Stdout + r1.Stderr)}[r1.OK]})
+		Detail: map[bool]string{true: "virus database đã cập nhật", false: firstLine(r1.Stdout + r1.Stderr) + " — signature CHƯA cập nhật được (mạng/blocked?)"}[r1.OK]})
 	if !r1.OK {
-		res.Success = false
+		res.Success = false // không lấy trạng thái service che lấp lỗi signature (TEST DEFENDER-04)
 	}
-	r2 := runSysExe("net.exe", []string{"stop", "WinDefend"}, 15*time.Second)
-	r3 := runSysExe("net.exe", []string{"start", "WinDefend"}, 15*time.Second)
-	ok2 := r3.OK || r2.OK // Defender được bảo vệ — stop có thể bị từ chối, start OK vẫn tính
-	res.Steps = append(res.Steps, PerfStep{Name: "Khởi động lại dịch vụ WinDefend", OK: ok2,
-		Detail: map[bool]string{true: "dịch vụ chạy lại bình thường", false: firstLine(r2.Stdout + r2.Stderr + r3.Stderr) + " (Defender có tamper protection — không stop được cũng bình thường)"}[ok2]})
-	if !ok2 {
-		res.Success = false
+	// trạng thái service TRƯỚC khi thao tác — không stop mù (Defender có tamper protection)
+	st := runSysExe("sc.exe", []string{"query", "WinDefend"}, 12*time.Second)
+	running := strings.Contains(strings.ToUpper(st.Stdout), "RUNNING")
+	if running {
+		res.Steps = append(res.Steps, PerfStep{Name: "WinDefend đang chạy — không cần restart", OK: true,
+			Detail: "không stop mù (Tamper Protection của Windows thường từ chối và việc stop không cần thiết cho cập nhật signature)"})
+	} else {
+		r3 := runSysExe("sc.exe", []string{"start", "WinDefend"}, 20*time.Second)
+		// verify trạng thái CUỐI bằng sc query — exit 0 của `sc start` không đủ (audit 6.2)
+		st2 := runSysExe("sc.exe", []string{"query", "WinDefend"}, 12*time.Second)
+		runningNow := strings.Contains(strings.ToUpper(st2.Stdout), "RUNNING")
+		res.Steps = append(res.Steps, PerfStep{Name: "WinDefend không chạy → start + verify", OK: runningNow,
+			Detail: map[bool]string{true: "service verified RUNNING sau khi start",
+				false: "start " + firstLine(r3.Stdout+r3.Stderr) + " — verify `sc query`: " + firstLine(st2.Stdout) + " (Windows từ chối thao tác — Tamper Protection/policy; KHÔNG khuyến nghị tắt bảo vệ để đạt xanh)"}[runningNow]})
+		if !runningNow {
+			res.Success = false // stop thành công không được che lấp start thất bại (TEST DEFENDER-01)
+		}
 	}
-	res.Message = map[bool]string{true: "Đã cập nhật Defender + khởi động lại dịch vụ — thử kiểm tra bảo vệ lại",
-		false: "Một số bước lỗi — xem chi tiết (signature update cần mạng)"}[res.Success]
+	res.Message = map[bool]string{true: "Defender signature cập nhật + service verified đang chạy",
+		false: "Một số phần lỗi — xem chi tiết từng bước (signature cần mạng; service cần Windows cho phép start)"}[res.Success]
 	return res
+}
+
+/** v4.1.0 (13.5): resolve MpCmdRun.exe — thử path chuẩn rồi platform/<ver mới nhất> */
+func defenderMpCmdRun() string {
+	pf := os.Getenv("ProgramFiles")
+	cands := []string{pf + `\Windows Defender\MpCmdRun.exe`}
+	platRoot := pf + `\Windows Defender\platform`
+	if ents, err := os.ReadDir(platRoot); err == nil {
+		var vers []string
+		for _, e := range ents {
+			if e.IsDir() {
+				vers = append(vers, e.Name())
+			}
+		}
+		for i := 0; i < len(vers); i++ { // sort giảm dần — lấy version mới nhất
+			for j := i + 1; j < len(vers); j++ {
+				if vers[j] > vers[i] {
+					vers[i], vers[j] = vers[j], vers[i]
+				}
+			}
+		}
+		for _, v := range vers {
+			cands = append(cands, filepath.Join(platRoot, v, "MpCmdRun.exe"))
+		}
+	}
+	for _, c := range cands {
+		if st, err := os.Stat(c); err == nil && !st.IsDir() {
+			return c
+		}
+	}
+	return ""
 }
 
 /** fix-time: đồng bộ lại giờ hệ thống với máy chủ thời gian */

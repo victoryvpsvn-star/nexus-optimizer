@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -134,40 +135,164 @@ const ifeoDiscord = `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image Fil
 // ---------- v3.9.0: snapshot gốc trước khi apply (theo audit P2-03/P2-04/P2-16) ----------
 // Lưu vào dataDir()/appopt-snap.json — hoàn tác trả về GIÁ TRỊ GỐC, không delete mù.
 // Cấu trúc: { "section": { "key hoặc name": { "type": "REG_DWORD", "data": "0x1" } } }
+// v4.1.0 (audit v4.0.0 phát hiện 06): lớp snapshot sửa lại theo báo cáo:
+//   - mutex chung quanh mọi read-modify-write (hai thao tác song song không ghi đè nhau)
+//   - ghi file nguyên tử: temp + flush/sync + close rồi mới thay thế; lỗi ghi KHÔNG nuốt nữa
+//   - JSON hỏng → cách ly file (.corrupt-<ts>) và báo lỗi, KHÔNG tự tạo file mới đè mất
+//     các section snapshot khác
+//   - caller bắt buộc xử lý lỗi: không persist được snapshot gốc thì KHÔNG được đụng vào
+//     cấu hình của người dùng (abort trước khi ghi/xóa registry)
+
+var snapMu sync.Mutex
 
 func appoptSnapPath() string { return filepath.Join(dataDir(), "appopt-snap.json") }
 
-func saveAppoptSnap(section string, m map[string]map[string]string) {
+/** Đọc toàn bộ snapshot; JSON hỏng → cách ly + lỗi (không âm thầm tạo lại) */
+func loadSnapAll() (map[string]map[string]map[string]string, error) {
+	b, err := os.ReadFile(appoptSnapPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]map[string]map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("đọc %s thất bại: %w", appoptSnapPath(), err)
+	}
 	var all map[string]map[string]map[string]string
-	if b, err := os.ReadFile(appoptSnapPath()); err == nil {
-		_ = json.Unmarshal(b, &all)
+	if err := json.Unmarshal(b, &all); err != nil {
+		// cách ly file hỏng — giữ bằng chứng, không ghi đè dữ liệu gốc của các section khác
+		q := appoptSnapPath() + ".corrupt-" + time.Now().Format("20060102-150405")
+		_ = os.Rename(appoptSnapPath(), q)
+		return nil, fmt.Errorf("snapshot JSON hỏng — đã cách ly sang %s (%v)", filepath.Base(q), err)
 	}
 	if all == nil {
 		all = map[string]map[string]map[string]string{}
 	}
+	return all, nil
+}
+
+/** Ghi nguyên tử 1 section; trả lỗi cho caller — không persist được thì caller phải abort */
+func saveAppoptSnap(section string, m map[string]map[string]string) error {
+	snapMu.Lock()
+	defer snapMu.Unlock()
+	all, err := loadSnapAll()
+	if err != nil {
+		return err
+	}
 	all[section] = m
-	if out, err := json.MarshalIndent(all, "", "  "); err == nil {
-		_ = os.WriteFile(appoptSnapPath(), out, filePerm())
+	out, err := json.MarshalIndent(all, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal snapshot: %w", err)
 	}
+	tmp := appoptSnapPath() + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, filePerm())
+	if err != nil {
+		return fmt.Errorf("tạo file tạm snapshot: %w", err)
+	}
+	if _, err := f.Write(out); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("ghi file tạm snapshot: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("sync snapshot: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("đóng snapshot: %w", err)
+	}
+	// os.Rename không atomic trên Windows — chấp nhận: temp+sync đã chặt hơn ghi đè trực tiếp,
+	// và lỗi rename vẫn được trả về thay vì nuốt (audit yêu cầu propagate error)
+	if err := os.Rename(tmp, appoptSnapPath()); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("thay thế file snapshot: %w", err)
+	}
+	return nil
 }
 
-func loadAppoptSnap(section string) map[string]map[string]string {
-	all := map[string]map[string]map[string]string{}
-	if b, err := os.ReadFile(appoptSnapPath()); err == nil {
-		_ = json.Unmarshal(b, &all)
+/** Đọc 1 section — found=false là trạng thái hợp lệ ("chưa có"), error là lỗi thật sự */
+func loadAppoptSnap(section string) (map[string]map[string]string, bool, error) {
+	snapMu.Lock()
+	defer snapMu.Unlock()
+	all, err := loadSnapAll()
+	if err != nil {
+		return nil, false, err
 	}
-	return all[section]
+	s, found := all[section]
+	return s, found, nil
 }
 
-func clearAppoptSnap(section string) {
-	all := map[string]map[string]map[string]string{}
-	if b, err := os.ReadFile(appoptSnapPath()); err == nil {
-		_ = json.Unmarshal(b, &all)
+/** Xóa 1 section; trả lỗi — chỉ gọi khi toàn bộ restore đã verify thành công */
+func clearAppoptSnap(section string) error {
+	snapMu.Lock()
+	defer snapMu.Unlock()
+	all, err := loadSnapAll()
+	if err != nil {
+		return err
 	}
 	delete(all, section)
-	if out, err := json.MarshalIndent(all, "", "  "); err == nil {
-		_ = os.WriteFile(appoptSnapPath(), out, filePerm())
+	out, err := json.MarshalIndent(all, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal snapshot: %w", err)
 	}
+	tmp := appoptSnapPath() + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, filePerm())
+	if err != nil {
+		return fmt.Errorf("tạo file tạm snapshot: %w", err)
+	}
+	if _, err := f.Write(out); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("ghi file tạm snapshot: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("sync snapshot: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("đóng snapshot: %w", err)
+	}
+	if err := os.Rename(tmp, appoptSnapPath()); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("thay thế file snapshot: %w", err)
+	}
+	return nil
+}
+
+/** Read-back sau khi hoàn tác: value hiện tại phải khớp dữ liệu gốc */
+func regValueMatches(key, name, wantData string) bool {
+	_, data, found := regQueryValue(key, name)
+	if !found {
+		return false
+	}
+	return strings.TrimSpace(data) == strings.TrimSpace(wantData)
+}
+
+/** v4.1.0 (phát hiện 01/06): phân biệt "value không tồn tại" với "lỗi query" —
+ * reg query thất bại vì Access Denied / runner lỗi KHÔNG được coi như "chưa từng có".
+ * exists=false chỉ khi reg trả lỗi "unable to find" (đa ngôn ngữ: lỗi missing của reg.exe
+ * thường vẫn tiếng Anh); các lỗi khác → error, caller phải dừng. */
+func regQueryValueStrict(key, name string) (typ, data string, exists bool, err error) {
+	r := runExe("reg", []string{"query", key, "/v", name}, 10*time.Second)
+	if !r.OK {
+		out := strings.ToLower(r.Stdout + r.Stderr)
+		if strings.Contains(out, "unable to find") || strings.Contains(out, "cannot find") || strings.Contains(out, "the system was unable") {
+			return "", "", false, nil // chắc chắn không tồn tại — trạng thái hợp lệ
+		}
+		return "", "", false, fmt.Errorf("reg query %s\\%s thất bại (exit %d): %s — không phân biệt được 'không tồn tại' và 'lỗi truy cập'", key, name, r.Code, firstLine(r.Stdout+r.Stderr))
+	}
+	for _, ln := range strings.Split(r.Stdout, "\n") {
+		ln = strings.TrimSpace(ln)
+		if strings.HasPrefix(ln, name) && strings.Contains(ln, "REG_") {
+			f := strings.Fields(ln)
+			if len(f) >= 3 {
+				return f[1], strings.Join(f[2:], " "), true, nil
+			}
+		}
+	}
+	return "", "", false, fmt.Errorf("reg query trả output không đọc được cho %s\\%s", key, name)
 }
 
 /** regQueryValue — đọc type+data hiện tại của 1 registry value (dùng cho snapshot) */
@@ -209,6 +334,7 @@ func applyBrowserPolicy(id string) AppOptRunResult {
 		vals = []RegValue{{"DisableTelemetry", "REG_DWORD", "1"}}
 	}
 	// v3.9.0: snapshot giá trị gốc TRƯỚC khi ghi — hoàn tác sẽ trả đúng giá trị cũ
+	// v4.1.0 (phát hiện 06): persist snapshot thất bại → ABORT trước khi đụng registry
 	snap := map[string]map[string]string{}
 	for _, v := range vals {
 		if typ, data, found := regQueryValue(key, v.Name); found {
@@ -216,7 +342,11 @@ func applyBrowserPolicy(id string) AppOptRunResult {
 		}
 	}
 	if len(snap) > 0 {
-		saveAppoptSnap("policy:"+id, snap)
+		if err := saveAppoptSnap("policy:"+id, snap); err != nil {
+			return AppOptRunResult{Mode: "windows", ID: id, Success: false,
+				Steps:   []PerfStep{{Name: "Lưu snapshot giá trị gốc", OK: false, Detail: err.Error() + " — HỦY tối ưu, không đụng registry (không mất dữ liệu gốc)"}},
+				Message: "Không lưu được snapshot gốc (" + err.Error() + ") — dừng an toàn, máy chưa bị thay đổi"}
+		}
 	}
 	r := regAddValues(key, vals, "")
 	res := AppOptRunResult{Mode: "windows", ID: id, Steps: []PerfStep{{Name: "Ghi chính sách " + key, OK: r.Success, Detail: r.Message}}}
@@ -247,13 +377,19 @@ func revertBrowserPolicy(id string) AppOptRunResult {
 	}
 	// v3.9.0 (audit P2-03): có snapshot → trả giá trị GỐC (giữ chính sách admin có trước);
 	// không có snapshot → delete về mặc định Windows
-	snap := loadAppoptSnap("policy:" + id)
+	// v4.1.0 (phát hiện 06): snapshot chỉ được xóa khi TOÀN BỘ value đã trả + verify khớp
+	snap, snapFound, snapErr := loadAppoptSnap("policy:" + id)
+	if snapErr != nil {
+		return AppOptRunResult{Mode: "windows", ID: id, Success: false,
+			Steps:   []PerfStep{{Name: "Đọc snapshot gốc", OK: false, Detail: snapErr.Error()}},
+			Message: "Không đọc được snapshot — KHÔNG hoàn tác mù (giữ nguyên trạng thái hiện tại để an toàn)"}
+	}
 	allOK := true
 	var detail []string
 	for _, n := range names {
 		if s, ok := snap[n]; ok {
 			r := runExe("reg", []string{"add", key, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
-			if !r.OK {
+			if !r.OK || !regValueMatches(key, n, s["data"]) {
 				allOK = false
 			}
 			detail = append(detail, n+" → trả giá trị gốc ("+s["data"]+")")
@@ -265,10 +401,19 @@ func revertBrowserPolicy(id string) AppOptRunResult {
 			detail = append(detail, n+" → gỡ (chưa từng có trước khi tối ưu)")
 		}
 	}
-	clearAppoptSnap("policy:" + id)
+	if allOK && snapFound {
+		if err := clearAppoptSnap("policy:" + id); err != nil {
+			allOK = false
+			detail = append(detail, "snapshot chưa xóa được: "+err.Error())
+		}
+	}
+	msg := "Đã hoàn tác — trả đúng trạng thái trước khi tối ưu (đã verify)"
+	if !allOK {
+		msg = "Một số value hoàn tác lỗi — snapshot GIỮ NGUYÊN để thử lại (không mất dữ liệu gốc)"
+	}
 	return AppOptRunResult{Mode: "windows", ID: id, Success: allOK,
 		Steps:   []PerfStep{{Name: "Hoàn tác chính sách (trả đúng trạng thái gốc)", OK: allOK, Detail: strings.Join(detail, "; ")}},
-		Message: map[bool]string{true: "Đã hoàn tác — trả đúng trạng thái trước khi tối ưu", false: "Một số value hoàn tác lỗi — xem chi tiết"}[allOK]}
+		Message: msg}
 }
 
 func applyDiscord(enabled bool) AppOptRunResult {
@@ -283,10 +428,15 @@ func applyDiscord(enabled bool) AppOptRunResult {
 				var m map[string]any
 				if err := json.Unmarshal(raw, &m); err == nil {
 					// v3.9.0 (audit P2-02): lưu giá trị HardwareAcceleration GỐC trước khi đổi
+					// v4.1.0 (phát hiện 06): persist lỗi → abort, không ghi đè settings.json
 					if prev, had := m["HardwareAcceleration"]; had {
-						saveAppoptSnap("discord-hw", map[string]map[string]string{
+						if serr := saveAppoptSnap("discord-hw", map[string]map[string]string{
 							"value": map[string]string{"json": fmt.Sprint(prev), "had": "1"},
-						})
+						}); serr != nil {
+							return AppOptRunResult{Mode: "windows", ID: "discord", Success: false,
+								Steps:   []PerfStep{{Name: "Lưu snapshot giá trị gốc", OK: false, Detail: serr.Error() + " — HỦY, không đổi settings.json"}},
+								Message: "Không lưu được snapshot gốc — dừng an toàn, Discord chưa bị thay đổi"}
+						}
 					}
 					m["HardwareAcceleration"] = false
 					if out, err := json.MarshalIndent(m, "", "  "); err == nil && os.WriteFile(cfg, out, 0644) == nil {
@@ -300,11 +450,20 @@ func applyDiscord(enabled bool) AppOptRunResult {
 			res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → tắt trong settings.json", OK: false,
 				Detail: "không tìm thấy settings.json của Discord"})
 		}
-		// IFEO CPU priority — cần admin; snapshot giá trị gốc nếu có
+		// IFEO CPU priority — cần admin; snapshot giá trị gốc nếu có (persist lỗi → bỏ qua IFEO, không ghi đè)
 		if typ, data, found := regQueryValue(ifeoDiscord, "CpuPriorityClass"); found {
-			saveAppoptSnap("discord-ifeo", map[string]map[string]string{
+			if serr := saveAppoptSnap("discord-ifeo", map[string]map[string]string{
 				"CpuPriorityClass": map[string]string{"type": typ, "data": data},
-			})
+			}); serr != nil {
+				res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord (IFEO) → bỏ qua", OK: false,
+					Detail: "lưu snapshot giá trị gốc lỗi: " + serr.Error() + " — không ghi đè IFEO"})
+				r2 := regAddValues(ifeoDiscord, []RegValue{{"CpuPriorityClass", "REG_DWORD", "16384"}}, "")
+				_ = r2 // không chạy — luôn báo lỗi cho phần IFEO
+				res.Success = hwOK
+				res.Message = map[bool]string{true: "Đã tắt HW accel Discord — RIÊNG IFEO bị bỏ qua vì không lưu được snapshot gốc (an toàn hơn ghi đè mù)",
+					false: "Không tắt được Hardware Acceleration — settings.json Discord không tìm thấy/không ghi được"}[hwOK]
+				return res
+			}
 		}
 		r := regAddValues(ifeoDiscord, []RegValue{{"CpuPriorityClass", "REG_DWORD", "16384"}}, "")
 		res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → Below Normal (IFEO)", OK: r.Success,
@@ -320,8 +479,11 @@ func applyDiscord(enabled bool) AppOptRunResult {
 		}
 	} else {
 		// v3.9.0 (audit P2-02): hoàn tác trả GIÁ TRỊ GỐC — key có trước thì giữ nguyên giá trị cũ
+		// v4.1.0 (phát hiện 06): snapshot chỉ xóa khi restore thành công + verify
 		hwRestored := false
-		if snap := loadAppoptSnap("discord-hw"); snap != nil && snap["value"] != nil {
+		if snap, snapFound, snapErr := loadAppoptSnap("discord-hw"); snapErr != nil {
+			res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → hoàn tác", OK: false, Detail: snapErr.Error()})
+		} else if snapFound && snap["value"] != nil {
 			if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
 				if raw, err := os.ReadFile(cfg); err == nil {
 					var m map[string]any
@@ -348,7 +510,13 @@ func applyDiscord(enabled bool) AppOptRunResult {
 					}
 				}
 			}
-			clearAppoptSnap("discord-hw")
+			if hwRestored {
+				if err := clearAppoptSnap("discord-hw"); err != nil {
+					hwRestored = false
+					res.Steps = append(res.Steps, PerfStep{Name: "Hardware Acceleration → hoàn tác", OK: false,
+						Detail: "restore OK nhưng xóa snapshot lỗi (" + err.Error() + ") — giữ snapshot, thử lại an toàn"})
+				}
+			}
 		}
 		if !hwRestored {
 			// không có snapshot (tối ưu trước khi cài v3.9.0) — fallback: gỡ key như cũ
@@ -365,14 +533,22 @@ func applyDiscord(enabled bool) AppOptRunResult {
 				}
 			}
 		}
-		// IFEO: trả giá trị gốc nếu có snapshot, không thì gỡ
+		// IFEO: trả giá trị gốc nếu có snapshot, không thì gỡ — chỉ clear khi verify khớp
 		ifeoOK := true
-		if snap := loadAppoptSnap("discord-ifeo"); snap != nil && snap["CpuPriorityClass"] != nil {
+		if snap, snapFound, snapErr := loadAppoptSnap("discord-ifeo"); snapErr != nil {
+			ifeoOK = false
+			res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → hoàn tác", OK: false, Detail: snapErr.Error()})
+		} else if snapFound && snap["CpuPriorityClass"] != nil {
 			s := snap["CpuPriorityClass"]
 			r := runExe("reg", []string{"add", ifeoDiscord, "/v", "CpuPriorityClass", "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
-			ifeoOK = r.OK
-			clearAppoptSnap("discord-ifeo")
-			res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → trả giá trị gốc", OK: ifeoOK, Detail: s["data"]})
+			ifeoOK = r.OK && regValueMatches(ifeoDiscord, "CpuPriorityClass", s["data"])
+			if ifeoOK {
+				if err := clearAppoptSnap("discord-ifeo"); err != nil {
+					ifeoOK = false
+				}
+			}
+			res.Steps = append(res.Steps, PerfStep{Name: "CPU priority Discord → trả giá trị gốc", OK: ifeoOK,
+				Detail: map[bool]string{true: s["data"] + " (verify khớp)", false: "restore lỗi — snapshot giữ nguyên để thử lại"}[ifeoOK]})
 		} else {
 			r := regDeleteValues(ifeoDiscord, []string{"CpuPriorityClass"}, "")
 			ifeoOK = r.Success
@@ -390,6 +566,7 @@ func applySpotify(enabled bool) AppOptRunResult {
 	runKey := `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
 	if enabled {
 		// v3.9.0 (audit P2-04): snapshot nguyên chuỗi command gốc trước khi xóa
+		// v4.1.0 (phát hiện 06): persist lỗi → abort an toàn (máy chưa bị thay đổi)
 		snap := map[string]map[string]string{}
 		for _, n := range []string{"Spotify", "Spotify Web Helper"} {
 			if typ, data, found := regQueryValue(runKey, n); found {
@@ -397,7 +574,11 @@ func applySpotify(enabled bool) AppOptRunResult {
 			}
 		}
 		if len(snap) > 0 {
-			saveAppoptSnap("spotify", snap)
+			if serr := saveAppoptSnap("spotify", snap); serr != nil {
+				return AppOptRunResult{Mode: "windows", ID: "spotify", Success: false,
+					Steps:   []PerfStep{{Name: "Lưu snapshot giá trị gốc", OK: false, Detail: serr.Error() + " — HỦY, không xóa Run entry"}},
+					Message: "Không lưu được snapshot gốc — dừng an toàn, Spotify chưa bị thay đổi"}
+			}
 		}
 		r := regDeleteValues(runKey, []string{"Spotify", "Spotify Web Helper"}, "")
 		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ Spotify khỏi tự khởi động (HKCU Run)", OK: r.Success,
@@ -406,19 +587,30 @@ func applySpotify(enabled bool) AppOptRunResult {
 		res.Message = "Đã gỡ Spotify khỏi khởi động Windows"
 	} else {
 		// hoàn tác: trả nguyên chuỗi gốc (đúng path + arguments) nếu có snapshot
-		snap := loadAppoptSnap("spotify")
-		if len(snap) > 0 {
+		// v4.1.0 (phát hiện 06): chỉ xóa snapshot khi mọi value đã trả + verify khớp
+		snap, snapFound, snapErr := loadAppoptSnap("spotify")
+		if snapErr != nil {
+			return AppOptRunResult{Mode: "windows", ID: "spotify", Success: false,
+				Steps:   []PerfStep{{Name: "Đọc snapshot gốc", OK: false, Detail: snapErr.Error()}},
+				Message: "Không đọc được snapshot — không hoàn tác mù (giữ trạng thái hiện tại)"}
+		}
+		if snapFound && len(snap) > 0 {
 			allOK := true
 			for n, s := range snap {
 				r := runExe("reg", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
-				if !r.OK {
+				if !r.OK || !regValueMatches(runKey, n, s["data"]) {
 					allOK = false
 				}
 				res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + n + " (nguyên chuỗi gốc)", OK: r.OK, Detail: s["data"]})
 			}
-			clearAppoptSnap("spotify")
+			if allOK {
+				if err := clearAppoptSnap("spotify"); err != nil {
+					allOK = false
+				}
+			}
 			res.Success = allOK
-			res.Message = map[bool]string{true: "Đã hoàn tác — trả đúng chuỗi khởi động gốc", false: "Một số value lỗi — xem chi tiết"}[allOK]
+			res.Message = map[bool]string{true: "Đã hoàn tác — trả đúng chuỗi khởi động gốc (verify khớp)",
+				false: "Một số value lỗi — snapshot GIỮ NGUYÊN để thử lại"}[allOK]
 			return res
 		}
 		// không có snapshot (tối ưu trước v3.9.0) — fallback path chuẩn
@@ -468,14 +660,20 @@ func applyRunEntryOpt(id string, enabled bool, label string, valueNames []string
 	res := AppOptRunResult{Mode: "windows", ID: id, Steps: []PerfStep{}}
 	runKey := `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
 	if enabled {
-		snap := map[string]map[string]string{}
+		// v4.1.0 (phát hiện 06): snapshot LUÔN lưu, gồm cả sentinel existed=false
+		// (app vốn không có Run entry → hoàn tác là no-op thành công, không báo "mất snapshot")
+		// Persist lỗi → abort TRƯỚC khi xóa value (không mất chuỗi command gốc)
+		snap := map[string]map[string]string{"existed": {"v": "0"}}
 		for _, n := range valueNames {
 			if typ, data, found := regQueryValue(runKey, n); found {
 				snap[n] = map[string]string{"type": typ, "data": data}
+				snap["existed"] = map[string]string{"v": "1"}
 			}
 		}
-		if len(snap) > 0 {
-			saveAppoptSnap("run:"+id, snap)
+		if serr := saveAppoptSnap("run:"+id, snap); serr != nil {
+			return AppOptRunResult{Mode: "windows", ID: id, Success: false,
+				Steps:   []PerfStep{{Name: "Lưu snapshot giá trị gốc", OK: false, Detail: serr.Error() + " — HỦY, không xóa Run entry"}},
+				Message: "Không lưu được snapshot gốc — dừng an toàn, " + label + " chưa bị thay đổi"}
 		}
 		r := regDeleteValues(runKey, valueNames, "")
 		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ " + label + " khỏi tự khởi động (HKCU Run)", OK: r.Success,
@@ -485,26 +683,53 @@ func applyRunEntryOpt(id string, enabled bool, label string, valueNames []string
 		return res
 	}
 	// hoàn tác: trả nguyên chuỗi gốc nếu có snapshot
-	snap := loadAppoptSnap("run:" + id)
-	if len(snap) > 0 {
-		allOK := true
-		for n, s := range snap {
-			r := runExe("reg", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
-			if !r.OK {
-				allOK = false
-			}
-			res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + n + " (nguyên chuỗi gốc)", OK: r.OK, Detail: s["data"]})
-		}
-		clearAppoptSnap("run:" + id)
-		res.Success = allOK
-		res.Message = map[bool]string{true: "Đã hoàn tác — " + label + " quay lại khởi động như cấu hình gốc của bạn", false: "Một số value lỗi — xem chi tiết"}[allOK]
+	snap, snapFound, snapErr := loadAppoptSnap("run:" + id)
+	if snapErr != nil {
+		return AppOptRunResult{Mode: "windows", ID: id, Success: false,
+			Steps:   []PerfStep{{Name: "Đọc snapshot gốc", OK: false, Detail: snapErr.Error()}},
+			Message: "Không đọc được snapshot — KHÔNG hoàn tác mù (giữ trạng thái hiện tại để an toàn)"}
+	}
+	if !snapFound {
+		// tối ưu trước v4.0.0 (không có snapshot) — báo trung thực: không đoán lại path
+		res.Success = false
+		res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + label + " trong khởi động", OK: false,
+			Detail: "không có snapshot chuỗi gốc (bản tối ưu trước v4.0.0) — tự bật lại trong Settings của " + label + " nếu cần"})
+		res.Message = "Không tìm thấy snapshot cấu hình gốc — không khôi phục mò được"
 		return res
 	}
-	// không có snapshot (tối ưu trước khi cài v4.0.0) — báo trung thực: không đoán lại path
-	res.Success = false
-	res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + label + " trong khởi động", OK: false,
-		Detail: "không có snapshot chuỗi gốc (bản tối ưu trước v4.0.0) — tự bật lại trong Settings của " + label + " nếu cần"})
-	res.Message = "Không tìm thấy snapshot cấu hình gốc — không khôi phục mò được"
+	if snap["existed"] != nil && snap["existed"]["v"] == "0" {
+		// app vốn KHÔNG có Run entry trước khi tối ưu → hoàn tác = no-op thành công
+		res.Success = true
+		res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + label + " trong khởi động", OK: true,
+			Detail: "app vốn không có entry tự khởi động trước khi tối ưu — không có gì cần khôi phục"})
+		res.Message = label + " vốn không tự khởi động trước đó — hoàn tác thành công (không có gì để trả)"
+		if err := clearAppoptSnap("run:" + id); err != nil {
+			res.Success = false
+			res.Message = "Hoàn tác OK nhưng xóa snapshot lỗi (" + err.Error() + ") — sẽ thử lại lần sau"
+		}
+		return res
+	}
+	allOK := true
+	for n, s := range snap {
+		if n == "existed" {
+			continue
+		}
+		r := runExe("reg", []string{"add", runKey, "/v", n, "/t", s["type"], "/d", s["data"], "/f"}, 8*time.Second)
+		ok := r.OK && regValueMatches(runKey, n, s["data"])
+		if !ok {
+			allOK = false
+		}
+		res.Steps = append(res.Steps, PerfStep{Name: "Khôi phục " + n + " (nguyên chuỗi gốc)", OK: ok, Detail: s["data"]})
+	}
+	if allOK {
+		if err := clearAppoptSnap("run:" + id); err != nil {
+			allOK = false
+			res.Steps = append(res.Steps, PerfStep{Name: "Xóa snapshot", OK: false, Detail: err.Error() + " — snapshot giữ nguyên, hoàn tác lại an toàn"})
+		}
+	}
+	res.Success = allOK
+	res.Message = map[bool]string{true: "Đã hoàn tác — " + label + " quay lại khởi động như cấu hình gốc (verify khớp)",
+		false: "Một số value lỗi — snapshot GIỮ NGUYÊN để thử lại (không mất dữ liệu gốc)"}[allOK]
 	return res
 }
 

@@ -5,6 +5,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +20,82 @@ import (
 	"sync"
 	"time"
 )
+
+// v4.1.0 (phát hiện 10 — SUPPLY-CHAIN): policy chữ ký số. Release hiện CHƯA ký số
+// (SmartScreen vẫn hỏi) — chưa bật chế độ bắt buộc; khi có certificate Authenticode
+// thì flip thành true để chặn cài binary không ký.
+const updateRequireSigned = false
+
+/** parse "sha256:abc..." từ assets[].digest của GitHub → hex lowercase */
+func parseAssetDigest(d string) (string, bool) {
+	d = strings.TrimSpace(strings.ToLower(d))
+	parts := strings.SplitN(d, ":", 2)
+	if len(parts) == 2 && parts[0] == "sha256" && len(parts[1]) == 64 {
+		if _, err := hex.DecodeString(parts[1]); err == nil {
+			return parts[1], true
+		}
+	}
+	return "", false
+}
+
+/** sha256 file — dùng cho verify binary tải về trước khi hoán đổi exe đang chạy */
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+/** release asset của 1 tag cụ thể: url/size/digest — đối chiếu trước khi download (10.2-10.4) */
+type releaseAsset struct {
+	URL    string
+	Size   int64
+	Digest string // dạng "sha256:..." raw
+}
+
+func fetchReleaseAsset(tag string) (releaseAsset, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(ghReq("https://api.github.com/repos/" + updateRepo + "/releases/tags/" + tag))
+	if err != nil {
+		return releaseAsset{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return releaseAsset{}, fmt.Errorf("query release %s: HTTP %d", tag, resp.StatusCode)
+	}
+	var rel struct {
+		Assets []struct {
+			Name               string `json:"name"`
+			Size               int64  `json:"size"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+			Digest             string `json:"digest"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&rel); err != nil {
+		return releaseAsset{}, err
+	}
+	for _, a := range rel.Assets {
+		if a.Name == updateAsset {
+			return releaseAsset{URL: a.BrowserDownloadURL, Size: a.Size, Digest: a.Digest}, nil
+		}
+	}
+	return releaseAsset{}, fmt.Errorf("release %s không có asset %s — updateCheck báo có bản mới nhưng asset thiếu (TEST UPDATER-09)", tag, updateAsset)
+}
+
+/** Authenticode qua PowerShell — trả "Valid" / "NotSigned" / lỗi khác; chỉ mang tính thông tin
+ * khi updateRequireSigned=false, chặn cài khi true (audit TEST UPDATER-04) */
+func authenticodeStatus(path string) (string, error) {
+	r := exec.Command("powershell.exe", "-NoProfile", "-Command",
+		fmt.Sprintf(`(Get-AuthenticodeSignature '%s').Status`, path))
+	out, err := r.Output()
+	return strings.TrimSpace(string(out)), err
+}
 
 // updateMtx: chống double-apply updater
 var updateMtx sync.Mutex
@@ -162,10 +240,24 @@ func updateApply() (string, error) {
 		}
 		return "", fmt.Errorf("đã là bản mới nhất (%s)", c["latest"])
 	}
-	url := "https://github.com/" + updateRepo + "/releases/latest/download/" + updateAsset
+	// v4.1.0 (phát hiện 10): KHÔNG tải từ releases/latest toàn repo nữa — pin ĐÚNG tag
+	// mà updateCheck đã chọn, đọc asset thật (url/size/digest) rồi verify trước khi đụng exe
+	tag, _ := c["latest"].(string)
+	if goTagNum(tag) <= 0 {
+		return "", fmt.Errorf("tag không hợp lệ: %q", tag)
+	}
+	asset, err := fetchReleaseAsset(tag)
+	if err != nil {
+		return "", err
+	}
+	wantSHA, hasSHA := parseAssetDigest(asset.Digest)
+	if !hasSHA {
+		// audit 10.4: không có digest công bố → fail-closed, không cài binary không xác thực được
+		return "", fmt.Errorf("release %s không công bố digest SHA-256 — CHẶN cài theo policy integrity (không đụng exe đang chạy)", tag)
+	}
 	tmp := exePath() + ".new"
 	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Do(ghReq(url))
+	resp, err := client.Do(ghReq(asset.URL)) // đúng URL asset của tag đã chọn (TEST UPDATER-01/02)
 	if err != nil {
 		return "", err
 	}
@@ -177,7 +269,12 @@ func updateApply() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	n, err := io.Copy(f, resp.Body)
+	// giới hạn cứng: chỉ đọc tối đa size+1 để phát hiện file phình to (TEST UPDATER-06)
+	maxRead := asset.Size + (1 << 20)
+	if asset.Size <= 0 {
+		maxRead = 200 << 20
+	}
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxRead))
 	_ = f.Close()
 	if err != nil {
 		_ = os.Remove(tmp)
@@ -186,6 +283,29 @@ func updateApply() (string, error) {
 	if n < 5<<20 { // exe ~9-10MB — file nhỏ hơn 5MB là phản hồi lạ
 		_ = os.Remove(tmp)
 		return "", fmt.Errorf("file tải về bất thường (%d byte) — bỏ qua", n)
+	}
+	if asset.Size > 0 && n != asset.Size {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("file tải về %d byte ≠ size công bố %d — file cắt cụt/sai — bỏ qua (không đụng exe)", n, asset.Size)
+	}
+	// SHA-256 bắt buộc khớp digest của asset (TEST UPDATER-03/05)
+	got, err := fileSHA256(tmp)
+	if err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("tính SHA-256 thất bại: %v", err)
+	}
+	if got != wantSHA {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("SHA-256 KHÔNG khớp (got %s ≠ want %s) — file sai/hỏng, STAGING ĐÃ XÓA, exe hiện tại còn nguyên", got[:16], wantSHA[:16])
+	}
+	// Authenticode — policy: hiện chưa ký → cảnh báo trung thực; flip updateRequireSigned khi có cert
+	sig, sigErr := authenticodeStatus(tmp)
+	if sigErr != nil {
+		sig = "UNKNOWN (" + sigErr.Error() + ")"
+	}
+	if updateRequireSigned && sig != "Valid" {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("chữ ký Authenticode không hợp lệ (%s) — CHẶN cài theo policy (exe hiện tại còn nguyên)", sig)
 	}
 	old := exePath() + ".old"
 	_ = os.Remove(old)
@@ -204,7 +324,33 @@ func updateApply() (string, error) {
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("đã cài xong nhưng tự mở lại lỗi: %v — hãy mở tool tay", err)
 	}
-	return fmt.Sprintf("Đã cài %s — tool đang tự mở lại…", c["latest"]), nil
+	// v4.1.0 (audit 12.7): health-check lite — PID mới phải sống ≥6s, chết sớm = rollback .old
+	go func() {
+		time.Sleep(6 * time.Second)
+		if !pidAlive(cmd.Process.Pid) {
+			log.Printf("[update] tiến trình mới chết trong health check — ROLLBACK về bản cũ")
+			_ = os.Rename(exePath(), exePath()+".bad")
+			_ = os.Rename(old, exePath())
+			_ = os.Remove(exePath() + ".bad")
+			restart := exec.Command(exePath())
+			restart.Dir = filepath.Dir(exePath())
+			restart.Args = append([]string{exePath()}, os.Args[1:]...)
+			_ = restart.Start()
+			return
+		}
+		_ = os.Remove(old) // bản mới sống khỏe — dọn .old
+	}()
+	return fmt.Sprintf("Đã cài %s (SHA-256 khớp, chữ ký: %s) — tool đang tự mở lại…", c["latest"], sig), nil
+}
+
+/** PID còn sống? — tasklist là cách đọc được cả trên Windows không cần handle */
+func pidAlive(pid int) bool {
+	out, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH").Output()
+	if err != nil {
+		return false // không kiểm được → coi như chết, rollback an toàn hơn
+	}
+	return strings.Contains(strings.ToLower(string(out)), fmt.Sprintf(" %d ", pid)) ||
+		strings.Contains(string(out), strconv.Itoa(pid))
 }
 
 /** POST /api/update: action=check → tra cứu; action=apply → trả lời UI trước, tải + hoán đổi nền, thoát khi xong */

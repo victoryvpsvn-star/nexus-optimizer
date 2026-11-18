@@ -336,7 +336,7 @@ function renderTweaks() {
             <span class="tag risk-${t.risk}">rủi ro ${t.risk}</span>
             ${t.requiresRoot ? '<span class="tag">cần Admin</span>' : ''}
             ${t.recommended ? '<span class="tag recommended">khuyến nghị</span>' : ''}
-            ${t.applied ? '<span class="tag applied">đã áp dụng</span>' : ''}
+            ${t.applied ? '<span class="tag applied">đã áp dụng</span>' : ''}${t.partial ? '<span class="tag" style="background:#4a3b1e;color:#ffd98a">⚠️ một phần — còn sót cấu hình</span>' : ''}
             <button class="btn" data-apply="${esc(t.id)}">Áp dụng</button>
             <button class="btn" data-revert="${esc(t.id)}">Hoàn tác</button>
           </div>

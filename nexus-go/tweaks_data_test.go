@@ -70,6 +70,19 @@ func TestGamingPresetIdsExist(t *testing.T) {
 	// mọi id apply phải có revert tương ứng — trừ hành động chạy-lần-một (dọn RAM, flush DNS:
 	// là thao tác làm sạch tức thời, không có trạng thái nào để hoàn tác)
 	oneShot := map[string]bool{"win-ram-clean": true, "win-flush-dns": true, "win-ram-standby-clear": true}
+	// v4.1.0 (phát hiện 07, TEST GAMING-01): chiều ngược lại cũng phải kiểm —
+	// id chỉ có trong Revert mà không có trong Apply nghĩa là Tắt Gaming sẽ đụng
+	// tweak mà Bật Gaming chưa từng chạm (trường hợp thật: win-sysresp ghi đè
+	// SystemResponsiveness=20 ngoài phạm vi preset)
+	applySet := map[string]bool{}
+	for _, id := range gamingPresetApplyWin {
+		applySet[id] = true
+	}
+	for _, id := range gamingPresetRevertWin {
+		if !applySet[id] && !oneShot[id] {
+			t.Fatalf("Gaming Revert có id không nằm trong Apply (revert quá phạm vi): %s", id)
+		}
+	}
 	haveRevert := map[string]bool{}
 	for _, id := range gamingPresetRevertWin {
 		haveRevert[id] = true

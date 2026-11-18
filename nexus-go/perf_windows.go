@@ -219,33 +219,55 @@ func perfOverclock(level string) OcResult {
 	}
 
 	// 2) Power plan High Performance (mọi mức)
-	r := runExe("powercfg", []string{"/setactive", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"}, 5*time.Second)
-	if r.OK {
+	// v4.1.0 (13.2): snapshot scheme đang active TRƯỚC khi đổi — restore trả đúng plan
+	// người dùng đang dùng, không phải Balanced mù. Persist lỗi → KHÔNG đổi plan (không
+	// áp dụng thứ mình không hoàn tác được); phần GPU vẫn chạy vì -lgc tự reset khi reboot.
+	schemeBefore, schemeErr := activeSchemeGUID()
+	planOK := false
+	if schemeErr == nil {
+		if old, found, lerr := loadAppoptSnap("perf"); lerr == nil && found && old["schemeGUID"] != nil {
+			schemeBefore = old["schemeGUID"]["v"] // giữ scheme của lần ép xung đầu
+		} else if lerr == nil {
+			if serr := saveAppoptSnap("perf", map[string]map[string]string{"schemeGUID": {"v": schemeBefore}}); serr != nil {
+				schemeErr = powerErr("persist snapshot scheme thất bại: " + serr.Error())
+			}
+		} else {
+			schemeErr = powerErr(lerr.Error())
+		}
+	}
+	if schemeErr != nil {
+		oc.Steps = append(oc.Steps, PerfStep{Name: "Power plan High Performance", OK: false,
+			Detail: schemeErr.Error() + " — BỎ QUA bước đổi plan (không áp dụng thứ không hoàn tác được)"})
+	} else {
+		r := runExe("powercfg", []string{"/setactive", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"}, 5*time.Second)
+		planOK = r.OK
+		if r.OK {
 		oc.Steps = append(oc.Steps, PerfStep{Name: "Power plan High Performance", OK: true,
 			Detail: "CPU không còn ngủ sớm, GPU không còn hạ xung khi rảnh"})
-	} else {
-		oc.Steps = append(oc.Steps, PerfStep{Name: "Power plan High Performance", OK: false,
-			Detail: firstLine(r.Stdout+r.Stderr) + " (cần quyền admin?)"})
-	}
-
-	// 3) CPU min state 100% cho từ mức Cân bằng (chỉ AC — cắm điện) + Ultimate Performance nếu max
-	if level != "safe" {
-		r := runExe("powercfg", []string{"/setacvalueindex", "SCHEME_CURRENT", "SUB_PROCESSOR", "PROCTHROTTLEMIN", "100"}, 5*time.Second)
-		if r.OK {
-			runExe("powercfg", []string{"/setactive", "SCHEME_CURRENT"}, 5*time.Second)
-			oc.Steps = append(oc.Steps, PerfStep{Name: "CPU min state 100% (cắm điện)", OK: true, Detail: "CPU luôn giữ xung cao nhất khi cắm điện"})
+		} else {
+			oc.Steps = append(oc.Steps, PerfStep{Name: "Power plan High Performance", OK: false,
+				Detail: firstLine(r.Stdout+r.Stderr) + " (cần quyền admin?)"})
 		}
-		if level == "max" {
-			r2 := runExe("powercfg", []string{"/duplicatescheme", "e9a42b02-d5df-448d-aa00-03f14749eb61"}, 6*time.Second)
-			if r2.OK {
-				if guid := firstGUID(r2.Stdout); guid != "" {
-					r3 := runExe("powercfg", []string{"/setactive", guid}, 5*time.Second)
-					oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: r3.OK,
-						Detail: "Scheme Ultimate (" + guid + ")"})
+		// 3) CPU min state 100% cho từ mức Cân bằng (chỉ AC — cắm điện) + Ultimate Performance nếu max
+		if level != "safe" {
+			r := runExe("powercfg", []string{"/setacvalueindex", "SCHEME_CURRENT", "SUB_PROCESSOR", "PROCTHROTTLEMIN", "100"}, 5*time.Second)
+			if r.OK {
+				runExe("powercfg", []string{"/setactive", "SCHEME_CURRENT"}, 5*time.Second)
+				oc.Steps = append(oc.Steps, PerfStep{Name: "CPU min state 100% (cắm điện)", OK: true, Detail: "CPU luôn giữ xung cao nhất khi cắm điện"})
+			}
+			if level == "max" {
+				r2 := runExe("powercfg", []string{"/duplicatescheme", "e9a42b02-d5df-448d-aa00-03f14749eb61"}, 6*time.Second)
+				if r2.OK {
+					if guid := firstGUID(r2.Stdout); guid != "" {
+						r3 := runExe("powercfg", []string{"/setactive", guid}, 5*time.Second)
+						oc.Steps = append(oc.Steps, PerfStep{Name: "Ultimate Performance plan", OK: r3.OK,
+							Detail: "Scheme Ultimate (" + guid + ")"})
+					}
 				}
 			}
 		}
 	}
+	_ = planOK
 
 	oc.Message = fmt.Sprintf("Ép xung mức %s hoàn tất trên %s — %d bước, có thể ↩ khôi phục gốc bất cứ lúc nào", ocLevelVN(level), gpu, len(oc.Steps))
 	return oc
@@ -262,12 +284,48 @@ func perfRestore() OcResult {
 		res.Steps = append(res.Steps, PerfStep{Name: "Gỡ khóa xung GPU", OK: false, Detail: firstLine(r.Stdout + r.Stderr)})
 		res.Success = false
 	} // không có nvidia-smi → máy không phải GPU NVIDIA — không tính là lỗi
-	runExe("nvidia-smi", []string{"-rmc"}, 8*time.Second)
-	r2 := runExe("powercfg", []string{"/setactive", "381b4222-f694-41f0-9685-ff5bb260df2e"}, 5*time.Second)
-	if r2.OK {
-		res.Steps = append(res.Steps, PerfStep{Name: "Power plan Balanced", OK: true, Detail: "Về scheme mặc định Windows (không phải plan bạn dùng trước đó — tự chọn lại nếu cần)"})
+	if _, lookErr := exec.LookPath("nvidia-smi"); lookErr == nil {
+		// v4.1.0 (13.2): -rmc bỏ qua kết quả → giờ ghi trung thực từng bước
+		rmc := runExe("nvidia-smi", []string{"-rmc"}, 8*time.Second)
+		res.Steps = append(res.Steps, PerfStep{Name: "Reset app clocks GPU (-rmc)", OK: rmc.OK,
+			Detail: map[bool]string{true: "xung ứng dụng về mặc định driver", false: firstLine(rmc.Stdout + rmc.Stderr)}[rmc.OK]})
+		if !rmc.OK {
+			res.Success = false
+		}
+	}
+	// v4.1.0 (13.2): trả ĐÚNG scheme gốc từ snapshot thay vì Balanced mù
+	r2OK, schemeDetail := false, ""
+	if snap, found, lerr := loadAppoptSnap("perf"); lerr == nil && found && snap["schemeGUID"] != nil {
+		want := snap["schemeGUID"]["v"]
+		r2 := runExe("powercfg", []string{"/setactive", want}, 5*time.Second)
+		if r2.OK {
+			if cur, cerr := activeSchemeGUID(); cerr == nil && cur == want {
+				r2OK = true
+				schemeDetail = "trả đúng power plan bạn dùng trước khi ép xung (" + want + ") — verify khớp"
+			} else if cerr != nil {
+				schemeDetail = cerr.Error() + " — không verify được"
+			} else {
+				schemeDetail = "setactive exit 0 nhưng scheme hiện tại là " + cur + " — không khớp, coi như lỗi"
+			}
+		} else {
+			schemeDetail = firstLine(r2.Stdout + r2.Stderr)
+		}
+	}
+	if !r2OK {
+		// không có snapshot (ép xung từ bản cũ) — fallback Balanced + nói rõ không phải exact
+		r2 := runExe("powercfg", []string{"/setactive", "381b4222-f694-41f0-9685-ff5bb260df2e"}, 5*time.Second)
+		r2OK = r2.OK
+		schemeDetail = "không có snapshot scheme gốc (bản ép xung cũ) — về Balanced mặc định, tự chọn lại plan của bạn nếu cần"
+		if !r2OK {
+			schemeDetail = firstLine(r2.Stdout + r2.Stderr)
+		}
 	} else {
-		res.Steps = append(res.Steps, PerfStep{Name: "Power plan Balanced", OK: false, Detail: firstLine(r2.Stdout + r2.Stderr)})
+		clearAppoptSnap("perf") // đã verify đúng scheme gốc — dọn snapshot perf
+	}
+	if r2OK {
+		res.Steps = append(res.Steps, PerfStep{Name: "Power plan → trạng thái gốc", OK: true, Detail: schemeDetail})
+	} else {
+		res.Steps = append(res.Steps, PerfStep{Name: "Power plan → trạng thái gốc", OK: false, Detail: schemeDetail})
 		res.Success = false
 	}
 	tr := perfTimerResolution("off", 0)

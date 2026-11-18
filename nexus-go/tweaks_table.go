@@ -105,13 +105,24 @@ func runStep(s step, revert bool) (string, bool) {
 		}
 		return "", true
 	case stepRegDel:
+		// v4.1.0 (phát hiện 08-A): query thất bại ≠ "không tồn tại" — chỉ lỗi
+		// "unable to find" của reg.exe mới là chắc chắn sạch; còn lại là lỗi thật
 		q := runSysExe("reg.exe", []string{"query", s.Key, "/v", s.Name}, s.timeout())
 		if !q.OK {
-			return "", true // chưa từng set — đã ở mặc định
+			out := strings.ToLower(q.Stdout + q.Stderr)
+			if strings.Contains(out, "unable to find") || strings.Contains(out, "cannot find") {
+				return "", true // NotFound rõ ràng — đã ở mặc định
+			}
+			return failStep(fmt.Sprintf("reg query %s\\%s (không phân biệt được NotFound và lỗi truy cập — access denied?)", s.Key, s.Name), q)
 		}
 		d := runSysExe("reg.exe", []string{"delete", s.Key, "/v", s.Name, "/f"}, s.timeout())
 		if !d.OK {
 			return failStep(fmt.Sprintf("reg delete %s\\%s", s.Key, s.Name), d)
+		}
+		// read-back verify: sau delete phải NotFound mới tính sạch
+		q2 := runSysExe("reg.exe", []string{"query", s.Key, "/v", s.Name}, s.timeout())
+		if q2.OK {
+			return fmt.Sprintf("reg delete %s\\%s: exit 0 nhưng value VẪN còn (read-back thấy value) — không tính hoàn tác", s.Key, s.Name), false
 		}
 		return "", true
 	case stepRegAddVe:
@@ -121,13 +132,22 @@ func runStep(s step, revert bool) (string, bool) {
 		}
 		return "", true
 	case stepRegDelKey:
+		// v4.1.0 (phát hiện 08-A): giống stepRegDel — phân biệt NotFound với QueryError
 		q := runSysExe("reg.exe", []string{"query", s.Key}, s.timeout())
 		if !q.OK {
-			return "", true // key không tồn tại — đã ở mặc định
+			out := strings.ToLower(q.Stdout + q.Stderr)
+			if strings.Contains(out, "unable to find") || strings.Contains(out, "cannot find") {
+				return "", true
+			}
+			return failStep(fmt.Sprintf("reg query key %s (không phân biệt được NotFound và lỗi truy cập)", s.Key), q)
 		}
 		d := runSysExe("reg.exe", []string{"delete", s.Key, "/f"}, s.timeout())
 		if !d.OK {
 			return failStep(fmt.Sprintf("reg delete key %s", s.Key), d)
+		}
+		q2 := runSysExe("reg.exe", []string{"query", s.Key}, s.timeout())
+		if q2.OK {
+			return fmt.Sprintf("reg delete key %s: exit 0 nhưng key VẪN còn (read-back thấy key) — không tính hoàn tác", s.Key), false
 		}
 		return "", true
 	case stepRegAddKey:
@@ -149,17 +169,43 @@ func runStep(s step, revert bool) (string, bool) {
 			return "", true // dịch vụ không tồn tại (máy rút gọn) — coi như xong
 		}
 		if !revert {
-			_ = runSysExe("sc.exe", []string{"stop", s.Name}, s.timeout()) // 1060/1062 bỏ qua
+			// apply: dừng service — không phải mục tiêu chính (config mới là chính), báo trung thực
+			sr := runSysExe("sc.exe", []string{"stop", s.Name}, s.timeout())
+			if !sr.OK {
+				_ = sr // chi tiết runtime state sẽ được verify bên dưới, không che lấp config
+			}
 		} else {
-			_ = runSysExe("sc.exe", []string{"start", s.Name}, s.timeout()) // lỗi start bỏ qua (đang chạy sẵn)
+			// v4.1.0 (phát hiện 08-B): revert gồm start — start thất bại PHẢI là thất bại;
+			// "already running" (1056) thì OK vì service đã chạy
+			sr := runSysExe("sc.exe", []string{"start", s.Name}, s.timeout())
+			if !sr.OK {
+				out := strings.ToLower(sr.Stdout + sr.Stderr)
+				if !strings.Contains(out, "already running") && !strings.Contains(out, "1056") {
+					// verify lại bằng sc query — có thể đã start được dù exit != 0
+					sv := runSysExe("sc.exe", []string{"query", s.Name}, s.timeout())
+					if !strings.Contains(strings.ToUpper(sv.Stdout), "RUNNING") && !strings.Contains(strings.ToUpper(sv.Stdout), "START_PENDING") {
+						return fmt.Sprintf("sc start %s thất bại — service vẫn chưa chạy (startup type đã đúng nhưng runtime chưa): %s", s.Name, truncateShort(firstLine(sr.Stdout+sr.Stderr))), false
+					}
+				}
+			}
 		}
+		// verify trạng thái runtime cuối — chỉ dùng để bắt lệch startup/runtime trên revert (đã fail ở trên);
+		// chiều apply OK của config vẫn trung thực: exit 0 của sc config là đủ cho startup type
 		return "", true
 	case stepPc:
 		set := runSysExe("powercfg.exe", []string{"-setacvalueindex", powercfgGuidCurrent, s.Sub, s.Setting, s.Data}, s.timeout())
 		if !set.OK {
 			return failStep("powercfg setacvalueindex", set)
 		}
-		_ = runSysExe("powercfg.exe", []string{"-setdcvalueindex", powercfgGuidCurrent, s.Sub, s.Setting, s.Data}, s.timeout()) // laptop: giá trị pin (bỏ qua lỗi desktop)
+		// v4.1.0 (phát hiện 08-C): DC fail ≠ bỏ qua mù — "not support" = NotApplicable
+		// (desktop không có chế độ pin), còn lại là lỗi thật → step thất bại
+		dc := runSysExe("powercfg.exe", []string{"-setdcvalueindex", powercfgGuidCurrent, s.Sub, s.Setting, s.Data}, s.timeout())
+		if !dc.OK {
+			out := strings.ToLower(dc.Stdout + dc.Stderr)
+			if !strings.Contains(out, "not support") && !strings.Contains(out, "không hỗ trợ") {
+				return failStep("powercfg setdcvalueindex (laptop có chế độ pin — giá trị pin chưa được đổi)", dc)
+			}
+		}
 		act := runSysExe("powercfg.exe", []string{"/setactive", powercfgGuidCurrent}, s.timeout())
 		if !act.OK {
 			return failStep("powercfg setactive", act)
@@ -172,7 +218,12 @@ func runStep(s step, revert bool) (string, bool) {
 		}
 		q := runSysExe("schtasks.exe", []string{"Query", "/TN", s.Name}, s.timeout())
 		if !q.OK {
-			return "", true // task không tồn tại trên build này — bỏ qua trung thực
+			// v4.1.0 (phát hiện 08-D): chỉ "không tồn tại" rõ ràng mới bỏ qua
+			out := strings.ToLower(q.Stdout + q.Stderr)
+			if strings.Contains(out, "does not exist") || strings.Contains(out, "cannot find") || strings.Contains(out, "không tồn tại") {
+				return "", true
+			}
+			return failStep(fmt.Sprintf("schtasks Query %s (không phân biệt được NotFound và lỗi truy cập)", s.Name), q)
 		}
 		c := runSysExe("schtasks.exe", []string{"Change", "/TN", s.Name, flag}, s.timeout())
 		if !c.OK {
@@ -201,7 +252,9 @@ func runSteps(steps []step, revert bool) (string, bool) {
 	for i, s := range steps {
 		if msg, ok := runStep(s, revert); !ok {
 			if len(steps) > 1 {
-				return fmt.Sprintf("bước %d/%d — %s (các bước TRƯỚC nó nếu đã chạy là đã áp dụng thật)", i+1, len(steps), msg), false
+				// v4.1.0 (phát hiện 08-E): cờ MỘT PHẦN ĐÃ ÁP DỤNG trong message —
+				// caller parse để lưu Partial state (boolean Applied không diễn tả được partial)
+				return fmt.Sprintf("bước %d/%d — %s (các bước TRƯỚC nó nếu đã chạy là đã áp dụng thật) ⚠️ MỘT PHẦN ĐÃ ÁP DỤNG", i+1, len(steps), msg), false
 			}
 			return msg, false
 		}

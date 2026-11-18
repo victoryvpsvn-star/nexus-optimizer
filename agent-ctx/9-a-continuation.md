@@ -521,3 +521,20 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   truyền body đã stringify) + static no-store; #41 3/3 xanh, FPS 60→120, token guard 403 ✓.
 - Bai học: token guard mới phải scan TOÀN BỘ caller HTTP client-side (perf.js local api
   shadow) — grep `const api =` toàn static trước khi ship auth change. pkill -x (không -f).
+
+
+## 16-b: v4.0.0 (go-v44, Go run 44312961718) — mở rộng tool theo yêu cầu user "thêm tool fix, app tối ưu, unlock CPU/GPU"
+- unlocks.go (router+types+sim helper) / unlocks_windows.go (thật) / unlocks_other.go (ci-sim):
+  GET /api/unlocks status (CPU PROCTHROTTLE MIN/MAX theo GUID qua powercfg /q — đọc hex cuối
+  nên khỏi lo localize; PowerThrottlingOff registry; NVIDIA qua nvidia-smi -q -d POWER/CLOCK
+  parse Power Limit/Max/Default + Max Clocks SM); POST {cpu-full|gpu-power|gpu-clock|restore}
+  — adminGate + snapshot appopt-snap.json section unlocks-cpu/unlocks-gpu + aggregate trung
+  thực (driver laptop chặn → báo lỗi thật); UI card #unlockCard trong sec-tweaks (perf.js).
+- Fixes 6→10: fix-sfc (DISM RestoreHealth + SFC /scannow, timeout 20 phút/bước, tail output),
+  fix-search (stop WSearch + xóa Windows.edb + start), fix-defender (MpCmdRun -SignatureUpdate
+  + restart WinDefend, tamper protection ghi trung thực), fix-time (w32tm /resync /force).
+- Appopt 6→8: steam + onedrive qua generic applyRunEntryOpt (HKCU Run, snapshot section
+  "run:<id>", hoàn tác trả chuỗi gốc; không snapshot thì báo trung thực không đoán path).
+- CI: #42 fail (bước 10 khai báo trùng const apps/defs → fixesV4/appsV4); #43 fail (assertion
+  cũ kén 6 app/6 fix → 8/10); #44 xanh 3/3, exe buildNumber=44, 10.86MB, FPS 60→120 pass.
+- Bài học: thêm item mới phải quét assertion số lượng CŨ trong fps-benchmark (grep "length !=").

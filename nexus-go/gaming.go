@@ -19,10 +19,12 @@ var gamingPresetApplyWin = []string{
 var gamingPresetRevertWin = []string{
 	"win-game-dvr-off", "win-gamemode-on", "win-fse-off", "win-mouse-accurate",
 	"win-keyboard-fast", "win-keyboard-accessibility-off", "win-menu-delay", "win-startup-delay",
-	"win-power-high", "win-sysresp", "win-cpu-priority-separation", "win-cpu-core-parking-off",
+	"win-power-high", "win-cpu-priority-separation", "win-cpu-core-parking-off",
 	"win-gpu-hwsch-on", "win-mmcss-gaming", "win-netthrottle", "win-background-apps-off",
 	"win-nagle", "win-gpu-tdr-delay", "win-cpu-dynamic-tick-off",
 } // v3.4.0 fix: bỏ 3 id không có trong apply (tránh bật lại SysMain/DiagTrack user chưa tắt)
+// v4.1.0 (phát hiện 07): bỏ win-sysresp khỏi Revert — nó không nằm trong Apply, Gaming
+// Mode tắt đã ghi đè SystemResponsiveness=20 ngoài phạm vi preset (audit TEST GAMING-01/02)
 
 const gamingNoteWin = "Các tinh chỉnh HKCU áp dụng ngay cho user hiện tại; các mục HKLM/service cần quyền Administrator — nếu thiếu quyền sẽ báo lỗi trung thực."
 const gamingNoteOther = "Gaming Mode chỉ áp dụng được trên Windows (bản .exe) — các mục sẽ được báo lỗi trung thực."
@@ -55,6 +57,17 @@ func getGamingStatus() GamingStatus {
 		if st.Failed > 0 {
 			st.Partial = true
 			st.Note = fmt.Sprintf("⚠️ Gaming Mode đang BẬT nhưng %d/%d hiệu ứng lỗi (thường do thiếu quyền admin) — xem chi tiết từng mục bên dưới. %s", st.Failed, len(effects), st.Note)
+		}
+	} else {
+		// v4.1.0 (phát hiện 07.5): "đã tắt toggle" ≠ mọi tweak đã trả về gốc — đếm cả chiều revert
+		for _, e := range effects {
+			if !e.Success {
+				st.Failed++
+			}
+		}
+		if st.Failed > 0 {
+			st.Partial = true
+			st.Note = fmt.Sprintf("⚠️ Gaming Mode đã TẮT nhưng %d/%d mục hoàn tác thất bại — cấu hình còn sót một phần (thử tắt lại, cần admin đủ). %s", st.Failed, len(effects), st.Note)
 		}
 	}
 	if at != nil {

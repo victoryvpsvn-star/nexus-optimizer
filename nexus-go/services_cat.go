@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -206,25 +207,100 @@ func itemServices(it SvcItem) []SvcRef {
 	return it.Services
 }
 
+/** v4.1.0 (phát hiện 09): applySvcBatch viết lại theo audit —
+ * DISABLE: query StartType thật (giữ delayed-auto) + runtime state (RUNNING/STOPPED)
+ *   → snapshot ghi bền vững TRƯỚC khi đụng sc config; persist lỗi → ABORT cả batch.
+ * RESTORE: chỉ đụng service CÓ snapshot (NEXUS từng đổi) — trả đúng StartType gốc
+ *   (Manual → Manual, Delayed → Delayed, không suy từ catalog Default), service vốn
+ *   đang chạy thì start lại + verify RUNNING; verify StartType read-back sau khi ghi. */
 func applySvcBatch(refs []SvcRef, disable bool) (okAll bool, detail string) {
 	okAll = true
-	var done, failed []string
-	for _, ref := range refs {
-		var target string
-		if disable {
-			target = "disabled"
-		} else {
-			target = ref.Default
+	var done, failed, skipped, noted []string
+	if disable {
+		// ---- giai đoạn snapshot: đọc thật, gộp vào section "services", persist 1 lần ----
+		snap, _, err := loadAppoptSnap("services")
+		if err != nil {
+			return false, "không đọc được snapshot services (" + err.Error() + ") — ABORT, không đụng dịch vụ nào"
 		}
-		r := runSysExe("sc.exe", []string{"config", ref.Name, "start=", target}, 8*time.Second)
-		if disable && r.OK { // dừng dịch vụ đang chạy để có tác dụng ngay — lỗi thì vẫn tính là tắt (restart sau)
-			runSysExe("sc.exe", []string{"stop", ref.Name}, 8*time.Second)
+		pending := map[string]map[string]string{}
+		for k, v := range snap {
+			pending[k] = v // giữ nguyên snapshot của service khác
 		}
-		if r.OK {
-			done = append(done, ref.Name)
-		} else {
-			okAll = false
-			failed = append(failed, ref.Name)
+		for _, ref := range refs {
+			found, startType := scQueryStart(ref.Name)
+			if !found {
+				skipped = append(skipped, ref.Name+" (không tồn tại)")
+				continue
+			}
+			wasRunning := scQueryRunning(ref.Name)
+			pending[ref.Name] = map[string]string{
+				"startType": startType,
+				"wasRunning": map[bool]string{true: "1", false: "0"}[wasRunning],
+			}
+		}
+		if err := saveAppoptSnap("services", pending); err != nil {
+			return false, "KHÔNG LƯU ĐƯỢC snapshot StartType gốc (" + err.Error() + ") — ABORT, không tắt dịch vụ nào (audit 09: snapshot phải persist trước khi disable)"
+		}
+		// ---- giai đoạn disable ----
+		for _, ref := range refs {
+			if _, _, found, _ := scQueryStartStrict(ref.Name); !found {
+				continue // đã skip khi snapshot
+			}
+			r := runSysExe("sc.exe", []string{"config", ref.Name, "start=", "disabled"}, 8*time.Second)
+			if r.OK {
+				// dừng service đang chạy để có tác dụng ngay — vốn dừng thì bỏ qua trung thực
+				if sr := runSysExe("sc.exe", []string{"stop", ref.Name}, 8*time.Second); !sr.OK {
+					if !strings.Contains(strings.ToLower(sr.Stdout+sr.Stderr), "has not been started") && !strings.Contains(strings.ToLower(sr.Stdout+sr.Stderr), "1062") {
+						noted = append(noted, ref.Name+" (stop bị từ chối — có thể vẫn đang chạy)")
+					}
+				}
+				done = append(done, ref.Name)
+			} else {
+				okAll = false
+				failed = append(failed, ref.Name)
+			}
+		}
+	} else {
+		// ---- restore: CHỈ service có snapshot; không snapshot → không đụng (09.3) ----
+		snap, _, err := loadAppoptSnap("services")
+		if err != nil {
+			return false, "không đọc được snapshot services (" + err.Error() + ") — KHÔNG restore mù theo catalog default"
+		}
+		for _, ref := range refs {
+			orig, has := snap[ref.Name]
+			if !has || orig["startType"] == "" {
+				skipped = append(skipped, ref.Name+" (không có snapshot — NEXUS chưa từng đổi, không đụng)")
+				continue
+			}
+			target := orig["startType"]
+			r := runSysExe("sc.exe", []string{"config", ref.Name, "start=", target}, 8*time.Second)
+			if !r.OK {
+				okAll = false
+				failed = append(failed, ref.Name)
+				continue
+			}
+			// verify StartType read-back
+			_, nowType := scQueryStart(ref.Name)
+			if nowType != target {
+				okAll = false
+				failed = append(failed, ref.Name+" (đã config "+target+" nhưng read-back thấy "+nowType+")")
+				continue
+			}
+			// vốn đang chạy trước khi bị tắt → start lại + verify RUNNING (09.5)
+			if orig["wasRunning"] == "1" {
+				runSysExe("sc.exe", []string{"start", ref.Name}, 12*time.Second)
+				if !scQueryRunning(ref.Name) {
+					okAll = false
+					failed = append(failed, ref.Name+" (config OK, verify StartType OK nhưng KHÔNG chạy lại được — runtime chưa về gốc)")
+					continue
+				}
+			}
+			done = append(done, ref.Name+" → "+target)
+			// restore + verify xong → gỡ key khỏi snapshot (section còn phần chưa xong)
+			delete(snap, ref.Name)
+			if err := saveAppoptSnap("services", snap); err != nil {
+				noted = append(noted, ref.Name+" (restore OK nhưng gỡ key snapshot lỗi — sẽ lặp an toàn lần sau)")
+			}
 		}
 	}
 	if len(failed) > 0 {
@@ -232,7 +308,34 @@ func applySvcBatch(refs []SvcRef, disable bool) (okAll bool, detail string) {
 	} else {
 		detail = "OK: " + strings.Join(done, ", ")
 	}
+	if len(skipped) > 0 {
+		detail += " • bỏ qua: " + strings.Join(skipped, ", ")
+	}
+	if len(noted) > 0 {
+		detail += " • lưu ý: " + strings.Join(noted, ", ")
+	}
 	return okAll, detail
+}
+
+/** runtime state — RUNNING/STOPPED riêng với startup type (09.6) */
+func scQueryRunning(svc string) bool {
+	r := runSysExe("sc.exe", []string{"query", svc}, 8*time.Second)
+	return strings.Contains(strings.ToUpper(r.Stdout), "RUNNING")
+}
+
+/** scQueryStartStrict — phân biệt service không tồn tại với query lỗi (08-D) */
+func scQueryStartStrict(svc string) (found bool, state string, exists bool, err error) {
+	found, state = scQueryStart(svc)
+	if !found {
+		// qc không trả START_TYPE — phân biệt "OpenService FAILED 1060" với lỗi khác
+		r := runSysExe("sc.exe", []string{"qc", svc}, 6*time.Second)
+		out := strings.ToLower(r.Stdout + r.Stderr)
+		if strings.Contains(out, "1060") || strings.Contains(out, "does not exist") || strings.Contains(out, "không tồn tại") {
+			return false, "", false, nil
+		}
+		return false, "", false, fmt.Errorf("sc qc %s thất bại — không phân biệt được (access denied?)", svc)
+	}
+	return true, state, true, nil
 }
 
 // ---------- view ----------
@@ -444,8 +547,10 @@ func presetRestore() ServicesActionResult {
 		}
 	}
 	res.Success = allOK
-	res.Message = map[bool]string{true: "Đã khôi phục toàn bộ dịch vụ về cấu hình mặc định Windows",
-		false: "Khôi phục xong, một số mục lỗi — xem chi tiết"}[allOK]
+	// v4.1.0 (phát hiện 09.3): restore dùng SNAPSHOT từng service — không phải "reset
+	// toàn bộ catalog về default" (đó sẽ là action riêng, đụng cả service người dùng tự cấu hình)
+	res.Message = map[bool]string{true: "Đã khôi phục các dịch vụ NEXUS từng tắt về ĐÚNG trạng thái gốc trước khi tắt (snapshot StartType + runtime)",
+		false: "Khôi phục một phần — service chưa có snapshot sẽ KHÔNG bị đụng; mục lỗi giữ nguyên snapshot để thử lại"}[allOK]
 	return res
 }
 

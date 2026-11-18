@@ -25,6 +25,7 @@ type TweakDef struct {
 type Tweak struct {
 	TweakDef
 	Applied    bool   `json:"applied"`
+	Partial    bool   `json:"partial,omitempty"` // v4.1.0 (08-E): một phần đã đổi máy / hoàn tác thất bại còn sót
 	AppliedAt  string `json:"appliedAt,omitempty"`
 	LastResult string `json:"lastResult,omitempty"`
 }
@@ -103,24 +104,41 @@ func regDeleteValues(key string, names []string, okMsg string) ActionResult {
 	if reg == "" {
 		return ActionResult{false, noRegExeMsg}
 	}
-	var failed, skipped []string
+	// v4.1.0 (phát hiện 08-A): skipped chỉ gồm NotFound RÕ RÀNG ("unable to find");
+	// query fail vì lý do khác (access denied...) là lỗi thật, không được coi là "chưa từng set"
+	var failed, notFound, queryErr []string
 	for _, n := range names {
 		q := runExe(reg, []string{"query", key, "/v", n}, 15*time.Second)
 		if !q.OK {
-			skipped = append(skipped, n)
+			out := strings.ToLower(q.Stdout + q.Stderr)
+			if strings.Contains(out, "unable to find") || strings.Contains(out, "cannot find") {
+				notFound = append(notFound, n)
+			} else {
+				queryErr = append(queryErr, fmt.Sprintf("%s (exit %d: %s)", n, q.Code, orDefault(q.Stderr, q.Stdout, "không rõ lý do")))
+			}
 			continue
 		}
 		d := runExe(reg, []string{"delete", key, "/v", n, "/f"}, 15*time.Second)
 		if !d.OK {
 			failed = append(failed, fmt.Sprintf("%s (exit %d: %s)", n, d.Code, orDefault(d.Stderr, d.Stdout, "không rõ lý do")))
+			continue
+		}
+		// read-back verify: delete exit 0 nhưng value còn → không tính xong
+		q2 := runExe(reg, []string{"query", key, "/v", n}, 15*time.Second)
+		if q2.OK {
+			failed = append(failed, n+" (delete exit 0 nhưng read-back vẫn thấy value)")
 		}
 	}
-	if len(failed) > 0 {
-		return ActionResult{false, truncateShort("reg.exe delete thất bại tại: " + strings.Join(failed, "; "))}
+	if len(failed) > 0 || len(queryErr) > 0 {
+		msg := truncateShort("reg.exe delete chưa trọn: " + strings.Join(append(failed, queryErr...), "; "))
+		if len(notFound) > 0 {
+			msg += fmt.Sprintf(" (bỏ qua %d value vốn không tồn tại: %s)", len(notFound), strings.Join(notFound, ", "))
+		}
+		return ActionResult{false, msg}
 	}
 	msg := okMsg
-	if len(skipped) > 0 {
-		msg += fmt.Sprintf(" (bỏ qua %d value không tìm thấy/không đọc được: %s)", len(skipped), strings.Join(skipped, ", "))
+	if len(notFound) > 0 {
+		msg += fmt.Sprintf(" (bỏ qua %d value vốn không có: %s)", len(notFound), strings.Join(notFound, ", "))
 	}
 	return ActionResult{true, truncateShort(msg)}
 }
@@ -1063,7 +1081,10 @@ func applyTweakById(id string) TweakRunResult {
 		return TweakRunResult{ID: id, Success: false, Message: fmt.Sprintf("Không tìm thấy tinh chỉnh %q", id)}
 	}
 	r := a.Apply()
-	saveTweakState(id, r.Success, r.Message)
+	// v4.1.0 (phát hiện 08-E): multi-step fail dọc đường vẫn đã thay đổi một phần máy —
+	// boolean Applied=false không diễn tả được; lưu Partial=true + message cờ
+	partial := !r.Success && strings.Contains(r.Message, "MỘT PHẦN ĐÃ ÁP DỤNG")
+	saveTweakStateExt(id, r.Success, partial, r.Message)
 	return TweakRunResult{ID: id, Success: r.Success, Message: truncateShort(r.Message)}
 }
 
@@ -1073,12 +1094,18 @@ func revertTweakById(id string) TweakRunResult {
 		return TweakRunResult{ID: id, Success: false, Message: fmt.Sprintf("Không tìm thấy tinh chỉnh %q", id)}
 	}
 	r := a.Revert()
-	saveTweakState(id, false, r.Message)
+	// v4.1.0 (TEST TWEAK-07): revert thất bại KHÔNG được ghi applied=false như thể đã trả xong —
+	// máy còn sót cấu hình → giữ Applied=true + Partial=true để UI hiện rõ
+	if r.Success {
+		saveTweakStateExt(id, false, false, r.Message)
+	} else {
+		saveTweakStateExt(id, true, true, "Hoàn tác thất bại — trạng thái vẫn còn sót một phần: "+r.Message)
+	}
 	return TweakRunResult{ID: id, Success: r.Success, Message: truncateShort(r.Message)}
 }
 
-func saveTweakState(id string, applied bool, msg string) {
-	st := TweakState{Applied: applied, LastResult: truncateShort(msg)}
+func saveTweakStateExt(id string, applied, partial bool, msg string) {
+	st := TweakState{Applied: applied, Partial: partial, LastResult: truncateShort(msg)}
 	if applied {
 		now := time.Now()
 		st.AppliedAt = &now
@@ -1090,7 +1117,7 @@ func getTweaks() []Tweak {
 	out := make([]Tweak, 0, len(tweakActions()))
 	for _, a := range tweakActions() {
 		st := appState.GetTweakState(a.Def.ID)
-		t := Tweak{TweakDef: a.Def, Applied: st.Applied, LastResult: st.LastResult}
+		t := Tweak{TweakDef: a.Def, Applied: st.Applied, Partial: st.Partial, LastResult: st.LastResult}
 		if st.AppliedAt != nil {
 			t.AppliedAt = st.AppliedAt.Format(time.RFC3339)
 		}

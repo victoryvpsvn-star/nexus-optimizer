@@ -29,6 +29,7 @@ func defaultUISettings() UISettings {
 
 type TweakState struct {
 	Applied    bool       `json:"applied"`
+	Partial    bool       `json:"partial,omitempty"` // v4.1.0 (phát hiện 08-E): multi-step fail dọc đường — một phần máy đã bị đổi
 	AppliedAt  *time.Time `json:"appliedAt,omitempty"`
 	LastResult string     `json:"lastResult,omitempty"`
 }

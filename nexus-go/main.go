@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const AppVersion = "4.0.0"
+const AppVersion = "4.1.0"
 
 // buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
 var buildNumber = "0"
@@ -32,8 +32,11 @@ var apiToken = genAPIToken()
 
 func genAPIToken() string {
 	b := make([]byte, 16)
+	// v4.1.0 (13.12): fail-closed — crypto/rand lỗi thì THOÁT thay vì fallback timestamp
+	// (token yếu = API mutation mở cửa cho process khác trên máy). Hiếm gặp nhưng
+	// nguyên tắc là không mở API không bảo vệ.
 	if _, err := rand.Read(b); err != nil {
-		return "fallback-" + fmt.Sprint(time.Now().UnixNano())
+		log.Fatalf("không tạo được token bảo mật từ crypto/rand (%v) — thoát để tránh mở API không bảo vệ", err)
 	}
 	return hex.EncodeToString(b)
 }

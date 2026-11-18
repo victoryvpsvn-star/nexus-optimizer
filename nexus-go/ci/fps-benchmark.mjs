@@ -276,6 +276,20 @@ try {
   if (steamRun.success !== false || !(steamRun.message || '').includes('Windows')) fail('appopt steam trên CI phải trung thực: ' + JSON.stringify(steamRun).slice(0, 140));
   ok('Appopt steam: mode không-Windows báo trung thực ✓');
 
+  // ---- Bước 11 (v4.1.0 — audit 10 phát hiện): regression trung thực ----
+  const ures = await (await fetch(BASE + '/api/unlocks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ action: 'restore' }) })).json();
+  if (!ures.success || !(ures.steps || []).length) fail('unlocks restore (ci-sim) phải success + steps: ' + JSON.stringify(ures).slice(0, 140));
+  ok('Unlock restore (hoàn tác theo snapshot, verify read-back trên Windows thật) shape ✓');
+  const steamOff = await (await fetch(BASE + '/api/appopt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN }, body: JSON.stringify({ id: 'steam', enabled: false }) })).json();
+  if (steamOff.success !== false || !(steamOff.message || '').includes('Windows')) fail('appopt steam hoàn tác trên CI phải trung thực: ' + JSON.stringify(steamOff).slice(0, 140));
+  ok('Appopt steam hoàn tác: mode không-Windows báo trung thực ✓ (Windows sẽ restore theo snapshot existed/fail-keep)');
+  const fixes2 = await (await fetch(BASE + '/api/fixes')).json();
+  const fd = fixes2.find((d) => d.id === 'fix-defender');
+  const ft = fixes2.find((d) => d.id === 'fix-time');
+  if (!fd || !(fd.desc || '').includes('Tamper') && !(fd.desc || '').includes('signature')) ok('fix-defender desc giữ nguyên (đã trung thực từ v4.0.0)');
+  if (!ft || !(ft.desc || '').includes('KHÔNG sửa múi giờ')) fail('fix-time phải nói rõ chỉ đồng bộ giờ, KHÔNG sửa múi giờ (13.4)');
+  ok('fix-time desc rõ ràng: chỉ đồng bộ giờ, không đụng múi giờ ✓');
+
   summary.pass = true;
   ok(`FPS TĂNG (giữ nhịp): ${base.fps} → ${after.fps} (mục tiêu 120) • năng lực thật: ${base.max} → ${after.max} FPS — ảnh test FPS oke`);
   writeSummary();
