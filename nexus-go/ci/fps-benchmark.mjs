@@ -169,7 +169,9 @@ try {
   const after = await runBench(page, '03-fps-after-120.png');
   summary.after = after.fps;
   summary.maxAfter = after.max;
-  if (after.fps < 145) fail(`FPS sau Tối ưu phải ≥105 (mục tiêu 120, nhận ${after.fps})`);
+  // v4.4.0: ngưỡng đúng theo thiết kế ≥105 (jitter target 120 -15); trước đây hard-code
+  // 145 lệch message — run nhận 119 (đúng chủ đích tool) bị fail oan
+  if (after.fps < 105) fail(`FPS sau Tối ưu phải ≥105 (mục tiêu 120, nhận ${after.fps})`);
   if (after.fps <= base.fps) fail('FPS sau Tối ưu phải TĂNG so với baseline');
   if (after.max < 120) fail(`Năng lực TỐI ĐA thật chỉ ${after.max} FPS < 120 — không được khoe 120 khi máy không đủ (anti-fake)`);
   if (after.max < after.fps) fail(`Năng lực thật (${after.max}) thấp hơn nhịp giữ được (${after.fps}) — phép đo có vấn đề`);
