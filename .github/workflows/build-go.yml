@@ -236,7 +236,7 @@ jobs:
             throw "ADK WinPE copype.cmd not found after all installers"
           }
           $peRoot = if (Test-Path "$pe86\copype.cmd") { $pe86 } else { $pe64 }
-          if (-not (Test-Path "$peRoot\amd64\WinPE_OCs\WinPE-WMI.cab")) { Write-Host "::warning::WinPE_OCs amd64 khong co WinPE-WMI.cab — xem listing" }
+          if (-not (Test-Path "$peRoot\amd64\WinPE_OCs\WinPE-WMI.cab")) { Write-Host "::warning::WinPE_OCs amd64 khong co WinPE-WMI.cab - xem listing" }
           Write-Host "ADK PE OK: $peRoot"
 
       - name: Tai exe NEXUS tu release go-vN
