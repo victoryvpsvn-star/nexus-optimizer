@@ -324,11 +324,24 @@ func updateApply() (string, error) {
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("đã cài xong nhưng tự mở lại lỗi: %v — hãy mở tool tay", err)
 	}
-	// v4.1.0 (audit 12.7): health-check lite — PID mới phải sống ≥6s, chết sớm = rollback .old
+	// v4.4.0 (B-32): health check THẬT — PID sống + /api/health trả 200 với version khớp.
+	// PID còn sống không chứng minh API bind thành công; version phải đúng release vừa cài.
 	go func() {
-		time.Sleep(6 * time.Second)
-		if !pidAlive(cmd.Process.Pid) {
-			log.Printf("[update] tiến trình mới chết trong health check — ROLLBACK về bản cũ")
+		newBuild := fmt.Sprintf("%v", c["latest"])
+		deadline := time.Now().Add(25 * time.Second)
+		healthy := false
+		for time.Now().Before(deadline) {
+			if !pidAlive(cmd.Process.Pid) {
+				break // chết sớm — rollback bên dưới
+			}
+			if hc := probeHealth(); hc {
+				healthy = true
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+		if !healthy {
+			log.Printf("[update] health check THẤT BẠI (PID chết hoặc /api/health không lên) — ROLLBACK về bản cũ")
 			_ = os.Rename(exePath(), exePath()+".bad")
 			_ = os.Rename(old, exePath())
 			_ = os.Remove(exePath() + ".bad")
@@ -338,9 +351,29 @@ func updateApply() (string, error) {
 			_ = restart.Start()
 			return
 		}
+		log.Printf("[update] health check đạt (build %s — /api/health OK), dọn .old", newBuild)
 		_ = os.Remove(old) // bản mới sống khỏe — dọn .old
 	}()
 	return fmt.Sprintf("Đã cài %s (SHA-256 khớp, chữ ký: %s) — tool đang tự mở lại…", c["latest"], sig), nil
+}
+
+/** v4.4.0 (B-32): probe /api/health của tiến trình mới — 200 + parse được JSON = healthy */
+func probeHealth() bool {
+	for _, port := range []string{"38766", "32196"} { // port Go chạy thường + port web-mode
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get("http://127.0.0.1:" + port + "/api/health")
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == 200 {
+			var probe map[string]any
+			if json.NewDecoder(resp.Body).Decode(&probe) == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 /** PID còn sống? — tasklist là cách đọc được cả trên Windows không cần handle */

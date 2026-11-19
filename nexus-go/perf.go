@@ -46,7 +46,7 @@ func (s *Store) PutPerfSettings(p PerfSettings) PerfSettings {
 	defer s.mu.Unlock()
 	s.data.Perf = p
 	s.normalizePerfLocked()
-	_ = s.saveLocked()
+	_ = s.commitLocked() // v4.4.0 (B-10)
 	return s.data.Perf
 }
 

@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const AppVersion = "4.3.0"
+const AppVersion = "4.4.0"
 
 // buildNumber: số run CI ghim qua -ldflags "-X main.buildNumber=..." (0 = build tay)
 var buildNumber = "0"
@@ -104,7 +104,13 @@ func main() {
 	var ln net.Listener
 	var err error
 	if *port > 0 {
-		ln, err = net.Listen("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprint(*port)))
+		// v4.4.0 (Rescue ISO): NEXUS_BIND=0.0.0.0 chỉ dùng trong môi trường rescue ISO
+		// (boot USB, dashboard truy cập từ máy khác qua LAN); mặc định vẫn 127.0.0.1 an toàn
+		bindHost := os.Getenv("NEXUS_BIND")
+		if bindHost == "" {
+			bindHost = "127.0.0.1"
+		}
+		ln, err = net.Listen("tcp", net.JoinHostPort(bindHost, fmt.Sprint(*port)))
 		if err != nil {
 			log.Fatalf("Không mở được cổng HTTP %d: %v", *port, err)
 		}

@@ -28,6 +28,11 @@ type RunResult struct {
 func isWin() bool { return runtimeIsWindows }
 
 /** Chạy 1 lệnh qua shell — dùng cho bash trên Linux; Windows hầu như không dùng */
+/** v4.4.0 (B-23): runner dùng cappedWriter sẵn có (script.go) — cap RAM lúc đọc, vẫn drain sau cap; ranh giới 256KB/luồng. */
+const runnerOutputCap = 256 * 1024
+
+func runnerOut(c *cappedWriter) string { return c.sb.String() }
+
 func runCmd(cmdline string, timeout time.Duration) RunResult {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -37,18 +42,18 @@ func runCmd(cmdline string, timeout time.Duration) RunResult {
 	} else {
 		cmd = exec.CommandContext(ctx, "bash", "-c", cmdline)
 	}
-	var stdout, stderr strings.Builder
+	var stdout, stderr cappedWriter // v4.4.0 (B-23): cap lúc đọc
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	r := RunResult{Stdout: stdout.String(), Stderr: stderr.String()}
+	r := RunResult{Stdout: runnerOut(&stdout), Stderr: runnerOut(&stderr)}
 	if err == nil {
 		r.OK = true
 		return r
 	}
 	if ee, ok := err.(*exec.ExitError); ok {
 		r.Code = ee.ExitCode()
-		r.Stderr = strings.TrimSpace(stdout.String() + stderr.String())
+		r.Stderr = strings.TrimSpace(runnerOut(&stdout) + runnerOut(&stderr))
 		if r.Stderr == "" {
 			r.Stderr = err.Error()
 		}
@@ -95,11 +100,11 @@ func runExe(exePath string, args []string, timeout time.Duration) RunResult {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exePath, args...)
 	setHideWindow(cmd)
-	var stdout, stderr strings.Builder
+	var stdout, stderr cappedWriter // v4.4.0 (B-23): cap lúc đọc
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	r := RunResult{Stdout: stdout.String(), Stderr: stderr.String()}
+	r := RunResult{Stdout: runnerOut(&stdout), Stderr: runnerOut(&stderr)}
 	if err == nil {
 		r.OK = true
 		return r
@@ -141,6 +146,10 @@ func runSysExe(name string, args []string, timeout time.Duration) RunResult {
 // ---------- PowerShell resolver ----------
 
 type PsResolve struct {
+	// v4.4.0 (B-34): chỉ Verified=true khi os.Stat/where xác nhận exe thật tồn tại —
+	// fallback tên PATH không được báo "found" (trước đây UI có thể báo PowerShell sẵn
+	// dù máy chỉ còn trông chờ PATH)
+	Verified bool
 	Exe    string
 	Detail string
 }
@@ -163,7 +172,7 @@ func resolvePowerShellExe() PsResolve {
 	}
 	if ov := os.Getenv("NEXUS_PS_OVERRIDE"); ov != "" {
 		if st, err := os.Stat(ov); err == nil && !st.IsDir() {
-			psCache.val = PsResolve{ov, "NEXUS_PS_OVERRIDE=" + ov}
+			psCache.val = PsResolve{Exe: ov, Detail: "NEXUS_PS_OVERRIDE=" + ov, Verified: true}
 			psCache.have = true
 			return psCache.val
 		}
@@ -173,11 +182,13 @@ func resolvePowerShellExe() PsResolve {
 		progFiles = `C:\Program Files`
 	}
 	cands := []PsResolve{
-		{filepath.Join(winSysDir(), "WindowsPowerShell", "v1.0", "powershell.exe"), "Windows PowerShell 5.1 (System32)"},
-		{filepath.Join(progFiles, "PowerShell", "7", "pwsh.exe"), "PowerShell 7 (Program Files)"},
+		// v4.4.0 (B-34): candidate chỉ là "khi đoán vị trí" — Verified gán sau khi Stat pass
+		{Exe: filepath.Join(winSysDir(), "WindowsPowerShell", "v1.0", "powershell.exe"), Detail: "Windows PowerShell 5.1 (System32)"},
+		{Exe: filepath.Join(progFiles, "PowerShell", "7", "pwsh.exe"), Detail: "PowerShell 7 (Program Files)"},
 	}
 	for _, c := range cands {
 		if st, err := os.Stat(c.Exe); err == nil && !st.IsDir() {
+			c.Verified = true
 			psCache.val = c
 			psCache.have = true
 			return psCache.val
@@ -195,15 +206,17 @@ func resolvePowerShellExe() PsResolve {
 				}
 			}
 			if r.OK && first != "" {
-				psCache.val = PsResolve{first, "tìm thấy qua where.exe: " + first}
+				psCache.val = PsResolve{Exe: first, Detail: "tìm thấy qua where.exe: " + first, Verified: true}
 				psCache.have = true
 				return psCache.val
 			}
 		}
 	}
+	// v4.4.0 (B-34): fallback KHÔNG Verified — status phải báo "chưa xác minh"
 	psCache.val = PsResolve{
-		Exe:    "powershell.exe",
-		Detail: "Không tìm thấy PowerShell theo đường dẫn chuẩn (System32\\WindowsPowerShell\\v1.0 + PowerShell 7). Windows có thể đã bị rút gọn PowerShell — chỉ còn phương án tra PATH, có nguy cơ ENOENT.",
+		Exe:      "powershell.exe",
+		Detail:   "Không tìm thấy PowerShell theo đường dẫn chuẩn (System32\\WindowsPowerShell\\v1.0 + PowerShell 7). Windows có thể đã bị rút gọn PowerShell — chỉ còn phương án tra PATH, có nguy cơ ENOENT.",
+		Verified: false,
 	}
 	psCache.have = true
 	return psCache.val
@@ -325,7 +338,8 @@ func getWinStatus() WinRuntimeStatus {
 		}
 	}
 	statusCache.val = WinRuntimeStatus{
-		IsWin: true, PsFound: ps.Exe != "", PsPath: ps.Exe, PsDetail: ps.Detail,
+		// v4.4.0 (B-34): PsFound chỉ true khi exe đã được xác minh thật sự tồn tại
+		IsWin: true, PsFound: ps.Exe != "" && ps.Verified, PsPath: ps.Exe, PsDetail: ps.Detail,
 		Admin: admin, AdminMethod: method, RegOk: regOk,
 	}
 	statusCache.at = time.Now()

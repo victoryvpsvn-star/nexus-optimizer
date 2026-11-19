@@ -218,6 +218,7 @@ func emptyDirContents(path string, only *regexp.Regexp) (int64, int, error) {
 		}
 		return 0, 0, err // access denied / lỗi I/O — caller phải báo trung thực
 	}
+	var delErr error // v4.4.0 (B-22): lỗi xóa từng file không còn bị nuốt
 	for _, e := range ents {
 		full := filepath.Join(path, e.Name())
 		if only != nil && !only.MatchString(e.Name()) {
@@ -227,7 +228,13 @@ func emptyDirContents(path string, only *regexp.Regexp) (int64, int, error) {
 		if err := os.RemoveAll(full); err == nil {
 			freed += sz
 			n++
+		} else if delErr == nil {
+			delErr = fmt.Errorf("%s: %w", filepath.Base(full), err)
 		}
+	}
+	if delErr != nil {
+		// đã xóa được một phần — báo lỗi để caller gắn "partial" thay vì success mù
+		return freed, n, fmt.Errorf("xóa được %d/%d mục nhưng còn file bị khóa/không xóa được — %w", n, n+1, delErr)
 	}
 	return freed, n, nil
 }

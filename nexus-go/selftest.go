@@ -516,16 +516,26 @@ func runSelftest(mode string, useWebhook bool) *SelftestReport {
 			skipped++
 		}
 	}
-	fullSkipped := 0
+	fullSkipped, fullFails := 0, 0
+	var fullFailIDs []string
 	for _, f := range full {
 		if f.Skipped {
-			fullSkipped++
+			fullSkipped++ // skipped KHÔNG được tính pass
+			continue
+		}
+		// v4.4.0 (B-09): Apply/Revert FULL thất bại phải vẽ thành fail tổng —
+		// không còn "ĐẠT" giả khi FULL có tweak lỗi
+		if !f.ApplyOK || !f.RevertOK {
+			fullFails++
+			fullFailIDs = append(fullFailIDs, f.ID)
 		}
 	}
 	tw := tweakActions()
 	rec := 0
 	uniqIDs := map[string]bool{}
 	uniq := true
+	uniqOrders := true // v4.4.0 (B-35): biến thật thay vì len(tw)>0
+	seenOrder := map[int]bool{}
 	for _, a := range tw {
 		if a.Def.Recommended {
 			rec++
@@ -533,6 +543,10 @@ func runSelftest(mode string, useWebhook bool) *SelftestReport {
 		if uniqIDs[a.Def.ID] {
 			uniq = false
 		}
+		if seenOrder[a.Def.Order] {
+			uniqOrders = false
+		}
+		seenOrder[a.Def.Order] = true
 		uniqIDs[a.Def.ID] = true
 	}
 	report := &SelftestReport{
@@ -542,13 +556,14 @@ func runSelftest(mode string, useWebhook bool) *SelftestReport {
 		Runtime: runtimeMap,
 		Catalog: map[string]any{
 			"total": len(tw), "recommended": rec, "uniqueIds": uniq,
-			"uniqueOrders": len(tw) > 0,
+			"uniqueOrders": uniqOrders, // v4.4.0 (B-35)
 		},
 		Items:   items,
 		Full:    full,
 		Counts:  map[string]int{"pass": pass, "fail": fail, "skipped": skipped + fullSkipped},
 		Webhook: map[string]any{"requested": useWebhook, "ok": false, "detail": "Không yêu cầu gửi"},
-		OK:      fail == 0 && uniq,
+		// v4.4.0 (B-09): tổng OK yêu cầu cả FULL pass — skipped không phải pass
+		OK:      fail == 0 && uniq && uniqOrders && fullFails == 0,
 	}
 	if useWebhook {
 		ok, detail := sendWebhookReport(report)

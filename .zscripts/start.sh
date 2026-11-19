@@ -74,7 +74,9 @@ if [ -f "./next-service-dist/server.js" ]; then
     # 设置环境变量
     export NODE_ENV=production
     export PORT="${PORT:-3000}"
-    export HOSTNAME="${HOSTNAME:-0.0.0.0}"
+    # v4.4.0 (B-01): mặc định LOOPBACK — API script chạy code bằng quyền server, không được
+    # phơi 0.0.0.0; cần remote thì cấu hình auth riêng + set HOSTNAME có chủ đích
+    export HOSTNAME="${HOSTNAME:-127.0.0.1}"
     export DATABASE_URL="${DATABASE_URL:-$DEFAULT_PACKAGED_DATABASE_URL}"
 
     if [ "$DATABASE_URL" = "$DEFAULT_PACKAGED_DATABASE_URL" ]; then

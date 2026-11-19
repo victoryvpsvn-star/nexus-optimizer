@@ -1,0 +1,37 @@
+#!/bin/sh
+# NEXUS Rescue — v4.4.0: dashboard cấu hình đầy đủ + web server truy cập qua LAN.
+# Chạy bởi service local (runlevel default) sau khi boot Alpine Rescue ISO.
+clear
+echo "=================================================================="
+echo "   _   _ _   _ _  _ ___   _   ___  _   __  ___ _  _  _   _  _  __"
+echo "  | \\| | | | |\\| | | | |   /  |  |  / \\ | |   /__ |  |_|  |  /__ |"
+echo " =================================================================="
+echo "    N E X U S   R E S C U E   E N V   —   lightweight diagnostic"
+echo "=================================================================="
+echo ""
+echo "[CPU]"
+grep 'model name' /proc/cpuinfo | head -1
+echo "Số lõi xử lý: $(nproc)"
+echo ""
+echo "[RAM]"
+free -m | awk 'NR==2{printf "Tổng: %d MB (%.1f GB) | Đang dùng: %d MB (%.2f GB) | Còn trống: %d MB (%.2f GB)\n", $2, $2/1024, $3, $3/1024, $4, $4/1024}'
+echo ""
+echo "[Ổ đĩa — GB đã dùng]"
+df -h -B G | grep -E '^/dev|^Filesystem'
+echo ""
+echo "[GPU]"
+lspci 2>/dev/null | grep -iE 'vga|3d|display' || echo "(không đọc được PCI — cài pciutils apk để xem chi tiết)"
+echo ""
+echo "[Mạng]"
+ip -4 addr show 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1'
+LANIP=$(ip -4 addr show 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | cut -d/ -f1)
+echo ""
+echo "=================================================================="
+echo "   NEXUS Dashboard (mở từ máy khác cùng mạng LAN):"
+echo "      http://${LANIP:-<ip>}:8080"
+echo "   Console này vẫn dùng được mọi lệnh busybox bình thường."
+echo "=================================================================="
+export NEXUS_BIND=0.0.0.0
+export NEXUS_DATA_DIR=/tmp/nexus-data
+mkdir -p /tmp/nexus-data
+exec /usr/bin/nexus --web --port 8080

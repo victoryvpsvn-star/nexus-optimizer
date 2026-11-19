@@ -2,6 +2,7 @@
 package main
 
 import (
+	"sort"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -201,11 +202,44 @@ func saveScreenshot(dataURL string) (ScreenshotInfo, string, bool) {
 	if m[1] != "png" {
 		ext = strings.ReplaceAll(m[1], "jpeg", "jpg")
 	}
-	name := fmt.Sprintf("shot_%s.%s", time.Now().Format("2006-01-02_150405"), ext)
-	if err := os.WriteFile(filepath.Join(shotsDir(), name), raw, 0o644); err != nil {
-		return ScreenshotInfo{}, "Không lưu được ảnh: " + err.Error(), false
+	// v4.4.0 (B-26): verify MAGIC BYTES — file "ảnh" thực chất là thứ khác bị chặn
+	if err := verifyImageMagic(raw, m[1]); err != nil {
+		return ScreenshotInfo{}, err.Error(), false
+	}
+	// v4.4.0 (B-24): thêm suffix entropy — 2 ảnh cùng giây không còn ghi đè nhau
+	name := fmt.Sprintf("shot_%s_%04x.%s", time.Now().Format("2006-01-02_150405"), time.Now().Nanosecond()%65536, ext)
+	shotPath := filepath.Join(shotsDir(), name)
+	if f, ferr := os.OpenFile(shotPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644); ferr == nil {
+		_, werr := f.Write(raw)
+		f.Close()
+		if werr != nil {
+			return ScreenshotInfo{}, "Không ghi được ảnh: " + werr.Error(), false
+		}
+	} else {
+		return ScreenshotInfo{}, "Không lưu được ảnh: " + ferr.Error(), false
 	}
 	return ScreenshotInfo{File: name, URL: "/shots/" + name, CreatedAt: time.Now().Format(time.RFC3339), SizeBytes: int64(len(raw))}, "Đã lưu ảnh chụp", true
+}
+
+/** v4.4.0 (B-26): kiểm magic bytes theo Content-Type khai báo — không tin client. */
+func verifyImageMagic(raw []byte, typ string) error {
+	switch typ {
+	case "png":
+		if len(raw) < 8 || string(raw[:8]) != "\x89PNG\r\n\x1a\n" {
+			return fmt.Errorf("dữ liệu không phải PNG thật (magic bytes sai)")
+		}
+	case "jpeg":
+		if len(raw) < 3 || raw[0] != 0xFF || raw[1] != 0xD8 || raw[2] != 0xFF {
+			return fmt.Errorf("dữ liệu không phải JPEG thật (magic bytes sai)")
+		}
+	case "webp":
+		if len(raw) < 12 || string(raw[:4]) != "RIFF" || string(raw[8:12]) != "WEBP" {
+			return fmt.Errorf("dữ liệu không phải WebP thật (magic bytes sai)")
+		}
+	default:
+		return fmt.Errorf("định dạng ảnh không hỗ trợ: %s", typ)
+	}
+	return nil
 }
 
 func listScreenshots() []ScreenshotInfo {
@@ -227,10 +261,10 @@ func listScreenshots() []ScreenshotInfo {
 			CreatedAt: st.ModTime().Format(time.RFC3339), SizeBytes: st.Size(),
 		})
 	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].CreatedAt > out[j-1].CreatedAt; j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
+	// v4.4.0 (B-36): O(n log n) + giới hạn 200 ảnh mới nhất
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
+	if len(out) > 200 {
+		out = out[:200]
 	}
 	return out
 }

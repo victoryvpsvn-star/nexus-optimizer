@@ -243,14 +243,19 @@ async function runFull(deadlineMs = 120_000): Promise<SelftestFullEntry[]> {
     }
     try {
       const ap = await applyTweakById(a.def.id)
-      const rv = await revertTweakById(a.def.id)
+      // v4.4.0 (B-08, port từ Go shouldRevertAfterApply): apply thất bại KHÔNG revert —
+      // tránh ghi giá trị mặc định đoán lên cấu hình thật; apply OK mới revert
+      let rv: Awaited<ReturnType<typeof revertTweakById>> | null = null
+      if (ap.success) {
+        rv = await revertTweakById(a.def.id)
+      }
       entries.push({
         id: a.def.id,
         name: a.def.name,
         applyOk: ap.success,
         applyMsg: shortDetail(ap.message),
-        revertOk: rv.success,
-        revertMsg: shortDetail(rv.message),
+        revertOk: rv ? rv.success : false,
+        revertMsg: rv ? shortDetail(rv.message) : 'Apply thất bại — KHÔNG revert (tránh ghi giá trị đoán lên cấu hình thật)',
         skipped: false,
       })
     } catch (e) {
@@ -413,6 +418,12 @@ export async function runSelftest(mode: 'check' | 'full', useWebhook: boolean): 
     webhook: { requested: useWebhook, ok: false, detail: useWebhook ? '' : 'Không yêu cầu gửi' },
     ok: false,
   }
+  // v4.4.0 (B-16, đối xứng Go B-09): FULL failures + FULL skipped phải ảnh hưởng tổng —
+  // không còn "ĐẠT" giả khi FULL có mục lỗi
+  const fullFailsAll = report.full.filter((f) => !f.skipped && (!f.applyOk || !f.revertOk))
+  const fullSkippedAll = report.full.filter((f) => f.skipped)
+  counts.fail += fullFailsAll.length
+  counts.skipped += fullSkippedAll.length
   report.ok = counts.fail === 0 && report.catalog.uniqueIds && report.catalog.uniqueOrders
 
   if (useWebhook) {

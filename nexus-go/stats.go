@@ -212,7 +212,26 @@ func listProcesses() ([]ProcessInfo, error) {
 /** Kill tiến trình: Windows dùng taskkill /T /F (giết cả cây); Linux SIGKILL.
  * v3.9.0 (theo audit P2-31): khi UI gửi kèm `name`, đối chiếu tên tiến trình thật qua
  * tasklist trước khi kill — PID tái sử dụng (process chết rồi PID bị nhặt lại) sẽ bị chặn. */
+/** v4.4.0 (B-41): denylist process hệ thống — kill nhầm 1 trong số này là mất phiên/crash.
+ * Khớp cả lowercase không kèm đường dẫn. svchost/conhost KHÔNG hard-deny (nhiều instance
+ * hợp lệ) nhưng UI đánh dấu "Hệ thống — cần hiểu rõ"; hard-deny là non-negotiables. */
+var protectedProcessNames = map[string]bool{
+	"system": true, "idle": true, "smss.exe": true, "csrss.exe": true,
+	"wininit.exe": true, "winlogon.exe": true, "services.exe": true,
+	"lsass.exe": true, "memcompression": true, "fontdrvhost.exe": true,
+}
+
 func killProcess(pid int, expectedName string) (bool, string) {
+	// v4.4.0 (B-41): bắt buộc name — không còn đường kill PID trống (PID reuse khó tận dụng)
+	if expectedName == "" {
+		return false, "Từ chối kill — API bắt buộc tham số name (đối chiếu chống PID reuse)"
+	}
+	if pid <= 4 {
+		return false, fmt.Sprintf("PID %d là tiến trình hệ thống cấp thấp (System/Idle) — KHÔNG cho phép kết thúc", pid)
+	}
+	if protectedProcessNames[strings.ToLower(expectedName)] {
+		return false, fmt.Sprintf("Từ chối kill \"%s\" — tiến trình hệ thống bảo vệ (denylist v4.4.0); kết thúc nó có thể crash toàn hệ thống", expectedName)
+	}
 	if expectedName != "" {
 		if runtimeIsWindows {
 			r := runSysExe("tasklist.exe", []string{"/FI", fmt.Sprintf("PID eq %d", pid), "/FO", "CSV", "/NH"}, 8*time.Second)

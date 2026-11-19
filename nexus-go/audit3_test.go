@@ -2,6 +2,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -97,5 +98,79 @@ func TestStorePersistErrSurface(t *testing.T) {
 	}
 	if st.LastPersistErr() == "" {
 		t.Fatalf("lỗi persist phải được ghi nhận (P2-02) — UI/health mới thấy được")
+	}
+}
+
+/** B-41: denylist process hệ thống + bắt buộc expectedName. */
+func TestProcessKillDenylist(t *testing.T) {
+	ok, msg := killProcess(4, "System")
+	if ok {
+		t.Fatalf("PID 4 phải bị chặn tuyệt đối")
+	}
+	if !strings.Contains(msg, "hệ thống") {
+		t.Fatalf("PID 4 phải bị từ chối là process hệ thống: %q", msg)
+	}
+	ok, _ = killProcess(9999, "lsass.exe")
+	if ok {
+		t.Fatalf("lsass.exe phải bị chặn (denylist)")
+	}
+	ok, msg = killProcess(9999, "")
+	if ok || !strings.Contains(msg, "name") {
+		t.Fatalf("kill không có expectedName phải bị từ chối (PID reuse): %q", msg)
+	}
+}
+
+/** B-25: parser strict — token sai phải lỗi, không nuốt âm thầm. */
+func TestParseSpecStrictRejectsBadTokens(t *testing.T) {
+	steps, err := parseSpecStrict("RA:HKCU\\Test\\Key|MyVal|REG_DWORD|1;BOGUS:nonsense", false, "test.tsv:12")
+	if err == nil {
+		t.Fatalf("token BOGUS phải là lỗi (B-25)")
+	}
+	if len(steps) != 1 {
+		t.Fatalf("bước hợp lệ trước token lỗi vẫn được trả: %d", len(steps))
+	}
+	if !strings.Contains(err.Error(), "test.tsv:12") {
+		t.Fatalf("lỗi phải có vị trí file:dòng: %v", err)
+	}
+	// spec hợp lệ hoàn toàn → không lỗi
+	if _, err := parseSpecStrict("RA:HKCU\\Test|A|REG_DWORD|1;RD:HKCU\\Test|B", false, "x:1"); err != nil {
+		t.Fatalf("spec hợp lệ phải parse sạch: %v", err)
+	}
+}
+
+/** B-34: PowerShell fallback chưa xác minh không được báo found. */
+func TestPsResolveVerifiedContract(t *testing.T) {
+	// resolvePowerShellExe luôn trả về val; trên Linux non-Windows không cache verified
+	// — kiểm contract qua getWinStatus (non-Windows → IsWin=false là trung thực)
+	st := getWinStatus()
+	if runtimeIsWindows && !st.PsFound {
+		t.Log("Windows thật không có PS — chấp nhận (máy rút gọn)")
+	}
+	if !runtimeIsWindows && (st.PsFound || st.IsWin) {
+		t.Fatalf("Linux mock không được báo PowerShell found")
+	}
+}
+
+/** B-38: Load normalize từng field — Accent có sẵn không mất phần còn lại. */
+func TestStoreLoadPartialSettings(t *testing.T) {
+	dir := t.TempDir()
+	// tạo config trước: Accent + Background tùy chỉnh, Radius trống
+	st := NewStore(dir)
+	st.mu.Lock()
+	st.data.Settings.Accent = "custom-accent"
+	st.data.Settings.Background = "sakura"
+	st.data.Settings.Radius = 2.5
+	_ = st.saveLocked()
+	st.mu.Unlock()
+
+	// Load lại từ disk — normalize không được đè custom value
+	st2 := NewStore(dir)
+	_ = st2.Load()
+	got := st2.GetSettings() // API thật của Store
+	if got.Accent != "custom-accent" {
+		t.Fatalf("Accent tùy chỉnh bị mất khi Load (B-38): %q", got.Accent)
+	}
+	if got.Radius != 2.5 {
+		t.Fatalf("Radius tùy chỉnh bị mất khi Load (B-38): %v", got.Radius)
 	}
 }

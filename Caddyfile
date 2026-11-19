@@ -1,17 +1,13 @@
+# v4.4.0 (B-01 + B-02, audit #4):
+#  - Caddy chỉ listen loopback — cổng này không được phơi ra mạng (API script của Next
+#    chạy code bằng quyền server; public = RCE).
+#  - XÓA route XTransformPort động (SSRF/proxy tới service loopback tùy ý theo query).
+#    Nếu sau này cần proxy nhiều service, cấu hình allowlist port cứng riêng.
+{
+	bind 127.0.0.1
+}
+
 :81 {
-	@transform_port_query {
-		query XTransformPort=*
-	}
-
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
-	}
-
 	handle {
 		reverse_proxy localhost:3000 {
 			header_up Host {host}

@@ -122,8 +122,22 @@ func (s *Store) Load() error {
 		}
 		return fmt.Errorf("config.json hỏng: %w", err)
 	}
+	// v4.4.0 (B-38): normalize TỪNG FIELD — config cũ thiếu field không còn bị zero-value
+	// khi Accent có sẵn; Accent trống = chưa có settings gì → dùng mặc định cả cụm
 	if d.Settings.Accent == "" {
 		d.Settings = defaultUISettings()
+	} else {
+		def := defaultUISettings()
+		if d.Settings.Background == "" {
+			d.Settings.Background = def.Background
+		}
+		if d.Settings.Radius == 0 {
+			d.Settings.Radius = def.Radius
+		}
+		if d.Settings.Lang == "" {
+			d.Settings.Lang = def.Lang
+		}
+
 	}
 	if d.TweakStates == nil {
 		d.TweakStates = map[string]TweakState{}
@@ -154,6 +168,18 @@ func (s *Store) Load() error {
 
 // saveLocked ghi file nguyên tử (tmp + rename) — gọi khi đang giữ mu
 // v3.9.0: perm 0600 trên Unix (config chứa webhook/scripts — audit P2-09/21)
+/** v4.4.0 (B-10): commitLocked = saveLocked + surface persistErr — mọi mutator đi qua đây
+ * để lỗi ghi đĩa luôn hiện ở /api/health, không còn đường "đổi RAM mà nuốt lỗi". */
+func (s *Store) commitLocked() error {
+	err := s.saveLocked()
+	if err != nil {
+		s.persistErr.Store(err.Error())
+	} else {
+		s.persistErr.Store("")
+	}
+	return err
+}
+
 func (s *Store) saveLocked() error {
 	b, err := json.MarshalIndent(&s.data, "", " ")
 	if err != nil {
@@ -251,9 +277,7 @@ func (s *Store) PutSettings(u UISettings) {
 		u.Lang = "vi"
 	}
 	s.data.Settings = u
-	if err := s.saveLocked(); err != nil {
-		s.persistErr.Store(err.Error())
-	}
+	_ = s.commitLocked() // v4.4.0 (B-10)
 }
 
 // GetWebhookURL: URL người dùng cấu hình ưu tiên, dự phòng env DISCORD_WEBHOOK_URL
@@ -274,9 +298,7 @@ func (s *Store) SetWebhookURL(url string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.WebhookURL = url
-	if err := s.saveLocked(); err != nil {
-		s.persistErr.Store(err.Error())
-	}
+	_ = s.commitLocked() // v4.4.0 (B-10)
 }
 
 func (s *Store) GetTweakState(id string) TweakState {
@@ -289,9 +311,7 @@ func (s *Store) PutTweakState(id string, st TweakState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.TweakStates[id] = st
-	if err := s.saveLocked(); err != nil {
-		s.persistErr.Store(err.Error())
-	}
+	_ = s.commitLocked() // v4.4.0 (B-10)
 }
 
 // v3.7.0: trạng thái App Optimizer — map riêng để không đụng TweakStates của catalog
@@ -309,7 +329,7 @@ func (s *Store) PutAppOptState(id string, st TweakState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.AppOptStates[id] = st
-	_ = s.saveLocked()
+	_ = s.commitLocked() // v4.4.0 (B-10)
 }
 
 // AddCleanupLog thêm log + giữ tối đa 100 mục gần nhất (giống take:15 DB cũ nhưng dư dả hơn)
@@ -337,7 +357,7 @@ func (s *Store) AddCleanupLog(kind, target string, freed int64, success bool, ms
 	if len(s.data.CleanupLogs) > 100 {
 		s.data.CleanupLogs = s.data.CleanupLogs[:100]
 	}
-	_ = s.saveLocked()
+	_ = s.commitLocked() // v4.4.0 (B-10)
 }
 
 func (s *Store) GetCleanupLogs() []CleanupLogEntry {
@@ -367,7 +387,7 @@ func (s *Store) PutGaming(enabled bool, effects []GamingEffect) {
 	s.data.Gaming.Enabled = enabled
 	s.data.Gaming.EnabledAt = at
 	s.data.Gaming.Effects = effects
-	_ = s.saveLocked()
+	_ = s.commitLocked() // v4.4.0 (B-10)
 }
 
 func (s *Store) ListScripts() []ScriptRecord {
@@ -401,7 +421,7 @@ func (s *Store) UpsertScript(rec ScriptRecord) ScriptRecord {
 			s.data.Scripts = append(s.data.Scripts, rec)
 		}
 	}
-	_ = s.saveLocked()
+	_ = s.commitLocked() // v4.4.0 (B-10)
 	return rec
 }
 
@@ -411,7 +431,7 @@ func (s *Store) DeleteScript(id int) bool {
 	for i := range s.data.Scripts {
 		if s.data.Scripts[i].ID == id {
 			s.data.Scripts = append(s.data.Scripts[:i], s.data.Scripts[i+1:]...)
-			_ = s.saveLocked()
+			_ = s.commitLocked() // v4.4.0 (B-10)
 			return true
 		}
 	}

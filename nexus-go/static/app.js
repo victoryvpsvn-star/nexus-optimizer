@@ -457,20 +457,28 @@ async function refreshFixes() {
       <div class="acard">
         <div class="acard-head"><span class="acard-ico">${f.icon}</span><b>${esc(f.name)}</b></div>
         <p class="muted small">${esc(f.desc)}</p>
+        ${f.confirm ? `<p class="small" style="color:#d97706">⚠️ Tác động: ${esc(f.confirm)}</p>` : ''}
         <div class="acard-foot">
           <span class="chip mut">${f.needsAdmin ? '🛡️ cần Admin' : '👤 không cần'}</span>
-          <button class="btn primary" data-fix="${f.id}" data-name="${esc(f.name)}">🔧 Sửa ngay</button>
+          <button class="btn primary" data-fix="${f.id}" data-name="${esc(f.name)}" data-confirm="${esc(f.confirm || '')}">🔧 Sửa ngay</button>
         </div>
         <div class="fix-result" id="fixres-${f.id}"></div>
       </div>`).join('');
     el.querySelectorAll('[data-fix]').forEach((b) => {
       b.addEventListener('click', async () => {
-        if (!confirm(`Chạy fix "${b.dataset.name}" ngay bây giờ?`)) return;
+        // v4.4.0 (B-31): card có tác động không hoàn tác được → dialog riêng hiển thị
+        // tác động thật (backend chặn confirm thiếu — đây là lớp UX)
+        const needConfirm = b.dataset.confirm;
+        if (needConfirm && !confirm(`Chạy fix "${b.dataset.name}"?
+
+⚠️ Tác động:
+${needConfirm}`)) return;
+        if (!needConfirm && !confirm(`Chạy fix "${b.dataset.name}" ngay bây giờ?`)) return;
         const id = b.dataset.fix;
         const res = $('fixres-' + id);
         b.disabled = true; b.textContent = 'Đang sửa…';
         try {
-          const r = await api('/api/fixes', { method: 'POST', body: JSON.stringify({ id }) });
+          const r = await api('/api/fixes', { method: 'POST', body: JSON.stringify({ id, confirm: !!needConfirm }) });
           res.innerHTML = (r.steps || []).map((s) => `<div>${s.ok ? '✅' : '❌'} ${esc(s.name)} — <span class="muted">${esc(s.detail || '')}</span></div>`).join('') +
             `<div style="margin-top:6px"><b>${esc(r.message || '')}</b></div>`;
           toast(r.message || 'Xong', r.success ? 'ok' : 'err');

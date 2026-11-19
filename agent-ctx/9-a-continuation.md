@@ -587,3 +587,31 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   rõ — sửa test, không nới code). Anchor patch python phải lấy text SAU các replace trước đó
   (runExe→nvSmi đổi text anchor — CI round trip tránh được nếu check thứ tự).
 - Verify: CI 3/3; exe go-v47 buildNumber=47; SHA-256 exe tải về == digest release khớp 100%.
+
+
+## 17-c: v4.3.0 (go-v48, run 44420581848) — audit #3 (upload/`BAO_CAO_AUDIT_NEXUS_OPTIMIZER_v4.2.0.txt`, P1×10/P2×7/P3×7)
+- Audit #3 của GPT rà commit 8ae9c1a (v4.2.0) — CHẤT LƯỢNG, bắt nhiều bug THẬT vào đúng code
+  v4.2.0: (1) cleanup goroutine Disk spawn vô điều kiện — action=ram vẫn XÓA FILE ngầm
+  [P1-01 nguy hiểm nhất]; (2) perfRestore của tôi setactive High Perf sau khi trả CPU MIN →
+  plan active cuối ≠ plan gốc [P1-03 — bug của chính tôi]; (3) saveAppoptSnap THAY cả map
+  → block scheme save mất HAGS keys [P1-04]; (4) selftest revert cả khi apply fail [P1-02];
+  (5) Discord IFEO regAddValues rồi bỏ kết quả [P1-06]; (6) regQueryValue nuốt access-denied
+  thành not-found [P1-07]; (7) BCD revert luôn true [P1-08]; (8) perf không snapshot custom
+  GPU lock của user trước -lgc [P1-09].
+- Fix: shouldRunDiskWorkers gate; shouldRevertAfterApply gate (partial qua message marker
+  "MỘT PHẦN ĐÃ ÁP DỤNG" — ActionResult KHÔNG có field Partial); updateAppoptSnap
+  read-modify-write fail-closed; perfRestore bỏ setactive High Perf + verify CUỐI scheme;
+  bcdValueAbsentOutput classify; regQueryValueStrict cho 4 snapshot paths; GPU lock snapshot
+  perf["gpuLockBefore"] + restore trả lock + verify; sysOp +6 route (cleanup/selftest/backup-
+  restore/script-run/timer/game-gpu); Store.persistErr atomic + /api/health header; P2-03
+  regAddValues partial; P2-05 emptyDirContents phân biệt not-exist vs access-denied (err
+  return → caller báo FAIL thật); P2-06 restore 500; P3-01 revertSpec reject; P3-04 0 lệnh
+  exe thô; P3-05 script save limit.
+- Backlog có chủ đích: P1-05 (snapshot engine cho cả catalog — cần SystemRunner interface,
+  khối lượng lớn), P1-10/P2-07 Electron DB (legacy), P3-02/03/06/07 (sandbox/Authenticode/
+  backup archive/redaction), Features 01-10 (Restore Center...).
+- Bài học: patch nhiều file trong 1 script python — assert fail giữa chừng BỎ cả lô (perf P3-04
+  lần 1 không ghi vì script chết ở assert P2-03 trước đó → phải chạy lại; anchor python `\\`
+  là 1 backslash, Go source cần 2 — anchor dài chứa `\` phải dùng regex hoặc escape 4).
+- Verify: CI 3/3; go-v48; SHA exe tải về == digest release khớp 100%; smoke: RAM-only chỉ trả
+  results kind=ram (không còn disk worker ngầm), restore/OC sim pass.

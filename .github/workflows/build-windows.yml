@@ -23,13 +23,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Bun (v4.4.0 B-18 — dùng bun.lock chuẩn của repo)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22' // v4.4.0 (B-17): Node 20 EOL 2026
 
       - name: Cài dependencies
-        run: npm install --no-audit --no-fund
+        # v4.4.0 (B-18): repo có bun.lock — dùng bun --frozen-lockfile, không còn resolve mới giữa các lần build
+        run: bun install --frozen-lockfile --no-audit --no-fund
 
       - name: Prisma generate + tạo DB template (Windows engine)
         env:

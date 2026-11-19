@@ -42,7 +42,12 @@ jobs:
 
       - name: Build Windows x64 exe (GUI, không cửa sổ console)
         working-directory: nexus-go
-        run: GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui -X main.buildNumber=${{ github.run_number }}" -o release/NEXUS-Optimizer-Go-x64.exe .
+        run: |
+          mkdir -p release
+          GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui -X main.buildNumber=${{ github.run_number }}" -o release/NEXUS-Optimizer-Go-x64.exe .
+          test -s release/NEXUS-Optimizer-Go-x64.exe || { echo "::error::exe rỗng/thiếu"; exit 1; }
+          sha256sum release/NEXUS-Optimizer-Go-x64.exe
+          go version -m release/NEXUS-Optimizer-Go-x64.exe | head -20
 
       - name: Liệt kê kết quả
         run: ls -la nexus-go/release/
@@ -86,6 +91,18 @@ jobs:
             - UI nhúng sẵn (WebView2 Win10/11); thiếu runtime sẽ tự mở trình duyệt mặc định
             - Đủ tính năng: Tổng quan realtime, 35 tinh chỉnh Windows, Dọn dẹp disk+RAM, Gaming Mode, Tiến trình, Mạng, Script, Tự kiểm tra + webhook Discord, Ảnh chụp, Sao lưu registry, Giao diện
             - Hiệu năng: Timer Resolution tự động, ép xung an toàn, FPS test 2 pha (giữ nhịp mục tiêu + đo TỐI ĐA thật không giới hạn)
+            - **v4.4.0 — audit #4 + Repair Center + Rescue ISO:**
+              • Sửa chữa mới: Tạo điểm khôi phục (Restore Point), xây lại cache icon/thumbnail, đăng ký lại app UWP, quét S.M.A.R.T + volume + thiết bị lỗi (read-only)
+              • Fix nguy hiểm giờ có CẢNH BÁO TÁC ĐỘNG riêng (preview trước khi chạy; backend chặn thiếu xác nhận)
+              • Process Manager chặn kill process hệ thống (denylist) + bắt buộc đối chiếu tên (chống PID reuse)
+              • Updater health-check thật (/api/health + version) — không còn rollback dựa trên PID sống
+              • Self-test tổng ĐẠT phải tính cả lỗi FULL; catalog uniqueOrders đúng thật
+              • Lỗi ghi đĩa ở mọi mutation Store được ghi nhận qua /api/health; config cũ không mất field tùy chỉnh khi load
+              • Screenshot: magic-bytes verify + tên chống trùng + sort nhanh + cap 200; mọi runner Go cap output lúc đọc (256KB)
+              • Parser TSV nghiêm: token sai → reject cả dòng (không nuốt âm thầm)
+              • Cleanup báo fail thật khi còn file không xóa được
+              • ⭐ NEXUS RESCUE ISO (Alpine ~70MB): boot USB → dashboard RAM/GB/CPU/GPU/mạng đầy đủ + web NEXUS truy cập qua LAN — xem release asset nexus-rescue.iso (ghi USB bằng Rufus/Etcher)
+              • CI: mkdir release + verify exe; Node 22; bun frozen-lockfile; container legacy bind loopback, bỏ Caddy SSRF route
             - **v4.3.0 — audit #3 (P1×10/P2×7):** CLEANUP RAM-ONLY KHÔNG CÒN XÓA FILE NGẦM (goroutine Disk giờ chỉ spawn khi action disk/all — bug nguy hiểm nhất); Self-test FULL không revert khi apply thất bại (không ghi default đoán); perfRestore trả CPU MIN KHÔNG activate High Perf + verify CUỐI plan active = plan gốc; snapshot perf fail-closed (load/persist lỗi → bỏ qua bước, read-modify-write không mất HAGS/CPU-MIN); PERF snapshot+restore CUSTOM GPU LOCK người dùng có trước khi ép xung; Discord IFEO không ghi khi snapshot lỗi; snapshot Registry dùng strict query (access denied ≠ 'không có'); BCD revert chỉ OK khi xác nhận value vắng; sysOp coordinator bao phủ thêm cleanup/selftest/backup-restore/script-run/timer/GPU-game; Store lỗi persist hiển thị qua /api/health; cleanup folder không đọc được = FAIL thật; regAddValues báo PARTIAL; TSV revertSpec rỗng bị reject; chuẩn hóa runSysExe/nvSmi hết (0 lệnh exe thô)
             - **v4.2.0 — audit #2 (P1×8/P2×10):** Performance ép xung giờ snapshot ĐỦ (HAGS kể cả exists=false + CPU MIN AC/DC + Ultimate plan do app tạo) và restore đầy đủ + verify read-back, Success tổng hợp đúng (planOK/HAGS/Ultimate/CPU-min fail đều được ghi); CPU restore KHÔNG đổi power plan người dùng đã chọn lại sau unlock; GPU restore PENDING khi driver mất (giữ snapshot retry); GPU clock read-back verify + wording đúng giới hạn driver; fix Services Restart + Printer bỏ OR — verify STOPPED/RUNNING thật; fixSearch chỉ nhận STOPPED rõ (output rỗng = UNKNOWN); Self-test FULL KHÔNG tự chạy Appx removal (khó đảo ngược); System Operation Coordinator chặn thao tác chồng (409); nvidia-smi dùng đường dẫn resolved + runSysExe chuẩn hóa
             - **v4.1.0 — 10 phát hiện audit đã sửa:** 🔒 Snapshot/Restore EXACT: CPU unlock snapshot đủ scheme+MIN/MAX+AC/DC, GPU power trả mức Current (không Default), GPU clock trả custom lock cũ; AppOpt/Unlock không xóa snapshot khi restore thất bại (retry được), persist lỗi → ABORT trước khi đụng máy; ❌ FALSE-SUCCESS hết: Defender bỏ điều kiện OR + verify sc query, Search tổng hợp stop/delete/start, Tweak engine phân biệt query-error ≠ not-found, sc start fail = fail, powercfg DC phân loại desktop/laptop; 🎮 Gaming không ghi đè ngoài preset (win-sysresp); 🛠️ Services restore theo snapshot StartType từng service (Manual→Manual, Delayed→Delayed) + start lại service vốn chạy; ⬇️ Updater pin đúng tag + SHA-256 bắt buộc khớp + health-check rollback
@@ -98,6 +115,79 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  # v4.4.0: NEXUS RESCUE ISO — Alpine-based (nhẹ ~70MB), boot USB → dashboard cấu hình đầy đủ
+  # (RAM/GB dùng/CPU/GPU/đĩa) + chạy NEXUS web truy cập qua LAN. Không WinPE ADK nặng.
+  build-rescue-iso:
+    name: Build NEXUS Rescue ISO (Alpine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Build Linux binary cho ISO
+        working-directory: nexus-go
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.buildNumber=${{ github.run_number }}" -o /tmp/nexus-linux .
+          test -s /tmp/nexus-linux || { echo "::error::binary rỗng"; exit 1; }
+
+      - name: Tải Alpine virt ISO (pin + fallback)
+        run: |
+          mkdir -p /tmp/iso
+          cd /tmp/iso
+          for V in alpine-virt-3.21.3-x86_64.iso alpine-virt-3.22.1-x86_64.iso alpine-virt-3.21.2-x86_64.iso; do
+            BR=$(echo "$V" | sed -E 's/alpine-virt-([0-9]+)\.[0-9]+\.[0-9]+.*/\1/')
+            URL="https://dl-cdn.alpinelinux.org/alpine/v$BR/releases/x86_64/$V"
+            echo "Thử $URL"
+            curl -sfL --connect-timeout 15 --max-time 180 -o base.iso "$URL" && { echo "Tải được: $V"; break; }
+          done
+          test -s base.iso || { echo "::error::Không tải được Alpine ISO"; exit 1; }
+          ls -la base.iso
+
+      - name: Tạo NEXUS overlay (apkovl) — dashboard + autorun
+        run: |
+          mkdir -p /tmp/iso/ov/etc/local.d /tmp/iso/ov/etc/runlevels/default /tmp/iso/ov/usr/bin
+          cp /tmp/nexus-linux /tmp/iso/ov/usr/bin/nexus
+          chmod +x /tmp/iso/ov/usr/bin/nexus
+          # symlink autorun: service local chạy script local.d/*.start ở runlevel default
+          ln -sf /etc/init.d/local /tmp/iso/ov/etc/runlevels/default/local
+          cp nexus-go/rescue/nexus.start /tmp/iso/ov/etc/local.d/nexus.start
+          chmod +x /tmp/iso/ov/etc/local.d/nexus.start
+          tar -czf /tmp/iso/nexus.apkovl.tar.gz -C /tmp/iso/ov etc usr
+          ls -la /tmp/iso/nexus.apkovl.tar.gz
+
+      - name: Chèn overlay vào ISO (xorriso)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xorriso >/dev/null 2>&1
+          cd /tmp/iso
+          xorriso -osirrox on -indev base.iso -outdev nexus-rescue.iso             -cp_push nexus.apkovl.tar.gz /           2>&1 | tail -3
+          test -s nexus-rescue.iso || { echo "::error::ISO xuất rỗng"; exit 1; }
+          ls -la nexus-rescue.iso
+          sha256sum nexus-rescue.iso
+
+      - name: Upload ISO vào release go-vN
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: go-v${{ github.run_number }}
+          files: /tmp/iso/nexus-rescue.iso
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Artifact ISO (nếu release step lỗi)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-rescue-iso
+          path: /tmp/iso/nexus-rescue.iso
 
   # v3.5.0: tự test Hiệu năng — ép xung TRƯỚC, rồi FPS test xem có tăng không (60 → 120),
   # tự chụp ảnh bằng chứng (đã chỉnh FPS, đã bấm Tối ưu, FPS đạt).
