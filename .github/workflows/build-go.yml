@@ -401,16 +401,18 @@ jobs:
           # Bai hoc run truoc: PS5.1 silent fail khong output -> dung pwsh 7 + PS5.1 luot doi,
           # PlatformArch x64 de bo WMI, capture 2>&1, IN RA RAW de debug. Bai hoc run 64:
           # khong bao gio Trim() tren null - regex extract.
-          $args = @('-File', 'C:\Fido\Fido.ps1', '-Win', '11', '-Rel', 'Latest', '-Lang', 'Vietnamese', '-Arch', 'x64', '-PlatformArch', 'x64', '-GetUrl')
-          $raw = (& pwsh -NoProfile -ExecutionPolicy Bypass @args 2>&1 | Out-String)
-          Write-Host '===== FIDO pwsh7 RAW ====='
-          Write-Host $raw
+          # Bug run truoc: $args la AUTOMATIC VARIABLE -> gan bi nuot -> & pwsh khong arg -> REPL silent!
+          Write-Host '===== FIDO direct call (pwsh7) ====='
+          & C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang Vietnamese -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut
+          Write-Host "FIDO exit: $LASTEXITCODE"
+          $raw = $fidoOut | Out-String
           $url = [regex]::Match($raw, 'https://[^\s]*\.iso[^\s]*').Value
           if (-not $url) {
-            Write-Host '===== FIDO PS5.1 RAW ====='
-            $raw = (& powershell -NoProfile -ExecutionPolicy Bypass @args 2>&1 | Out-String)
-            Write-Host $raw
-            $url = [regex]::Match($raw, 'https://[^\s]*\.iso[^\s]*').Value
+            Write-Host '===== FIDO PS5.1 retry ====='
+            & powershell -NoProfile -ExecutionPolicy Bypass -File C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang Vietnamese -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut2
+            Write-Host "FIDO PS5.1 exit: $LASTEXITCODE"
+            $raw2 = $fidoOut2 | Out-String
+            $url = [regex]::Match($raw2, 'https://[^\s]*\.iso[^\s]*').Value
           }
           Write-Host "ISO URL: $url"
           if (-not $url) { throw "Fido khong tra ve URL (raw o tren) - ho MS block cloud IP -> dung fallback python flow vlscppe+ov-df+api" }
