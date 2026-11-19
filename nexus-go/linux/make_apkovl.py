@@ -17,19 +17,19 @@ VARIANTS = {
     'desktop': {
         'pretty': 'NEXUS Linux 1.0 Desktop Lite (Alpine base)',
         'world': ['xfce4', 'xfce4-terminal', 'lightdm', 'lightdm-gtk-greeter',
-                  'firefox', 'font-dejavu', 'font-noto', 'elogind', 'dbus', 'neofetch'],
+                  'firefox', 'font-dejavu', 'font-noto', 'elogind', 'dbus'],
         'runlevels': ['dbus', 'lightdm', 'networking', 'local'],
     },
     'gaming': {
         'pretty': 'NEXUS Linux 1.0 Gaming (Alpine base)',
         'world': ['xfce4', 'xfce4-terminal', 'lightdm', 'lightdm-gtk-greeter',
                   'firefox', 'font-dejavu', 'font-noto', 'elogind', 'dbus',
-                  'flatpak', 'htop', 'neofetch'],
+                  'flatpak', 'htop'],
         'runlevels': ['dbus', 'lightdm', 'networking', 'local'],
     },
     'rescue': {
         'pretty': 'NEXUS Linux 1.0 Rescue CLI (Alpine base)',
-        'world': ['neofetch', 'htop'],
+        'world': ['htop'],
         'runlevels': ['networking', 'local'],
     },
 }
@@ -58,12 +58,32 @@ EOF
 esac
 """
 
+NEXFETCH = r'''#!/bin/sh
+# NEXUS nexfetch — info hệ thống + logo NEXUS (thuần shell, không cần gói ngoài)
+G='\033[1;36m'; P='\033[1;35m'; R='\033[0m'
+os=$(sed -n 's/^PRETTY_NAME="\(.*\)"$/\1/p' /etc/os-release 2>/dev/null || echo NEXUS)
+k=$(uname -r); a=$(uname -m)
+up=$(cut -d. -f1 /proc/uptime | awk '{d=int($1/86400);h=int($1%86400/3600);m=int($1%3600/60); if(d)printf "%dd %dh",d,h; else if(h)printf "%dh %dm",h,m; else printf "%dm",m}')
+pk=$(apk info 2>/dev/null | wc -l)
+mem=$(free -m 2>/dev/null | awk '/^Mem:/{printf "%d/%d MB",$3,$2}')
+cpu=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
+vm='máy thật'; grep -qsi 'hypervisor' /proc/cpuinfo && vm='Hyper-V guest'
+shell=$(ps -p $$ -o comm= 2>/dev/null || echo sh)
+printf "%b\n" \
+" $G    /\\\\      $R $P${os}$R" \
+" $G   /  \\     $R Kernel : $k ($a)" \
+" $G  /|/|\\    $R Uptime : $up" \
+" $G  |__|      $R Shell  : $shell" \
+" $G   ||       $R CPU    : $cpu" \
+" $G   ||       $R RAM    : $mem" \
+" $G NEXUS      $R Gói    : $pk" \
+" $G  /\\\\      $R Runtime: $vm" \
+" $G NEXUS Linux $R Cài gói: nx install <tên gói>$R"
+'''
+
 WELCOME = """#!/bin/sh
-# NEXUS Linux — chào mừng + neofetch khi login (TTY / SSH)
-if [ -x /usr/bin/neofetch ]; then
-  neofetch
-fi
-echo "Gợi ý NEXUS: cài gói bằng 'nx install <tên gói>' (thay apt). Đổi ngôn ngữ: setup-alpine"
+# NEXUS Linux — nexfetch khi login (TTY / SSH)
+[ -x /usr/bin/nexfetch ] && /usr/bin/nexfetch
 """
 
 NEXUS_START = """#!/bin/sh
@@ -140,6 +160,7 @@ def main() -> int:
             '  Xem giúp  : nx\n'))
         # 2) nx — trình quản lý gói thay apt
         add_text(tf, 'usr/bin/nx', NX_SCRIPT, mode=0o755)
+        add_text(tf, 'usr/bin/nexfetch', NEXFETCH, mode=0o755)
         # 3) neofetch khi login
         add_text(tf, 'etc/profile.d/00-nexus-welcome.sh', WELCOME, mode=0o755)
         # 4) Mạng DHCP — Hyper-V Default Switch cấp IP tự động

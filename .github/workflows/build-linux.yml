@@ -62,7 +62,7 @@ jobs:
           tag_name: nexus-linux-v1
           name: NEXUS Linux v1 — Desktop / Gaming / Rescue (Hyper-V)
           body: |
-            **NEXUS Linux v1** — 3 bản, đều boot UEFI + BIOS (Hyper-V Gen 2 OK), neofetch ra NEXUS Linux, lệnh `nx install` thay apt (backend apk).
+            **NEXUS Linux v1** — 3 bản, đều boot UEFI + BIOS (Hyper-V Gen 2 OK), `nexfetch` riêng của NEXUS hiển thị "NEXUS Linux", lệnh `nx install` thay apt (backend apk).
 
             | ISO | Dành cho | RAM VM khuyến nghị |
             |---|---|---|

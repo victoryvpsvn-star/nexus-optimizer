@@ -3,7 +3,7 @@
 # Usage: fetch_pkgs.sh <variant> <build_dir>
 set -e
 V="$1"; BUILD="$2"
-# docker alpine mac dinh chi co repo MAIN — firefox/flatpak/neofetch thuoc COMMUNITY!
+# docker alpine mac dinh chi co repo MAIN — firefox/flatpak thuoc COMMUNITY!
 cat > /etc/apk/repositories <<'EOF'
 https://dl-cdn.alpinelinux.org/alpine/v3.21/main
 https://dl-cdn.alpinelinux.org/alpine/v3.21/community
@@ -11,9 +11,9 @@ EOF
 apk update >/dev/null
 apk add --no-cache abuild >/dev/null
 case "$V" in
-  desktop) PKGS="xfce4 xfce4-terminal lightdm lightdm-gtk-greeter firefox font-dejavu font-noto elogind dbus neofetch" ;;
-  gaming)  PKGS="xfce4 xfce4-terminal lightdm lightdm-gtk-greeter firefox font-dejavu font-noto elogind dbus flatpak htop neofetch" ;;
-  rescue)  PKGS="neofetch htop" ;;
+  desktop) PKGS="xfce4 xfce4-terminal lightdm lightdm-gtk-greeter firefox font-dejavu font-noto elogind dbus" ;;
+  gaming)  PKGS="xfce4 xfce4-terminal lightdm lightdm-gtk-greeter firefox font-dejavu font-noto elogind dbus flatpak htop" ;;
+  rescue)  PKGS="htop" ;;
   *) echo "variant lạ: $V"; exit 1 ;;
 esac
 mkdir -p "$BUILD/apks/$V/x86_64"
