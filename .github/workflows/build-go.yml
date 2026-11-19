@@ -206,25 +206,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cai Windows ADK + WinPE add-on (winget, fallback choco)
+      - name: Cai ADK base + WinPE add-on (fwlink dong bo 24H2, fallback choco)
         shell: powershell
         timeout-minutes: 35
         run: |
-          # ADK base + PE add-on tu winget (chinh chu Microsoft, dong bo version);
-          # neu winget loi thi choco WindowsADK.WinPE lam phuong an du phong
+          # Bai hoc run 58: winget cai ADK base FAIL 0x80070057 -> chi con PE add-on 26100
+          # khong co base -> copype "architecture not found". Cai TRUC TIEP adksetup.exe
+          # voi CAP FWLINK DONG BO 24H2 (ADK 2289980 + PE add-on 2289981 — add-on nay da
+          # chung minh cai OK qua choco); choco la fallback cuoi.
           $pe86 = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           $pe64 = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           function Test-PeReady { (Test-Path "$pe86\copype.cmd") -or (Test-Path "$pe64\copype.cmd") }
           if (-not (Test-PeReady)) {
-            winget install --id Microsoft.WindowsADK --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-            winget install --id Microsoft.WindowsADKPEAddon --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2289980" -OutFile C:\adksetup.exe -UseBasicParsing
+            $p1 = Start-Process C:\adksetup.exe -ArgumentList "/q","/norestart","/CEIPOff" -Wait -PassThru
+            Write-Host "ADK base installer exit: $($p1.ExitCode)"
           }
           if (-not (Test-PeReady)) {
-            Write-Host "winget failed - trying choco WindowsADK.WinPE"
+            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2289981" -OutFile C:\adkwinpesetup.exe -UseBasicParsing
+            $p2 = Start-Process C:\adkwinpesetup.exe -ArgumentList "/q","/norestart","/CEIPOff" -Wait -PassThru
+            Write-Host "PE add-on installer exit: $($p2.ExitCode)"
+          }
+          if (-not (Test-PeReady)) {
+            Write-Host "direct installers failed - trying choco WindowsADK.WinPE"
             choco install -y --no-progress WindowsADK.WinPE
           }
-          if (-not (Test-PeReady)) { throw "ADK WinPE copype.cmd not found after winget + choco" }
-          Write-Host "ADK PE OK"
+          if (-not (Test-PeReady)) {
+            Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 40 -ExpandProperty FullName
+            throw "ADK WinPE copype.cmd not found after all installers"
+          }
+          $peRoot = if (Test-Path "$pe86\copype.cmd") { $pe86 } else { $pe64 }
+          if (-not (Test-Path "$peRoot\amd64\WinPE_OCs\WinPE-WMI.cab")) { Write-Host "::warning::WinPE_OCs amd64 khong co WinPE-WMI.cab — xem listing" }
+          Write-Host "ADK PE OK: $peRoot"
 
       - name: Tai exe NEXUS tu release go-vN
         shell: powershell
@@ -240,8 +253,12 @@ jobs:
         run: |
           $pe  = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
+          if (-not (Test-Path "$pe\amd64\WinPE_OCs")) {
+            Get-ChildItem "$pe" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName
+            throw "WinPE_OCs amd64 thieu - ADK/add-on chua dung version"
+          }
           & "$pe\copype.cmd" amd64 C:\winpe
-          if ($LASTEXITCODE -ne 0) { throw "copype failed" }
+          if ($LASTEXITCODE -ne 0) { throw "copype failed - xem output copype ben tren" }
           # Mount image index 1 (real PE - not Setup)
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
           if ($LASTEXITCODE -ne 0) { throw "mount boot.wim failed" }
