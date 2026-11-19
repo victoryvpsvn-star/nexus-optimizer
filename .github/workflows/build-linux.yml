@@ -1,0 +1,84 @@
+name: Build NEXUS Linux ×3 (Desktop / Gaming / Rescue — Hyper-V ready)
+
+on:
+  push:
+    branches: [main]
+    paths: ['nexus-go/linux/**', 'nexus-go/rescue/make_iso.py', '.github/workflows/build-linux.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-nexus-linux:
+    name: NEXUS Linux — desktop/gaming/rescue ISO (UEFI+BIOS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tải Alpine virt ISO (base — pin + fallback)
+        run: |
+          mkdir -p /tmp/nx
+          for V in alpine-virt-3.21.3-x86_64.iso alpine-virt-3.22.1-x86_64.iso alpine-virt-3.21.2-x86_64.iso; do
+            BR=$(echo "$V" | sed -E 's/alpine-virt-([0-9]+\.[0-9]+)\.[0-9]+.*/\1/')
+            URL="https://dl-cdn.alpinelinux.org/alpine/v$BR/releases/x86_64/$V"
+            echo "Thu $URL"
+            curl -fsSL --retry 3 -o /tmp/nx/base.iso "$URL" && break || true
+          done
+          test -s /tmp/nx/base.iso || { echo "::error::Không tải được Alpine ISO"; exit 1; }
+          ls -la /tmp/nx/base.iso
+
+      - name: Fetch gói + tự ký repo (docker alpine — 3 variant)
+        run: |
+          chmod +x nexus-go/linux/fetch_pkgs.sh
+          for V in desktop gaming rescue; do
+            docker run --rm -v "$PWD/nexus-go/linux:/build/alpine:ro" \
+              -v "$PWD/nexus-go/linux:/out" \
+              alpine:3.21 sh /build/alpine/fetch_pkgs.sh "$V" /out
+          done
+
+      - name: Tạo apkovl 3 variant
+        run: |
+          mkdir -p /tmp/nx/ov
+          for V in desktop gaming rescue; do
+            python3 nexus-go/linux/make_apkovl.py "$V" "nexus-go/linux/keys/$V" "/tmp/nx/ov/nexus-$V.apkovl.tar.gz"
+          done
+
+      - name: Build 3 ISO (chèn apkovl + bake repo gói offline)
+        run: |
+          for V in desktop gaming rescue; do
+            python3 nexus-go/rescue/make_iso.py /tmp/nx/base.iso \
+              "/tmp/nx/ov/nexus-$V.apkovl.tar.gz" \
+              "/tmp/nx/nexus-linux-$V.iso" \
+              "nexus-go/linux/apks/$V"
+            sha256sum "/tmp/nx/nexus-linux-$V.iso"
+          done
+          ls -la /tmp/nx/
+
+      - name: Upload vào release nexus-linux-v1
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nexus-linux-v1
+          name: NEXUS Linux v1 — Desktop / Gaming / Rescue (Hyper-V)
+          body: |
+            **NEXUS Linux v1** — 3 bản, đều boot UEFI + BIOS (Hyper-V Gen 2 OK), neofetch ra NEXUS Linux, lệnh `nx install` thay apt (backend apk).
+
+            | ISO | Dành cho | RAM VM khuyến nghị |
+            |---|---|---|
+            | nexus-linux-desktop.iso | XFCE + Firefox — dùng hằng ngày | 4 GB |
+            | nexus-linux-gaming.iso | XFCE + flatpak + zram + tuning | 4–6 GB |
+            | nexus-linux-rescue.iso | CLI cứu hộ/cấu hình siêu nhẹ | 1–2 GB |
+
+            Hyper-V: tạo VM Gen 2 → boot ISO → đăng nhập root (không mật khẩu) → nếu variant desktop/gaming: XFCE tự vào sau boot. Cài thêm gói: `nx install <gói>`.
+          files: |
+            /tmp/nx/nexus-linux-desktop.iso
+            /tmp/nx/nexus-linux-gaming.iso
+            /tmp/nx/nexus-linux-rescue.iso
+
+      - name: Artifact dự phòng
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-linux-isos
+          path: /tmp/nx/nexus-linux-*.iso
+          retention-days: 7

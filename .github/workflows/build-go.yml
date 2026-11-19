@@ -383,6 +383,7 @@ jobs:
           [ -f nexus-go/ci/fps-summary.md ] && cat nexus-go/ci/fps-summary.md >> $GITHUB_STEP_SUMMARY || true
 
   win11-iso:
+    if: github.event_name == 'workflow_dispatch'
     name: Build Win11 Pro 24H2 Gaming ISO (Debloated + Tuned)
     runs-on: windows-latest
     timeout-minutes: 55
