@@ -10,14 +10,14 @@ case "$V" in
   rescue)  PKGS="neofetch htop" ;;
   *) echo "variant lạ: $V"; exit 1 ;;
 esac
-mkdir -p "/build/apks/$V/x86_64"
+mkdir -p "$BUILD/apks/$V/x86_64"
 abuild-keygen -an >/dev/null 2>&1
 KEY=$(find /root/.abuild -name '*.rsa' | head -1)
-mkdir -p "/build/keys/$V"
-cp "$KEY.pub" "/build/keys/$V/"
+mkdir -p "$BUILD/keys/$V"
+cp "$KEY.pub" "$BUILD/keys/$V/"
 echo "$V: apk fetch -R $PKGS"
-apk fetch --quiet -R -o "/build/apks/$V/x86_64" $PKGS
-cd "/build/apks/$V/x86_64"
+apk fetch --quiet -R -o "$BUILD/apks/$V/x86_64" $PKGS
+cd "$BUILD/apks/$V/x86_64"
 apk index --quiet -o APKINDEX.apk *.apk 2>/dev/null || apk index -o APKINDEX.apk *.apk
 abuild-sign -q -k "$KEY" APKINDEX.apk
 echo "$V: $(ls *.apk | wc -l) gói + APKINDEX ký OK"

@@ -197,9 +197,9 @@ jobs:
   # boot ngoài Windows → dashboard cấu hình đầy đủ + NEXUS web qua LAN. Siêu nhẹ: chỉ WMI +
   # PowerShell + StorageWMI (SMART); không desktop env; mọi ghi chỉ trong RAM disk X:.
   build-windows-pe:
-    if: github.event_name == 'workflow_dispatch'
     name: Build Windows NEXUS ISO (WinPE gaming ultra-light)
     runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 45
     needs: [release]   # đoi release cat xong đe nap exe + upload ISO vao cung tag go-vN
     if: ${{ !cancelled() && needs.release.result == 'success' }}
@@ -384,9 +384,9 @@ jobs:
           [ -f nexus-go/ci/fps-summary.md ] && cat nexus-go/ci/fps-summary.md >> $GITHUB_STEP_SUMMARY || true
 
   win11-iso:
-    if: github.event_name == 'workflow_dispatch'
     name: Build Win11 Pro 24H2 Gaming ISO (Debloated + Tuned)
     runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 55
     steps:
       - name: Checkout

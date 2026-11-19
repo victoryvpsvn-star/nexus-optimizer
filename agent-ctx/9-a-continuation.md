@@ -759,3 +759,11 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - PHIÊN SAU: poll run 96962df → nếu xanh: tải 3 phần .7z về download/, giải nén .001 (7z trên sandbox? kiểm `which 7z`; không có → cat .001 .002 .003 > .7z? KHÔNG — 7z multivolume: dùng py7zr không hỗ trợ; tải về cả 3 phần + hướng dẫn user tự ghép bằng merge.bat/7-Zip), Discord thông báo + hướng dẫn. Nếu fail: đọc log bước cụ thể, fix, push lại.
 - WinPE job vẫn fail (choco add-on thiếu boot.wim) — chưa sửa; cần adkwinpesetup.exe fwlink.
 - Câu hỏi user 'test máy yếu': trả lời = VirtualBox VM (2 CPU/4GB) đủ test cài đặt+firstboot+apps; chơi game phải máy thật; không có dịch vụ test Win11 free đáng tin.
+
+
+## 17-l: PIVOT — bro dừng Win11 (máy yếu), chuyển NEXUS Linux ×3 cho Hyper-V
+- Run 7b59a4a win11: failure (connector đã lấy SKU OK trong CI nhưng job fail sau đó — CHƯA debug, đã gate). Win11 + WinPE jobs giờ chỉ chạy workflow_dispatch.
+- NEXUS Linux ×3 (nhánh nexus-go/linux/): make_apkovl.py (3 variant desktop/gaming/rescue: os-release NEXUS Linux + usr/bin/nx thay apt (apk backend) + neofetch login + DHCP eth0 + runlevels + gaming tune zram) + fetch_pkgs.sh (docker alpine apk fetch -R + abuild-keygen + apk index + abuild-sign → repo local tự ký, key .pub vào apkovl) + make_iso.py mở rộng bake /apks/x86_64 → ISO offline-boot cài world.
+- Run 18c7c1e build-linux FAIL: fetch_pkgs.sh ghi vào "/build/apks" (mount RO) thay vì $BUILD → exit 20. Fix + move if: sau runs-on (run 5769986 bị GitHub coi workflow file invalid khi if: đứng trước name: — phải dịch xuống).
+- phiên sau: poll run build-linux (nhánh sau commit này) → nếu xanh: tải 3 ISO về download/ + release nexus-linux-v1 + Discord. Lỗi tiếp có thể: apk fetch network trong docker (runner OK), apk index include key, boot Alpine Install world từ /media/cdrom/apks cần đúng cấu trúc (apks/x86_64/APKINDEX.apk + key pub /etc/apk/keys — đã chuẩn), RAM VM 4GB cho desktop.
+- REMIX: make_iso.py hiển thị exit code pycdlib nếu ISO >2GB? ISO desktop ~550MB OK.
