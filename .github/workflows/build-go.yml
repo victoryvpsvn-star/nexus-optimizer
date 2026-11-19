@@ -91,6 +91,11 @@ jobs:
             - UI nhúng sẵn (WebView2 Win10/11); thiếu runtime sẽ tự mở trình duyệt mặc định
             - Đủ tính năng: Tổng quan realtime, 35 tinh chỉnh Windows, Dọn dẹp disk+RAM, Gaming Mode, Tiến trình, Mạng, Script, Tự kiểm tra + webhook Discord, Ảnh chụp, Sao lưu registry, Giao diện
             - Hiệu năng: Timer Resolution tự động, ép xung an toàn, FPS test 2 pha (giữ nhịp mục tiêu + đo TỐI ĐA thật không giới hạn)
+            - **v4.5.0 — WINDOWS NEXUS ISO (WinPE thật):**
+              • ⭐ `windows-nexus.iso` trong release — Windows PE chính chủ Microsoft (như AOMEI PE Builder), boot ngoài Windows để cứu dữ liệu / diagnose khi Windows hỏng
+              • Siêu nhẹ cho gaming thủ: chỉ WMI + PowerShell + StorageWMI (SMART) — không desktop nặng; boot nhanh, mọi ghi chỉ vào RAM disk X:, KHÔNG đụng dữ liệu thật
+              • Dashboard đầy đủ ngay console: CPU lõi/luồng, RAM tổng/dùng/còn (GB), ổ đĩa GB dùng, GPU + VRAM, ổ vật lý + S.M.A.R.T, IP LAN
+              • NEXUS Dashboard web chạy sẵn — mở từ điện thoại/máy khác cùng LAN: http://<ip>:8080
             - **v4.4.0 — audit #4 + Repair Center + Rescue ISO:**
               • Sửa chữa mới: Tạo điểm khôi phục (Restore Point), xây lại cache icon/thumbnail, đăng ký lại app UWP, quét S.M.A.R.T + volume + thiết bị lỗi (read-only)
               • Fix nguy hiểm giờ có CẢNH BÁO TÁC ĐỘNG riêng (preview trước khi chạy; backend chặn thiếu xác nhận)
@@ -186,6 +191,97 @@ jobs:
         with:
           name: nexus-rescue-iso
           path: /tmp/iso/nexus-rescue.iso
+
+
+  # v4.5.0: WINDOWS NEXUS ISO — WinPE chính chủ Microsoft (như AOMEI PE Builder) cho gaming thủ:
+  # boot ngoài Windows → dashboard cấu hình đầy đủ + NEXUS web qua LAN. Siêu nhẹ: chỉ WMI +
+  # PowerShell + StorageWMI (SMART); không desktop env; mọi ghi chỉ trong RAM disk X:.
+  build-windows-pe:
+    name: Build Windows NEXUS ISO (WinPE gaming ultra-light)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    needs: [release]   # đợi release cắt xong để nạp exe + upload ISO vào cùng tag go-vN
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cài Windows ADK + WinPE add-on (choco)
+        shell: powershell
+        run: |
+          # ADK PE add-on kéo luôn ADK base; silent, không mở UI
+          choco install -y --no-progress windows-adk-windows-pe-addon
+          $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
+          if (-not (Test-Path "$pe\copype.cmd")) { throw "ADK WinPE chưa có copype.cmd — kiểm tra choco install" }
+          Write-Host "ADK OK: $pe"
+
+      - name: Tải exe NEXUS từ release go-vN
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\out | Out-Null
+          gh release download go-v${{ github.run_number }} --repo ${{ github.repository }} --pattern "*.exe" --dir C:\out
+          Get-ChildItem C:\out
+
+      - name: Tạo workspace PE + mount + inject NEXUS
+        shell: powershell
+        run: |
+          $pe  = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
+          $adk = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit"
+          $err = "$adk\Windows Preinstallation Environment" ; # phòng khi path khác (kiểm cả Program Files không (x86))
+          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
+          & "$pe\copype.cmd" amd64 C:\winpe
+          if ($LASTEXITCODE -ne 0) { throw "copype thất bại" }
+          # Mount image index 1 (PE thật — không phải Setup)
+          dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
+          if ($LASTEXITCODE -ne 0) { throw "mount boot.wim thất bại" }
+          # NEXUS vào image
+          New-Item -ItemType Directory -Force -Path C:\winpe\mount\NEXUS | Out-Null
+          Copy-Item C:\out\*.exe C:\winpe\mount\NEXUS\nexus.exe -Force
+          Copy-Item nexus-go\rescue\pe\startnet.cmd C:\winpe\mount\Windows\System32\startnet.cmd -Force
+          Copy-Item nexus-go\rescue\pe\nexus-dashboard.ps1 C:\winpe\mount\NEXUS\nexus-dashboard.ps1 -Force
+          # Package tối thiểu (siêu nhẹ): WMI trước (PowerShell cần), rồi PowerShell, StorageWMI (SMART)
+          $ocs = "$pe\amd64\WinPE_OCs"
+          foreach ($p in @("WinPE-WMI","WinPE-PowerShell","WinPE-StorageWMI")) {
+            dism /Image:C:\winpe\mount /Add-Package /PackagePath:"$ocs\$p.cab"
+            if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$p base thêm lỗi (có thể đã có) — tiếp tục" }
+            dism /Image:C:\winpe\mount /Add-Package /PackagePath:"$ocs\en-us\$p.cab"
+            if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$p en-us thêm lỗi — tiếp tục" }
+          }
+          # Commit — boot.wim trong media được cập nhật trực tiếp
+          dism /Unmount-Image /MountDir:C:\winpe\mount /Commit
+          if ($LASTEXITCODE -ne 0) { throw "unmount commit thất bại" }
+
+      - name: Tạo ISO + verify
+        shell: powershell
+        run: |
+          $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
+          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
+          New-Item -ItemType Directory -Force -Path C:\out | Out-Null
+          & "$pe\MakeWinPEMedia.cmd" /ISO C:\winpe C:\out\windows-nexus.iso
+          if ($LASTEXITCODE -ne 0) { throw "MakeWinPEMedia thất bại" }
+          $iso = Get-Item C:\out\windows-nexus.iso
+          Write-Host "ISO: $($iso.Length) bytes ($([math]::Round($iso.Length/1MB,1)) MB)"
+          if ($iso.Length -lt 150MB) { throw "ISO quá nhỏ — boot.wim không được inject?" }
+          if ($iso.Length -gt 900MB) { throw "ISO quá lớn — review packages" }
+          # Verify image 1 chứa NEXUS + startnet + dashboard
+          dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
+          dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount2
+          foreach ($f in @("C:\winpe\mount2\NEXUS\nexus.exe","C:\winpe\mount2\Windows\System32\startnet.cmd","C:\winpe\mount2\NEXUS\nexus-dashboard.ps1")) {
+            if (-not (Test-Path $f)) { throw "thiếu $f trong image" }
+            Write-Host "OK: $f ($((Get-Item $f).Length) B)"
+          }
+          dism /Unmount-Image /MountDir:C:\winpe\mount2 /Discard
+          Get-FileHash C:\out\windows-nexus.iso -Algorithm SHA256 | Format-List
+
+      - name: Upload windows-nexus.iso vào release go-vN
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload go-v${{ github.run_number }} C:\out\windows-nexus.iso --repo ${{ github.repository }} --clobber
+          Write-Host "Đã nạp windows-nexus.iso vào release go-v${{ github.run_number }}"
 
   # v3.5.0: tự test Hiệu năng — ép xung TRƯỚC, rồi FPS test xem có tăng không (60 → 120),
   # tự chụp ảnh bằng chứng (đã chỉnh FPS, đã bấm Tối ưu, FPS đạt).

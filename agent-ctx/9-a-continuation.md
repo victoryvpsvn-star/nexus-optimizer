@@ -615,3 +615,31 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   là 1 backslash, Go source cần 2 — anchor dài chứa `\` phải dùng regex hoặc escape 4).
 - Verify: CI 3/3; go-v48; SHA exe tải về == digest release khớp 100%; smoke: RAM-only chỉ trả
   results kind=ram (không còn disk worker ngầm), restore/OC sim pass.
+
+
+## 17-d: v4.4.0 (go-v54, run 44472735630+Windows success) — audit #4 + Repair Center + Rescue ISO
+- Audit #4 (B-01→41) — triage: Go 14 finding thật sửa hết (B-05 CI mkdir+verify; B-09
+  report.OK tính FULL fails+skipped≠pass; B-10 commitLocked mọi mutator; B-22 RemoveAll
+  partial; B-23 cappedWriter cho runCmd/runExe — CÓ SẴN trong script.go, không redefine;
+  B-24 screenshot O_EXCL+nanos; B-25 parseSpecStrict token sai reject row; B-26 magic
+  bytes; B-32 updater poll /api/health; B-34 PsResolve.Verified; B-35 uniqueOrders;
+  B-36 sort.Slice+cap; B-38 load normalize; B-41 kill denylist System/lsass/... + name
+  bắt buộc). TS legacy nhanh: B-01 loopback, B-02 bỏ Caddy XTransformPort SSRF, B-08
+  gate revert, B-16 report.ok tính FULL, B-17 Node 22, B-18 bun frozen.
+- Repair Center (yêu cầu user): +4 fix (restorepoint/icons/uwp/diskscan read-only);
+  FixCard.Confirm — UI ⚠ tác động riêng + backend HTTP 428 khi thiếu confirm (B-31).
+- NEXUS Rescue ISO (như AOMEI PE nhưng nhẹ ~68MB): CI job Alpine virt 3.21.3 pin+fallback;
+  overlay apkovl (dashboard CPU/RAM-GB/disk-GB/GPU/network + nexus --web :8080 qua LAN,
+  NEXUS_BIND=0.0.0.0 env; autorun via runlevels/default/local symlink); release asset
+  nexus-rescue.iso. Bài học CI:
+  1) YAML comment là `#` không phải `//` — comment inline sai làm run failure KHÔNG JOB.
+  2) `needs:` phải đúng JOB ID (không phải job name) — sai → failure tức thì 0 jobs.
+  3) xorriso -cp_push không chạy trên runner ubuntu26 ("Not a known command: '/'") —
+     dùng pycdlib add_file(iso_path D1-safe '/NEXUS_APK.;1', rr_name='nexus.apkovl.tar.gz')
+     + verify get_file_from_iso readback (script rescue/make_iso.py).
+  4) sed branch Alpine phải major.minor ('v3.21') không phải major ('v3').
+  5) Smoke script assert cứng (số fix 10, FPS ≥145) — phóng feature phải đồng bộ cập nhật
+     CI assert; FPS 145 lệch message ≥105 → fail oan nhận 119 (jitter target 120).
+  6) POST gate mới (428) phải cập nhật smoke — assert UI flow đúng mới đủ.
+- Verify: CI xanh cả 2; go-v54: exe SHA khớp 100% + nexus-rescue.iso 71,3MB overlay
+  verify (9 entries, binary+autorun có mặt); smoke fix-internet không confirm → 428 ✓.
