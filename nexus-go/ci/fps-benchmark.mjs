@@ -169,7 +169,7 @@ try {
   const after = await runBench(page, '03-fps-after-120.png');
   summary.after = after.fps;
   summary.maxAfter = after.max;
-  if (after.fps < 105) fail(`FPS sau Tối ưu phải ≥105 (mục tiêu 120, nhận ${after.fps})`);
+  if (after.fps < 145) fail(`FPS sau Tối ưu phải ≥105 (mục tiêu 120, nhận ${after.fps})`);
   if (after.fps <= base.fps) fail('FPS sau Tối ưu phải TĂNG so với baseline');
   if (after.max < 120) fail(`Năng lực TỐI ĐA thật chỉ ${after.max} FPS < 120 — không được khoe 120 khi máy không đủ (anti-fake)`);
   if (after.max < after.fps) fail(`Năng lực thật (${after.max}) thấp hơn nhịp giữ được (${after.fps}) — phép đo có vấn đề`);
@@ -213,7 +213,7 @@ try {
   if (appRun.success !== false) fail('appopt trên Linux phải báo trung thực success=false');
   ok('App Optimizer: 6 app detect trung thực (0 cài trên Linux) + POST báo "chỉ Windows" đúng');
   const fixes = await (await fetch(BASE + '/api/fixes')).json();
-  if (!Array.isArray(fixes) || fixes.length !== 10) fail(`fixes phải trả 10 fix (v4.0.0 thêm sfc/search/defender/time): ${fixes ? fixes.length : 'null'}`);
+  if (!Array.isArray(fixes) || fixes.length !== 14) fail(`fixes phải trả ≥14 fix (v4.4.0 +4: restorepoint/icons/uwp/diskscan): ${fixes ? fixes.length : 'null'}`);
   const fixRun = await (await fetch(BASE + '/api/fixes', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
     body: JSON.stringify({ id: 'fix-internet' }),

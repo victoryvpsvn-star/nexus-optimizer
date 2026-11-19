@@ -144,7 +144,7 @@ jobs:
           mkdir -p /tmp/iso
           cd /tmp/iso
           for V in alpine-virt-3.21.3-x86_64.iso alpine-virt-3.22.1-x86_64.iso alpine-virt-3.21.2-x86_64.iso; do
-            BR=$(echo "$V" | sed -E 's/alpine-virt-([0-9]+)\.[0-9]+\.[0-9]+.*/\1/')
+            BR=$(echo "$V" | sed -E 's/alpine-virt-([0-9]+\.[0-9]+)\.[0-9]+.*/\1/')
             URL="https://dl-cdn.alpinelinux.org/alpine/v$BR/releases/x86_64/$V"
             echo "Thử $URL"
             curl -sfL --connect-timeout 15 --max-time 180 -o base.iso "$URL" && { echo "Tải được: $V"; break; }
