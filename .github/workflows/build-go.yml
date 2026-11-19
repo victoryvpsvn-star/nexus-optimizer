@@ -223,22 +223,38 @@ jobs:
           # ADK, exit 1000 MSI hay do thieu runtime) -> adksetup truc tiep co /log ->
           # choco windows-adk (base) -> verify registry la dieu kien chot.
           $roots = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows Kits\\Installed Roots"
-          function Test-KitsRoot { ($null -ne (Get-ItemProperty -Path $roots -Name KitsRoot10 -ErrorAction SilentlyContinue)) }
+          # Bai hoc run 62: runner co registry STUB KitsRoot10 (tu Visual Studio SDK) ->
+          # kiem tra value rong thi bo qua oan ADK base -> copype khong tim amd64. Kiem NGHIEM:
+          # WinPERoot phai co value + oscdimg.exe phai ton tai (oscdimg nam trong ADK base
+          # Deployment Tools - PE add-on KHONG co). Dieu kien chot la oscdimg file thuc.
+          function Test-Oscdimg {
+            $cands = @(
+              "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
+              "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+            )
+            foreach ($c in $cands) { if (Test-Path $c) { return $true } }
+            return $false
+          }
+          function Test-KitsStrict {
+            $w = (Get-ItemProperty -Path $roots -Name WinPERoot -ErrorAction SilentlyContinue).WinPERoot
+            if (-not $w) { return $false }
+            return (Test-Oscdimg)
+          }
           choco install -y --no-progress vcredist2010
-          if (-not (Test-KitsRoot)) {
+          if (-not (Test-KitsStrict)) {
             Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2289980" -OutFile C:\adksetup.exe -UseBasicParsing
-            $p1 = Start-Process C:\adksetup.exe -ArgumentList "/q","/norestart","/CEIPOff","/log","C:\adksetup.log" -Wait -PassThru
+            $p1 = Start-Process C:\adksetup.exe -ArgumentList "/q","/norestart","/CEIPOff","/features","OptionId.DeploymentTools","/log","C:\adksetup.log" -Wait -PassThru
             Write-Host "ADK base installer exit: $($p1.ExitCode)"
             Get-Content C:\adksetup.log -Tail 25 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "ADKLOG: $_" }
           }
-          if (-not (Test-KitsRoot)) {
+          if (-not (Test-KitsStrict)) {
             Write-Host "direct base failed - trying choco windows-adk (base)"
             choco install -y --no-progress windows-adk
           }
-          if (-not (Test-KitsRoot)) {
-            throw "ADK base dang chua co registry KitsRoot10 - xem adksetup.log artifact"
+          if (-not (Test-KitsStrict)) {
+            throw "ADK base thieu oscdimg/WinPERoot - xem adksetup.log trong artifact"
           }
-          Write-Host "ADK base OK (registry KitsRoot10 co) - cai PE add-on"
+          Write-Host "ADK base OK (oscdimg co) - cai PE add-on"
           choco install -y --no-progress windows-adk-winpe
           if (-not (Test-PeReady)) {
             Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 40 -ExpandProperty FullName
@@ -267,7 +283,13 @@ jobs:
             throw "WinPE_OCs amd64 thieu - ADK/add-on chua dung version"
           }
           & "$pe\copype.cmd" amd64 C:\winpe
-          if ($LASTEXITCODE -ne 0) { throw "copype failed - xem output copype ben tren" }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::copype failed - thu tay stage media template (dua tren ADK files)"
+            Remove-Item -Recurse -Force C:\winpe -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force -Path C:\winpe\mount | Out-Null
+            robocopy "$pe\amd64\media" C:\winpe\media /E /NFL /NDL /NJH /NJS
+            if ($LASTEXITCODE -ge 8) { throw "media template robocopy failed - $pe\amd64\media thieu" }
+          }
           # Mount image index 1 (real PE - not Setup)
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
           if ($LASTEXITCODE -ne 0) { throw "mount boot.wim failed" }
@@ -295,7 +317,13 @@ jobs:
           if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
           New-Item -ItemType Directory -Force -Path C:\out | Out-Null
           & "$pe\MakeWinPEMedia.cmd" /ISO C:\winpe C:\out\windows-nexus.iso
-          if ($LASTEXITCODE -ne 0) { throw "MakeWinPEMedia failed" }
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path C:\out\windows-nexus.iso)) {
+            Write-Host "::warning::MakeWinPEMedia failed - oscdimg direct (hybrid BIOS+UEFI)"
+            $osc = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+            if (-not (Test-Path $osc)) { $osc = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe" }
+            & $osc -m -o -u2 -udfver102 "-bootdata:2#p0,e,bC:\winpe\media\Boot\etfsboot.com#pEF,e,bC:\winpe\media\efi\microsoft\boot\efisys.bin" C:\winpe\media C:\out\windows-nexus.iso
+            if ($LASTEXITCODE -ne 0) { throw "oscdimg direct failed" }
+          }
           $iso = Get-Item C:\out\windows-nexus.iso
           Write-Host "ISO: $($iso.Length) bytes ($([math]::Round($iso.Length/1MB,1)) MB)"
           if ($iso.Length -lt 150MB) { throw "ISO too small - boot.wim not injected?" }
