@@ -12,7 +12,7 @@ except ImportError:
     import pycdlib
 
 iso = pycdlib.PyCdlib()
-iso.new(interchange_level=4, joliet=True, udf=True)
+iso.new(interchange_level=4, joliet=True, udf="2.60")
 
 # Directory tree truoc (pycdlib khong tu tao parent)
 seen_dirs = set()
