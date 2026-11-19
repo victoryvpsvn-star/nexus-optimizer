@@ -9,6 +9,7 @@ apks_dir (tùy chọn): gói .apk + APKINDEX sẽ bake vào ISO /apks/x86_64
 """
 import sys
 import os
+import re
 
 import pycdlib
 
@@ -41,7 +42,7 @@ def main() -> int:
         for fn in sorted(os.listdir(apks_sub)):
             n += 1
             # Tên ISO9660 D1-safe + unique tuyệt đối (số đếm), tên thật ở Rock Ridge
-            safe = fn.upper().replace('-', '_').replace('.', '_')
+            safe = re.sub(r'[^A-Z0-9_]', '_', fn.upper())  # gtk+3.0 v.v. — chỉ A-Z 0-9 _
             iso.add_file(os.path.join(apks_sub, fn),
                          iso_path=f'/NXAPKS/X86_64/{n:03d}_{safe[:55]}.;1',
                          rr_name=fn)
