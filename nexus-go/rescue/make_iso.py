@@ -38,10 +38,13 @@ def main() -> int:
         iso.add_directory(iso_path='/APKS/X86_64', rr_name='x86_64')
         n = 0
         for fn in sorted(os.listdir(apks_sub)):
-            iso.add_file(os.path.join(apks_sub, fn),
-                         iso_path=f'/APKS/X86_64/{fn.upper().replace(".", "_")[:64]}.;1',
-                         rr_name=fn)
             n += 1
+            # Tên ISO9660 D1-safe + unique tuyệt đối (số đếm tăng dần), tên thật
+            # giữ ở Rock Ridge — Alpine boot đọc rr nên thấy tên gói như thường.
+            safe = fn.upper().replace('-', '_').replace('.', '_')
+            iso.add_file(os.path.join(apks_sub, fn),
+                         iso_path=f'/APKS/X86_64/{n:03d}_{safe[:55]}.;1',
+                         rr_name=fn)
         print(f"baked {n} file gói vào /apks/x86_64")
     iso.write(out)
     iso.close()
