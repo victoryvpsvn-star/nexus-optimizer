@@ -678,3 +678,29 @@ Yêu cầu user: ISO Windows PE thật như AOMEI PE Builder — lightweight/gam
   từ release go-vN về download/ verify pycdlib; (f) Discord + ctx 17-f.
 - Trạng thái release: go-v61/62/63/64 đã có exe + nexus-rescue.iso (Alpine) xanh đầy đủ;
   chỉ windows-nexus.iso là chưa vào release.
+
+
+## 17-f: v4.5.1 — ISO pycdlib + gaming/apps trong PE (push cuối phiên)
+Yêu cầu user: ISO phải có super tối ưu gaming + Sakura debloat + app installer (Discord/Steam/Chrome/Opera...).
+Đã làm (commit cuối): 
+- make_winpe_iso.py (pycdlib, STAGE=C:\winpe\media): tạo ISO El Torito BIOS (etfsboot.com,
+  noemul, load 4) + UEFI (efisys.bin) — KHÔNG cần oscdimg/ADK base nữa.
+- Workflow: ADK step chỉ choco windows-adk-winpe (add-on, đã 100% OK mọi run); workspace
+  robocopy media template (bỏ copype); ISO step chạy python make_winpe_iso.py + verify
+  mount readback 5 file (exe/startnet/dashboard/offline-tune/apps) + size 150-900MB.
+- PE mới: nexus-offline-tune.ps1 (offline reg load SOFTWARE+SYSTEM Windows thật: HAGS=2,
+  GameBar/GameDVR off, telemetry, SysMain off, PowerThrottlingOff, SystemResponsiveness 10,
+  Tasks\Games priority); nexus-apps.ps1 (menu 1=all 2=gaming 3=debloat-only; tải 8 installer
+  chính chủ vào <win>\NEXUS-Apps; ghi <win>\NEXUS\firstboot.ps1 debloat UWP + cài silent +
+  RunOnce offline NEXUSFirstBoot tự xóa); startnet.cmd menu 1/2/0 + NEXUS web start nền.
+- Bug sửa trong phiên: $fbPath → $fbScript (apps ps1).
+TIẾP THEO: poll run mới nhất; nếu xanh → tải windows-nexus.iso từ release go-vN về
+download/ (pycdlib đọc lại El Torito + boot.wim size tăng) + Discord + verify. Nếu py
+script lỗi cú pháp/API → fix ngay (API đã verify: add_eltorito(bootfile_path, platform_id=0,
+media_name='noemul', boot_load_size=4; efi=True entry thứ 2 bootable=False). LƯU Ý: pycdlib
+add_file iso_path level 4 KHÔNG cần ';1'; file da add trong loop KHÔNG add lại (etfsboot/
+efisys được add riêng TRƯỚC add_eltorito — nếu loop đã add đường đó thì remove phần add
+trùng trong py script — hiện script add etfsboot lần nữa sau loop → có thể lỗi "duplicate" →
+check file đã add: bỏ dòng add_file etfsboot/efisys trùng (loop đã add từ stage) — XEM KỸ
+PY SCRIPT: có if lenient; nếu CI fail duplicate → xoá 2 dòng add_file trùng).
+- Release go-v65 vẫn có exe + alpine ISO xanh; windows-nexus.iso là asset cần bổ sung.

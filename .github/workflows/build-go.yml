@@ -206,67 +206,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cai ADK base + WinPE add-on (fwlink dong bo 24H2, fallback choco)
+      - name: Cai WinPE add-on (choco) - ISO tao bang pycdlib, khong can ADK base
         shell: powershell
-        timeout-minutes: 35
+        timeout-minutes: 30
         run: |
-          # Bai hoc run 58: winget cai ADK base FAIL 0x80070057 -> chi con PE add-on 26100
-          # khong co base -> copype "architecture not found". Cai TRUC TIEP adksetup.exe
-          # voi CAP FWLINK DONG BO 24H2 (ADK 2289980 + PE add-on 2289981 - add-on nay da
-          # chung minh cai OK qua choco); choco la fallback cuoi.
-          $pe86 = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          $pe64 = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          function Test-PeReady { (Test-Path "$pe86\copype.cmd") -or (Test-Path "$pe64\copype.cmd") }
-          # Bai hoc run 58-60: PE add-on tu cai OK NHUNG khong ghi registry Installed Roots
-          # (KitsRoot10/WinPERoot) - chi ADK BASE ghi; copype.cmd doc registry -> khong co
-          # base thi "architecture not found: amd64". Chia tang: vcredist2010 (dep quen cua
-          # ADK, exit 1000 MSI hay do thieu runtime) -> adksetup truc tiep co /log ->
-          # choco windows-adk (base) -> verify registry la dieu kien chot.
-          $roots = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows Kits\\Installed Roots"
-          # Bai hoc run 62: runner co registry STUB KitsRoot10 (tu Visual Studio SDK) ->
-          # kiem tra value rong thi bo qua oan ADK base -> copype khong tim amd64. Kiem NGHIEM:
-          # WinPERoot phai co value + oscdimg.exe phai ton tai (oscdimg nam trong ADK base
-          # Deployment Tools - PE add-on KHONG co). Dieu kien chot la oscdimg file thuc.
-          # Run 63: choco windows-adk "installed" NHUNG oscdimg khong nam o path doan truoc
-          # (registry stub VS SDK che KitsRoot10 + ADK 22621 co the giai nen khac) -> DO TIM
-          # oscdimg.exe DE QUY trong Windows Kits va ghi duong dan xuong file cho step ISO.
-          function Test-Oscdimg {
-            $found = Get-ChildItem "C:\Program Files (x86)\Windows Kits","C:\Program Files\Windows Kits" -Recurse -Filter oscdimg.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($found) {
-              $found.FullName | Out-File C:\oscdimg-path.txt -Encoding ascii
-              Write-Host "OSCDIMG FOUND: $($found.FullName)"
-              return $true
-            }
-            return $false
-          }
-          function Test-KitsStrict {
-            $w = (Get-ItemProperty -Path $roots -Name WinPERoot -ErrorAction SilentlyContinue).WinPERoot
-            if (-not $w) { return $false }
-            return (Test-Oscdimg)
-          }
+          # Bai hoc run 58-64: ADK base installer tren runner khong on dinh (exit 1000,
+          # registry stub VS SDK che path) -> DUY NHAT can la PE add-on (media template +
+          # boot.wim + WinPE_OCs). ISO tao bang python pycdlib (El Torito BIOS+UEFI) -
+          # khong copype, khong oscdimg, khong registry.
           choco install -y --no-progress vcredist2010
-          if (-not (Test-KitsStrict)) {
-            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2289980" -OutFile C:\adksetup.exe -UseBasicParsing
-            $p1 = Start-Process C:\adksetup.exe -ArgumentList "/q","/norestart","/CEIPOff","/features","OptionId.DeploymentTools","/log","C:\adksetup.log" -Wait -PassThru
-            Write-Host "ADK base installer exit: $($p1.ExitCode)"
-            Get-Content C:\adksetup.log -Tail 25 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "ADKLOG: $_" }
-          }
-          if (-not (Test-KitsStrict)) {
-            Write-Host "direct base failed - trying choco windows-adk (base)"
-            choco install -y --no-progress windows-adk
-          }
-          if (-not (Test-KitsStrict)) {
-            throw "ADK base thieu oscdimg/WinPERoot - xem adksetup.log trong artifact"
-          }
-          Write-Host "ADK base OK (oscdimg co) - cai PE add-on"
           choco install -y --no-progress windows-adk-winpe
-          if (-not (Test-PeReady)) {
-            Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 40 -ExpandProperty FullName
-            throw "ADK WinPE copype.cmd not found after all installers"
+          $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
+          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
+          if (-not (Test-Path "$pe\amd64\media\sources\boot.wim")) {
+            Get-ChildItem $pe -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName
+            throw "PE add-on media template thieu boot.wim"
           }
-          $peRoot = if (Test-Path "$pe86\copype.cmd") { $pe86 } else { $pe64 }
-          if (-not (Test-Path "$peRoot\amd64\WinPE_OCs\WinPE-WMI.cab")) { Write-Host "::warning::WinPE_OCs amd64 khong co WinPE-WMI.cab - xem listing" }
-          Write-Host "ADK PE OK: $peRoot"
+          Write-Host "ADK PE OK: $pe"
 
       - name: Tai exe NEXUS tu release go-vN
         shell: powershell
@@ -286,13 +242,10 @@ jobs:
             Get-ChildItem "$pe" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName
             throw "WinPE_OCs amd64 thieu - ADK/add-on chua dung version"
           }
-          & "$pe\copype.cmd" amd64 C:\winpe
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::copype failed - thu tay stage media template (dua tren ADK files)"
-            Remove-Item -Recurse -Force C:\winpe -ErrorAction SilentlyContinue
-            New-Item -ItemType Directory -Force -Path C:\winpe\mount | Out-Null
+          if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
+            # stage media template truc tiep tu add-on (bo qua copype - khong can registry)
             robocopy "$pe\amd64\media" C:\winpe\media /E /NFL /NDL /NJH /NJS
-            if ($LASTEXITCODE -ge 8) { throw "media template robocopy failed - $pe\amd64\media thieu" }
+            if ($LASTEXITCODE -ge 8) { throw "media robocopy failed - $pe\amd64\media thieu" }
           }
           # Mount image index 1 (real PE - not Setup)
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
@@ -302,6 +255,8 @@ jobs:
           Copy-Item C:\out\*.exe C:\winpe\mount\NEXUS\nexus.exe -Force
           Copy-Item nexus-go\rescue\pe\startnet.cmd C:\winpe\mount\Windows\System32\startnet.cmd -Force
           Copy-Item nexus-go\rescue\pe\nexus-dashboard.ps1 C:\winpe\mount\NEXUS\nexus-dashboard.ps1 -Force
+          Copy-Item nexus-go\rescue\pe\nexus-offline-tune.ps1 C:\winpe\mount\NEXUS\nexus-offline-tune.ps1 -Force
+          Copy-Item nexus-go\rescue\pe\nexus-apps.ps1 C:\winpe\mount\NEXUS\nexus-apps.ps1 -Force
           # Minimal packages (ultra-light): WMI first (PowerShell needs it), then PowerShell, StorageWMI (SMART)
           $ocs = "$pe\amd64\WinPE_OCs"
           foreach ($p in @("WinPE-WMI","WinPE-PowerShell","WinPE-StorageWMI")) {
@@ -314,28 +269,19 @@ jobs:
           dism /Unmount-Image /MountDir:C:\winpe\mount /Commit
           if ($LASTEXITCODE -ne 0) { throw "unmount commit failed" }
 
-      - name: Tao ISO + verify
+      - name: Tao ISO (pycdlib) + verify
         shell: powershell
         run: |
-          $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
-          New-Item -ItemType Directory -Force -Path C:\out | Out-Null
-          & "$pe\MakeWinPEMedia.cmd" /ISO C:\winpe C:\out\windows-nexus.iso
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path C:\out\windows-nexus.iso)) {
-            Write-Host "::warning::MakeWinPEMedia failed - oscdimg direct (hybrid BIOS+UEFI)"
-            $osc = (Get-Content C:\oscdimg-path.txt -ErrorAction SilentlyContinue | Select-Object -First 1)
-            if (-not $osc) { throw "oscdimg.exe khong tim duoc - xem ADK install step" }
-            & $osc -m -o -u2 -udfver102 "-bootdata:2#p0,e,bC:\winpe\media\Boot\etfsboot.com#pEF,e,bC:\winpe\media\efi\microsoft\boot\efisys.bin" C:\winpe\media C:\out\windows-nexus.iso
-            if ($LASTEXITCODE -ne 0) { throw "oscdimg direct failed" }
-          }
+          python -m pip install --quiet pycdlib
+          python nexus-go\rescue\pe\make_winpe_iso.py
           $iso = Get-Item C:\out\windows-nexus.iso
           Write-Host "ISO: $($iso.Length) bytes ($([math]::Round($iso.Length/1MB,1)) MB)"
-          if ($iso.Length -lt 150MB) { throw "ISO too small - boot.wim not injected?" }
-          if ($iso.Length -gt 900MB) { throw "ISO too big - review packages" }
-          # Verify image 1 contains NEXUS + startnet + dashboard
+          if ($iso.Length -lt 150MB) { throw "ISO qua nho - boot.wim khong duoc inject?" }
+          if ($iso.Length -gt 900MB) { throw "ISO qua lon - review packages" }
+          # Verify image 1 chua NEXUS + startnet + dashboard + 2 script gaming
           dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount2
-          foreach ($f in @("C:\winpe\mount2\NEXUS\nexus.exe","C:\winpe\mount2\Windows\System32\startnet.cmd","C:\winpe\mount2\NEXUS\nexus-dashboard.ps1")) {
+          foreach ($f in @("C:\winpe\mount2\NEXUS\nexus.exe","C:\winpe\mount2\Windows\System32\startnet.cmd","C:\winpe\mount2\NEXUS\nexus-dashboard.ps1","C:\winpe\mount2\NEXUS\nexus-offline-tune.ps1","C:\winpe\mount2\NEXUS\nexus-apps.ps1")) {
             if (-not (Test-Path $f)) { throw "missing in image: $f" }
             Write-Host "OK: $f ($((Get-Item $f).Length) B)"
           }
