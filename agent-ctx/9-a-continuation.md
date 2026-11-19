@@ -643,3 +643,38 @@ UI chưa ưng ý — agent sau có thể polish UI. Yêu cầu: chỉ EDIT, khô
   6) POST gate mới (428) phải cập nhật smoke — assert UI flow đúng mới đủ.
 - Verify: CI xanh cả 2; go-v54: exe SHA khớp 100% + nexus-rescue.iso 71,3MB overlay
   verify (9 entries, binary+autorun có mặt); smoke fix-internet không confirm → 428 ✓.
+
+
+## 17-e: windows-nexus.iso (WinPE, v4.5.0) — ĐANG XỬ LÝ CI (chưa xanh ở lần cắt ctx này)
+Yêu cầu user: ISO Windows PE thật như AOMEI PE Builder — lightweight/gaming.
+Đã làm (commit denv...→fded37a, v4.5.0 đã cắt release go-v61..go-v64 nhiều lần):
+- nexus-go/rescue/pe/startnet.cmd + nexus-dashboard.ps1 — ASCII không dấu + CRLF (PS 5.1 trên
+  runner đọc ANSI; tiếng Việt có dấu phá string terminator — 2 lần dính lỗi này).
+- Job `build-windows-pe` trong build-go.yml (windows-latest, needs release → upload asset
+  windows-nexus.iso vào tag go-vN): tải exe từ release, inject vào boot.wim index 1, add
+  WinPE-WMI + WinPE-PowerShell + WinPE-StorageWMI (+ en-us), MakeWinPEMedia /ISO, verify
+  image + size 150–900MB.
+- CI STRUGGLE (đừng lặp lại):
+  1. `windows-adk-windows-pe-addon` KHÔNG tồn tại trên choco (run 56). Package đúng:
+     `windows-adk-winpe` (add-on, v10.1.26100.9457) + meta `WindowsADK.WinPE`.
+  2. winget Microsoft.WindowsADK fail 0x80070057 (run 57) → chỉ add-on không có base →
+     copype "architecture not found: amd64" (chỉ ADK BASE ghi registry Installed Roots:
+     KitsRoot10/WinPERoot; add-on KHÔNG ghi).
+  3. adksetup.exe fwlink 2289980 (ADK 26100) exit 1000/0x3e8 "View is requesting shutdown"
+     ngay khi start (run 60/63) — tự thoát, không cài được base.
+  4. run 62: registry stub KitsRoot10 từ Visual Studio SDK trên runner làm Test-KitsRoot
+     pass oan → skip cài base → copype vẫn fail. Run 63: choco windows-adk (base 22621)
+     "has been installed" NHƯNG oscdimg không có ở path đoán (registry stub che path) →
+     Test-KitsStrict fail.
+  5. Fix hiện tại (fded37a, ĐANG CHẠY lúc cắt ctx): Test-Oscdimg DÒ DE QUY oscdimg.exe
+     trong C:\Program Files (x86)\Windows Kits + Program Files\Windows Kits → ghi path
+     vào C:\oscdimg-path.txt; copype fail → robocopy media template thủ công; ISO fail →
+     oscdimg direct -bootdata:2 (BIOS etfsboot + UEFI efisys) -u2 -udfver102.
+- VIỆC TIẾP THEO: (a) xem run mới nhất của build-windows-pe; (b) nếu oscdimg KHÔNG tìm
+  được vì choco windows-adk 22621 thật sự không có file → thử choco package
+  `WindowsADK` khác / winget lần nữa / hoặc tạo ISO bằng IMAPI2 không boot + patch El
+  Torito; (c) nếu copype vẫn fail thì hand-rolled robocopy đã có sẵn; (d) verify ISO:
+  dism /Get-ImageInfo + mount readback NEXUS + size 150-900MB; (e) tải windows-nexus.iso
+  từ release go-vN về download/ verify pycdlib; (f) Discord + ctx 17-f.
+- Trạng thái release: go-v61/62/63/64 đã có exe + nexus-rescue.iso (Alpine) xanh đầy đủ;
+  chỉ windows-nexus.iso là chưa vào release.
