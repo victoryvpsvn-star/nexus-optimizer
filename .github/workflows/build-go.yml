@@ -379,16 +379,29 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Fido Rufus -> lay link ISO Win11 24H2 chinh chu + tai ve (~5.5GB)
-        shell: powershell
+        shell: pwsh
         timeout-minutes: 15
         run: |
+          $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force -Path C:\Fido | Out-Null
           Invoke-WebRequest -Uri 'https://github.com/pbatard/Fido/raw/master/Fido.ps1' -OutFile C:\Fido\Fido.ps1 -UseBasicParsing
-          # Fido: Rufus chinh chu, lay link download ISO tu Microsoft (khong third-party)
-          $raw = & powershell -NoProfile -ExecutionPolicy Bypass -File C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang 'Vietnamese' -Arch x64 -GetUrl
-          $url = ($raw | Select-String -Pattern 'https://' | Select-Object -Last 1).Line.Trim()
+          Write-Host "Fido.ps1 size: $((Get-Item C:\Fido\Fido.ps1).Length) bytes"
+          # Bai hoc run truoc: PS5.1 silent fail khong output -> dung pwsh 7 + PS5.1 luot doi,
+          # PlatformArch x64 de bo WMI, capture 2>&1, IN RA RAW de debug. Bai hoc run 64:
+          # khong bao gio Trim() tren null - regex extract.
+          $args = @('-File', 'C:\Fido\Fido.ps1', '-Win', '11', '-Rel', 'Latest', '-Lang', 'Vietnamese', '-Arch', 'x64', '-PlatformArch', 'x64', '-GetUrl')
+          $raw = (& pwsh -NoProfile -ExecutionPolicy Bypass @args 2>&1 | Out-String)
+          Write-Host '===== FIDO pwsh7 RAW ====='
+          Write-Host $raw
+          $url = [regex]::Match($raw, 'https://[^\s]*\.iso[^\s]*').Value
+          if (-not $url) {
+            Write-Host '===== FIDO PS5.1 RAW ====='
+            $raw = (& powershell -NoProfile -ExecutionPolicy Bypass @args 2>&1 | Out-String)
+            Write-Host $raw
+            $url = [regex]::Match($raw, 'https://[^\s]*\.iso[^\s]*').Value
+          }
           Write-Host "ISO URL: $url"
-          if (-not $url) { throw "Fido khong tra ve URL" }
+          if (-not $url) { throw "Fido khong tra ve URL (raw o tren) - ho MS block cloud IP -> dung fallback python flow vlscppe+ov-df+api" }
           $url | Out-File C:\Fido\iso-url.txt -Encoding ascii
           curl.exe -L --retry 3 --retry-delay 5 -o C:\win11-original.iso $url
           $iso = Get-Item C:\win11-original.iso
