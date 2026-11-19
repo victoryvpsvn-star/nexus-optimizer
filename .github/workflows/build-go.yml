@@ -164,14 +164,12 @@ jobs:
           tar -czf /tmp/iso/nexus.apkovl.tar.gz -C /tmp/iso/ov etc usr
           ls -la /tmp/iso/nexus.apkovl.tar.gz
 
-      - name: Chèn overlay vào ISO (xorriso)
+      - name: Chèn overlay vào ISO (pycdlib — giữ nguyên El Torito boot)
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq xorriso >/dev/null 2>&1
-          cd /tmp/iso
-          xorriso -osirrox on -indev base.iso -outdev nexus-rescue.iso             -cp_push nexus.apkovl.tar.gz /           2>&1 | tail -3
-          test -s nexus-rescue.iso || { echo "::error::ISO xuất rỗng"; exit 1; }
-          ls -la nexus-rescue.iso
-          sha256sum nexus-rescue.iso
+          python3 -m pip install --quiet pycdlib
+          python3 nexus-go/rescue/make_iso.py /tmp/iso/base.iso /tmp/iso/nexus.apkovl.tar.gz /tmp/iso/nexus-rescue.iso
+          ls -la /tmp/iso/nexus-rescue.iso
+          sha256sum /tmp/iso/nexus-rescue.iso
 
       - name: Upload ISO vào release go-vN
         uses: softprops/action-gh-release@v2
