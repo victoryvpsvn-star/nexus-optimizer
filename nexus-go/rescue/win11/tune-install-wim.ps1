@@ -95,7 +95,7 @@ RA "$Y\ControlSet001\Control\Session Manager\Memory Management\PrefetchParameter
 RA "$Y\ControlSet001\Control\Session Manager\Memory Management\PrefetchParameters" 'EnableSuperfetch' 0
 # Khoa LTS 24H2 - khong tu dong nang len ban moi
 RA "$S\Policies\Microsoft\Windows\WindowsUpdate" 'TargetReleaseVersion' 1
-RA "$S\Policies\Microsoft\Windows\WindowsUpdate" 'TargetReleaseVersionInfo' '24H2' 'REG_SZ'
+RA "$S\Policies\Microsoft\Windows\WindowsUpdate" 'TargetReleaseVersionInfo' '26H2' 'REG_SZ'
 RA "$S\Policies\Microsoft\Windows\WindowsUpdate" 'ProductPolicy' 'Windows 11' 'REG_SZ'
 [gc]::Collect(); Start-Sleep 1
 reg unload HKLM\NXS_SOFT | Out-Null

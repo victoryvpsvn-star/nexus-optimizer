@@ -109,11 +109,16 @@ for o in opts:
 uri = None
 for o in opts:
     u = o.get('Uri') or ''
-    if o.get('DownloadType', '').lower() == 'x64' and u.lower().endswith('.iso'):
+    dt = str(o.get('DownloadType', ''))
+    if dt.lower() in ('x64', '1') and u.lower().endswith('.iso'):
         uri = u
         break
 if not uri and opts:
-    uri = opts[0].get('Uri')
+    for o in opts:
+        u = o.get('Uri') or ''
+        if u.lower().endswith('.iso'):
+            uri = u
+            break
 if not uri:
     print('NEXUS-MS-CONNECTOR-FAIL', flush=True)
     sys.exit(1)
