@@ -748,3 +748,14 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
   3. WinPE job: choco add-on KHÔNG có boot.wim → cần adkwinpesetup.exe fwlink chính chủ (tìm linkid mới qua web_search 'Windows PE add-on for Windows ADK download fwlink') thay choco.
 - Job WinPE run này cũng fail (chưa xem — có thể cùng lỗi boot.wim; file 0_* log đã tải /tmp/ci-f nếu cần).
 - ĐỪNG dùng $args trong PS workflow (automatic var). Đừng Trim() trên null.
+
+
+## 17-k: CHỐT — Fido sai tận gốc + python MS connector HOẠT ĐỘNG (link prss thật)
+- Nguyên nhân Fido fail TỪ ĐẦU trên runner: **`-Lang Vietnamese` KHÔNG có trong list ngôn ngữ Fido cho 26H2** → exit 1. Log run 56005c6: 'Use -Lang List...'. (SILENT run trước là @args bug.)
+- Connector flow đã chạy OK TRONG CI (run 44535306296): session → sku info 200 → SKU English Id=27160 → 1 option → chỉ crash bug nhỏ. Đã fix (96962df): DownloadType là INT (1), URL có token ?t= → check '.iso' in uri. LOCAL TEST: NEXUS-ISO-URL = https://software.download.prss.microsoft.com/dbazure/Windows11_Client_x64_en-us_26300_9457.iso?t=... (link chính chủ, token ~3 ngày).
+- **MS KHÔNG còn cho tải 24H2 consumer** — Fido + connector chỉ có 26H2 (26300.9457, 2026.09). Đã đổi TargetReleaseVersionInfo=26H2 trong tune-install-wim.ps1. Bro muốn 24H2 THẬT → chỉ còn UUP dump (build 26100.xx, CI ~2h, timeout 120') — làm nếu bro nhất định.
+- ISO sẽ là **en-US** (connector 38 SKU KHÔNG có Vietnamese; vi-VN locale trả 0 Sku) → bro đổi display language tiếng Việt trong Settings sau khi cài (miễn phí) — nói rõ trong reply/README.
+- Run hiện tại: commit 96962df — job 'Build Win11 Pro 24H2 Gaming ISO': connector (~1') → curl tải 5.5GB (~3-5') → tune 20-30' → pycdlib ISO 12' → 7z split 5' → upload go-vN. TỔNG ~45-55' (timeout 55' — CHẶT; nếu fail timeout → giảm: bỏ CheckIntegrity, đổi curl -C - resume, tách 2 job).
+- PHIÊN SAU: poll run 96962df → nếu xanh: tải 3 phần .7z về download/, giải nén .001 (7z trên sandbox? kiểm `which 7z`; không có → cat .001 .002 .003 > .7z? KHÔNG — 7z multivolume: dùng py7zr không hỗ trợ; tải về cả 3 phần + hướng dẫn user tự ghép bằng merge.bat/7-Zip), Discord thông báo + hướng dẫn. Nếu fail: đọc log bước cụ thể, fix, push lại.
+- WinPE job vẫn fail (choco add-on thiếu boot.wim) — chưa sửa; cần adkwinpesetup.exe fwlink.
+- Câu hỏi user 'test máy yếu': trả lời = VirtualBox VM (2 CPU/4GB) đủ test cài đặt+firstboot+apps; chơi game phải máy thật; không có dịch vụ test Win11 free đáng tin.
