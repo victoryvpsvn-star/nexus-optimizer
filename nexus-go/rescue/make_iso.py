@@ -28,24 +28,24 @@ def main() -> int:
     # ISO9660 name phải D1-safe (A-Z,0-9,_); Linux mount dùng Rock Ridge → tên thật là
     # 'nexus.apkovl.tar.gz' — Alpine boot sẽ tự tìm và áp apkovl ở root media
     iso.add_file(overlay, iso_path='/NEXUS_APK.;1', rr_name='nexus.apkovl.tar.gz')
-    # Bake repo gói local vào ISO: /apks/x86_64/*.apk + APKINDEX.apk
+    # Bake repo gói riêng của NEXUS vào ISO: /nxapks/x86_64/*.apk + APKINDEX.apk
+    # (KHÔNG dùng /apks — ISO Alpine gốc đã có /apks/x86_64 sẵn → pycdlib duplicate!)
     if apks_dir:
         apks_sub = os.path.join(apks_dir, 'x86_64')
         if not os.path.isdir(apks_sub):
             print(f"::error::thiếu {apks_sub}", file=sys.stderr)
             return 1
-        iso.add_directory(iso_path='/APKS', rr_name='apks')
-        iso.add_directory(iso_path='/APKS/X86_64', rr_name='x86_64')
+        iso.add_directory(iso_path='/NXAPKS', rr_name='nxapks')
+        iso.add_directory(iso_path='/NXAPKS/X86_64', rr_name='x86_64')
         n = 0
         for fn in sorted(os.listdir(apks_sub)):
             n += 1
-            # Tên ISO9660 D1-safe + unique tuyệt đối (số đếm tăng dần), tên thật
-            # giữ ở Rock Ridge — Alpine boot đọc rr nên thấy tên gói như thường.
+            # Tên ISO9660 D1-safe + unique tuyệt đối (số đếm), tên thật ở Rock Ridge
             safe = fn.upper().replace('-', '_').replace('.', '_')
             iso.add_file(os.path.join(apks_sub, fn),
-                         iso_path=f'/APKS/X86_64/{n:03d}_{safe[:55]}.;1',
+                         iso_path=f'/NXAPKS/X86_64/{n:03d}_{safe[:55]}.;1',
                          rr_name=fn)
-        print(f"baked {n} file gói vào /apks/x86_64")
+        print(f"baked {n} file gói vào /nxapks/x86_64")
     iso.write(out)
     iso.close()
     size = os.path.getsize(out)

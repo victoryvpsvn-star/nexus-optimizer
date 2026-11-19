@@ -169,7 +169,7 @@ def main() -> int:
             'auto eth0\niface eth0 inet dhcp\n'))
         # 5) apk repositories — ưu tiên repo local trên ISO (offline), CDN dự phòng
         add_text(tf, 'etc/apk/repositories', (
-            '/media/cdrom/apks\n'
+            '/media/cdrom/nxapks\n'
             '# muốn cài thêm online: bỏ dấu # dòng dưới\n'
             '# https://dl-cdn.alpinelinux.org/alpine/v3.21/main\n'
             '# https://dl-cdn.alpinelinux.org/alpine/v3.21/community\n'))
