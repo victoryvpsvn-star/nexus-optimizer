@@ -216,13 +216,23 @@ try {
   ok('App Optimizer: 6 app detect trung thực (0 cài trên Linux) + POST báo "chỉ Windows" đúng');
   const fixes = await (await fetch(BASE + '/api/fixes')).json();
   if (!Array.isArray(fixes) || fixes.length !== 14) fail(`fixes phải trả ≥14 fix (v4.4.0 +4: restorepoint/icons/uwp/diskscan): ${fixes ? fixes.length : 'null'}`);
+  // v4.4.0 (B-31): POST thiếu confirm với card có Confirm phải bị chặn 428 — kiểm TRƯỚC
+  const gate = await (await fetch(BASE + '/api/fixes', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
+    body: JSON.stringify({ id: 'fix-internet' }), // fix-internet có Confirm → thiếu confirm phải 428
+  }));
+  if (gate.status !== 428) fail(`fixes POST thiếu confirm phải HTTP 428 (B-31), nhận ${gate.status}`);
+  const gateErr = await gate.json();
+  if (!gateErr.error || !gateErr.error.includes('Cần xác nhận')) fail('428 phải kèm hướng dẫn xác nhận: ' + JSON.stringify(gateErr));
+  ok(`Fixes confirm gate OK: POST thiếu confirm → HTTP 428 + hướng dẫn`);
+
   const fixRun = await (await fetch(BASE + '/api/fixes', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': TOKEN },
-    body: JSON.stringify({ id: 'fix-internet' }),
+    body: JSON.stringify({ id: 'fix-internet', confirm: true }),
   })).json();
   if (!Array.isArray(fixRun.steps) || fixRun.steps.length < 1) fail('fixes POST phải trả steps');
   if (fixRun.success !== false || fixRun.mode !== 'không-Windows') fail('fixes trên Linux phải trung thực (mode=không-Windows)');
-  ok(`Fixes: 6 fix catalog OK + POST fix-internet trả steps trung thực (mode=${fixRun.mode})`);
+  ok(`Fixes: POST fix-internet confirm:true trả steps trung thực (mode=${fixRun.mode})`);
 
   // ---- Bước 8 (v3.8.0): Dịch vụ — 4 nhóm + preset trung thực trên nền không-Windows ----
   const svcs = await (await fetch(BASE + '/api/services')).json();
