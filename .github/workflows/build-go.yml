@@ -414,8 +414,14 @@ jobs:
             $raw2 = $fidoOut2 | Out-String
             $url = [regex]::Match($raw2, 'https://[^\s]*\.iso[^\s]*').Value
           }
+          if (-not $url) {
+            Write-Host '===== FALLBACK python MS connector (Fido that bai) ====='
+            python nexus-go\rescue\win11\ms_connector.py 2>&1 | Tee-Object -Variable msOut
+            $raw3 = $msOut | Out-String
+            $url = [regex]::Match($raw3, 'NEXUS-ISO-URL=(https://\S+)').Groups[1].Value
+          }
           Write-Host "ISO URL: $url"
-          if (-not $url) { throw "Fido khong tra ve URL (raw o tren) - ho MS block cloud IP -> dung fallback python flow vlscppe+ov-df+api" }
+          if (-not $url) { throw "Ca Fido lan python MS connector deu khong lay duoc URL - xem log tren" }
           $url | Out-File C:\Fido\iso-url.txt -Encoding ascii
           curl.exe -L --retry 3 --retry-delay 5 -o C:\win11-original.iso $url
           $iso = Get-Item C:\win11-original.iso
