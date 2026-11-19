@@ -110,13 +110,13 @@ uri = None
 for o in opts:
     u = o.get('Uri') or ''
     dt = str(o.get('DownloadType', ''))
-    if dt.lower() in ('x64', '1') and u.lower().endswith('.iso'):
+    if dt.lower() in ('x64', '1') and '.iso' in u.lower():
         uri = u
         break
 if not uri and opts:
     for o in opts:
         u = o.get('Uri') or ''
-        if u.lower().endswith('.iso'):
+        if '.iso' in u.lower():
             uri = u
             break
 if not uri:
