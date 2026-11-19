@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+echo "root:root" | chpasswd
+chmod 0440 /etc/sudoers.d/90-nexus 2>/dev/null || true
+apt-get clean
+exit 0

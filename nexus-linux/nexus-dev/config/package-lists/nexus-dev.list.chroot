@@ -1,0 +1,93 @@
+## NEXUS Linux Dev — terminal cho dev + bộ tool kiểu Kali (Debian bookworm main)
+## Tên gói được validate bởi nexus-linux/validate-packages.sh TRƯỚC khi build.
+## Thêm tool mới: thêm 1 dòng vào đây + push — CI tự build lại ISO.
+
+## base live system
+linux-image-amd64
+initramfs-tools
+live-boot
+live-config
+systemd-sysv
+sudo
+locales
+console-setup
+bash-completion
+
+## dev core
+build-essential
+gdb
+strace
+ltrace
+cmake
+python3
+python3-pip
+python3-venv
+python3-requests
+python3-scapy
+python3-impacket
+nodejs
+npm
+openssl
+sqlite3
+jq
+
+## terminal & tiện ích
+git
+curl
+wget
+aria2
+rsync
+openssh-client
+openssh-server
+tmux
+vim
+nano
+neovim
+less
+ripgrep
+fd-find
+fzf
+ncdu
+tree
+file
+zip
+unzip
+p7zip-full
+xz-utils
+bzip2
+gnupg
+man-db
+htop
+btop
+net-tools
+iputils-ping
+iproute2
+
+## network / recon
+traceroute
+bind9-dnsutils
+whois
+mtr-tiny
+nmap
+masscan
+tshark
+sshuttle
+
+## web / appsec / crack (kiểu Kali)
+wapiti
+sqlmap
+hydra
+john
+hashcat
+aircrack-ng
+macchanger
+proxychains4
+dirb
+wfuzz
+whatweb
+binwalk
+steghide
+libimage-exiftool-perl
+socat
+netcat-openbsd
+tcpdump

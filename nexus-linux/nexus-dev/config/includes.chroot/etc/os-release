@@ -1,0 +1,8 @@
+NAME="NEXUS Linux"
+PRETTY_NAME="NEXUS Linux 1.0 Dev Terminal (Debian bookworm base)"
+ID=nexus
+ID_LIKE=debian
+VERSION_ID="1.0"
+VERSION="1.0-dev"
+HOME_URL="https://github.com/victoryvpsvn-star/nexus-optimizer"
+SUPPORT_URL="https://github.com/victoryvpsvn-star/nexus-optimizer"

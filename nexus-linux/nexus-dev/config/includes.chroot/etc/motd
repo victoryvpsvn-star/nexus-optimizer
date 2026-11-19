@@ -1,0 +1,6 @@
+NEXUS Linux 1.0 Dev Terminal — welcome bro!
+
+  Cài gói       : nx install <gói>    (thay apt)
+  Tra tool      : nx tools
+  Info hệ thống : nexfetch
+  Đã cài sẵn    : 70+ tool dev/security kiểu Kali — gõ `nx tools` xem bảng

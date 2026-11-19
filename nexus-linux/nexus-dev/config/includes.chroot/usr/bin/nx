@@ -1,0 +1,32 @@
+#!/bin/bash
+# NEXUS nx — trình quản lý gói của NEXUS Linux Dev (thay apt, backend apt-get)
+S=""
+[ "$(id -u)" -ne 0 ] && S="sudo"
+case "$1" in
+  install|i) shift; exec $S apt-get install -y "$@" ;;
+  remove|r) shift; exec $S apt-get remove -y "$@" ;;
+  purge) shift; exec $S apt-get purge -y "$@" ;;
+  update) exec $S apt-get update ;;
+  upgrade) shift; exec $S apt-get upgrade -y "$@" ;;
+  full-upgrade) shift; exec $S apt-get full-upgrade -y "$@" ;;
+  search|s) shift; exec apt-cache search "$@" ;;
+  info|show) shift; exec apt-cache show "$@" ;;
+  list) dpkg-query -W -f='${binary:Package}\t${Version}\n' 2>/dev/null ;;
+  clean) exec $S apt-get clean ;;
+  autoremove) exec $S apt-get autoremove -y ;;
+  tools) cat /usr/share/nexus/tools.txt ;;
+  *) cat <<'EOF'
+NEXUS nx 1.0 — dùng như apt trên NEXUS Linux Dev (backend apt):
+  nx install <gói>    cài gói          (thay: sudo apt install)
+  nx remove <gói>     gỡ gói
+  nx purge <gói>      gỡ + xóa config
+  nx update           cập nhật index   (thay: sudo apt update)
+  nx upgrade          nâng cấp toàn bộ
+  nx search <từ>      tìm gói
+  nx info <gói>       thông tin gói
+  nx list             liệt kê gói đã cài
+  nx tools            bảng tra cứu tool dev/security đã cài sẵn
+  nx clean|autoremove dọn rác hệ thống
+EOF
+ ;;
+esac

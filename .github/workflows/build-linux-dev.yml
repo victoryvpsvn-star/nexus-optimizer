@@ -1,0 +1,69 @@
+name: Build NEXUS Linux Dev (terminal cho dev — Debian base, Hyper-V ready)
+
+on:
+  push:
+    branches: [main]
+    paths: ['nexus-linux/**', '.github/workflows/build-linux-dev.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-dev-iso:
+    name: NEXUS Linux Dev — live-build Debian bookworm
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate package list (fail fast — không đợi live-build chết giữa đường)
+        run: bash nexus-linux/validate-packages.sh nexus-linux/nexus-dev/config/package-lists/nexus-dev.list.chroot
+
+      - name: Cài live-build + bootloader deps (BIOS + UEFI)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends live-build xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux mtools dosfstools
+
+      - name: Build ISO
+        working-directory: nexus-linux/nexus-dev
+        run: |
+          sudo sh ./auto/config
+          sudo lb build 2>&1 | tee /tmp/lb.log
+          test -s live-image-amd64.iso || { echo "::error::lb build không xuất ISO — đuôi log:"; tail -60 /tmp/lb.log; exit 1; }
+          mv live-image-amd64.iso nexus-linux-dev.iso
+          sha256sum nexus-linux-dev.iso
+          ls -la nexus-linux-dev.iso
+
+      - name: Verify ISO (kích thước + boot BIOS/UEFI)
+        run: |
+          file nexus-linux/nexus-dev/nexus-linux-dev.iso
+          xorriso -indev nexus-linux/nexus-dev/nexus-linux-dev.iso -report_el_torito as_mkisofs | head -30
+          SIZE=$(stat -c%s nexus-linux/nexus-dev/nexus-linux-dev.iso)
+          test "$SIZE" -gt 300000000 || { echo "::error::ISO quá nhỏ: $SIZE"; exit 1; }
+          echo "ISO OK: $SIZE bytes"
+
+      - name: Upload release nexus-linux-dev-v1
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nexus-linux-dev-v1
+          name: NEXUS Linux Dev v1 — Terminal cho dev (Debian base)
+          body: |
+            **NEXUS Linux Dev v1** — bản TERMINAL cho dev, cực nhẹ, base **Debian bookworm** (KHÔNG Alpine), đội tool security/dev kiểu Kali, vẫn là NEXUS OS.
+
+            - Lệnh `nx install <gói>` thay apt (backend apt-get) • `nx tools` tra bảng tool • `nexfetch` riêng của NEXUS
+            - Login: user `nexus` tự đăng nhập tty1 (mật khẩu `nexus`, sudo NOPASSWD) — root mật khẩu `root`
+            - Boot UEFI + BIOS → Hyper-V **Gen 2** OK, RAM VM 2GB đủ dùng (khuyên 4GB)
+            - ~80 tool: nmap, masscan, tcpdump, tshark, nikto, sqlmap, hydra, john, hashcat, aircrack-ng, binwalk, steghide, scapy, impacket, gcc/gdb/cmake, python3, nodejs/npm… — gõ `nx tools` xem bảng
+
+            **Hyper-V Gen 2:** New → Virtual Machine → Generation 2 → RAM 2048MB+ → Security: tắt Secure Boot (hoặc chọn template Microsoft UEFI CA — shim Debian có ký) → boot ISO → login → `nexfetch`.
+
+            Thêm tool mới: sửa `nexus-linux/nexus-dev/config/package-lists/nexus-dev.list.chroot` + push — CI build lại tự động.
+          files: nexus-linux/nexus-dev/nexus-linux-dev.iso
+
+      - name: Artifact dự phòng
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-linux-dev-iso
+          path: nexus-linux/nexus-dev/nexus-linux-dev.iso
+          retention-days: 7

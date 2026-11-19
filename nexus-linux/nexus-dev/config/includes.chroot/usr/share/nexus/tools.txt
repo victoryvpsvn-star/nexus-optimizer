@@ -1,0 +1,8 @@
+== NEXUS Linux Dev — tool đã cài (thêm mới: nx install <gói>) ==
+Recon/Quét     : nmap masscan whatweb dig(bind9-dnsutils) whois mtr
+Sniff/Mạng     : tcpdump tshark socat netcat macchanger sshuttle proxychains4
+Web/AppSec     : wapiti sqlmap dirb wfuzz binwalk steghide exiftool
+Brute/Crack    : hydra john hashcat aircrack-ng
+Exploit/Script : python3 + scapy + impacket
+Dev            : gcc g++ make cmake gdb strace ltrace python3 nodejs npm git tmux neovim ripgrep fzf fd ncdu jq sqlite3
+Tìm thêm       : nx search <từ>  |  cài mới: nx install <gói>
