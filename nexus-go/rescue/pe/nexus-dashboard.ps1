@@ -1,10 +1,10 @@
-# NEXUS Rescue PE — dashboard cau hinh đay đu (gaming ultra-light, v4.5.0)
-# Chay trong WinPE: PowerShell + WMI + StorageWMI (đa inject vao image).
+# NEXUS Rescue PE - dashboard cau hinh _ay _u (gaming ultra-light, v4.5.0)
+# Chay trong WinPE: PowerShell + WMI + StorageWMI (_a inject vao image).
 $ErrorActionPreference = 'Continue'
 Clear-Host
 $line = '=' * 66
 Write-Host $line
-Write-Host '   N E X U S   R E S C U E   P E   —   gaming ultra-light (v4.5.0)'
+Write-Host '   N E X U S   R E S C U E   P E   -   gaming ultra-light (v4.5.0)'
 Write-Host $line
 Write-Host ''
 
@@ -32,7 +32,7 @@ try {
 }
 Write-Host ''
 
-# --- O đia — GB đa dung ---
+# --- O _ia - GB _a dung ---
 try {
   Write-Host '[O dia - GB da dung]'
   Get-CimInstance Win32_LogicalDisk -ErrorAction Stop | ForEach-Object {
@@ -70,7 +70,7 @@ try {
 }
 Write-Host ''
 
-# --- Mang + đia chi web server ---
+# --- Mang + _ia chi web server ---
 try {
   Write-Host '[Mang]'
   Get-CimInstance Win32_NetworkAdapterConfiguration -ErrorAction Stop |

@@ -1,6 +1,6 @@
 @echo off
-REM NEXUS Windows PE — v4.5.0: autorun sau khi WinPE boot xong.
-REM X: la RAM disk — moi ghi trong phien PE KHONG đung du lieu that tren o.
+REM NEXUS Windows PE - v4.5.0: autorun sau khi WinPE boot xong.
+REM X: la RAM disk - moi ghi trong phien PE KHONG _ung du lieu that tren o.
 title NEXUS Rescue PE - gaming ultra-light
 wpeinit
 if exist X:\NEXUS\nexus-dashboard.ps1 (
