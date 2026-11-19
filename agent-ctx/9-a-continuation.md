@@ -767,3 +767,13 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - Run 18c7c1e build-linux FAIL: fetch_pkgs.sh ghi vào "/build/apks" (mount RO) thay vì $BUILD → exit 20. Fix + move if: sau runs-on (run 5769986 bị GitHub coi workflow file invalid khi if: đứng trước name: — phải dịch xuống).
 - phiên sau: poll run build-linux (nhánh sau commit này) → nếu xanh: tải 3 ISO về download/ + release nexus-linux-v1 + Discord. Lỗi tiếp có thể: apk fetch network trong docker (runner OK), apk index include key, boot Alpine Install world từ /media/cdrom/apks cần đúng cấu trúc (apks/x86_64/APKINDEX.apk + key pub /etc/apk/keys — đã chuẩn), RAM VM 4GB cho desktop.
 - REMIX: make_iso.py hiển thị exit code pycdlib nếu ISO >2GB? ISO desktop ~550MB OK.
+
+
+## 17-m: NEXUS LINUX ×3 XANH + RELEASE — hoàn thành yêu cầu bro
+- Run c0f4f33 SUCCESS. Chuỗi 8 fix: community repo → neofetch bị Alpine gỡ (thay nexfetch thuần shell ASCII NEXUS) → pip pycdlib → dup key if (build-go.yml bị GitHub reject file) → len check argv → /nxapks (ISO Alpine gốc có sẵn /apks → duplicate name) → D1-safe regex (gtk+3.0).
+- Release **nexus-linux-v1**: nexus-linux-desktop.iso 402MB (XFCE+Firefox), nexus-linux-gaming.iso 407MB (XFCE+flatpak+zram+tune), nexus-linux-rescue.iso 64MB (CLI). UEFI+BIOS, Hyper-V Gen 2 OK.
+- Đã tải cả 3 về /home/z/my-project/download/ + SHA256 (c6f48e2c…, 5dd17cf6…, 181330cf…). Discord đã gửi embed (HTTP 204).
+- Đã xác thực: apkovl đọc được từ cả desktop+rescue (nx/nexfetch/os-release), CI có verify readback + sha256 tự động.
+- Cơ chế boot: apkovl + /nxapks (repo tự ký abuild-sign, pub key trong apkovl /etc/apk/keys) + world → Alpine init cài world offline từ /media/cdrom/nxapks. Desktop/gaming: lightdm+dbus+networking runlevel; rescue: CLI.
+- Win family: gate workflow_dispatch (win11-iso + build-windows-pe) — bro không làm win nữa.
+- Nếu bro quay lại: có thể thêm variant (KDE/Hyper-V enhanced guests), hoặc fix win11 job (connector lấy SKU OK nhưng job fail sau đó — chưa debug).
