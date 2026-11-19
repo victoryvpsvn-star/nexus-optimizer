@@ -14,7 +14,7 @@ import pycdlib
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 5):
         print("usage: make_iso.py <base.iso> <apkovl.tar.gz> <out.iso>", file=sys.stderr)
         return 2
     base, overlay, out = sys.argv[1:4]
