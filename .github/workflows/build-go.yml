@@ -217,20 +217,29 @@ jobs:
           $pe86 = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           $pe64 = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           function Test-PeReady { (Test-Path "$pe86\copype.cmd") -or (Test-Path "$pe64\copype.cmd") }
-          if (-not (Test-PeReady)) {
+          # Bai hoc run 58-60: PE add-on tu cai OK NHUNG khong ghi registry Installed Roots
+          # (KitsRoot10/WinPERoot) — chi ADK BASE ghi; copype.cmd doc registry -> khong co
+          # base thi "architecture not found: amd64". Chia tang: vcredist2010 (dep quen cua
+          # ADK, exit 1000 MSI hay do thieu runtime) -> adksetup truc tiep co /log ->
+          # choco windows-adk (base) -> verify registry la dieu kien chot.
+          $roots = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows Kits\\Installed Roots"
+          function Test-KitsRoot { ($null -ne (Get-ItemProperty -Path $roots -Name KitsRoot10 -ErrorAction SilentlyContinue)) }
+          choco install -y --no-progress vcredist2010
+          if (-not (Test-KitsRoot)) {
             Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2289980" -OutFile C:\adksetup.exe -UseBasicParsing
-            $p1 = Start-Process C:\adksetup.exe -ArgumentList "/q","/norestart","/CEIPOff" -Wait -PassThru
+            $p1 = Start-Process C:\adksetup.exe -ArgumentList "/q","/norestart","/CEIPOff","/log","C:\adksetup.log" -Wait -PassThru
             Write-Host "ADK base installer exit: $($p1.ExitCode)"
+            Get-Content C:\adksetup.log -Tail 25 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "ADKLOG: $_" }
           }
-          if (-not (Test-PeReady)) {
-            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2289981" -OutFile C:\adkwinpesetup.exe -UseBasicParsing
-            $p2 = Start-Process C:\adkwinpesetup.exe -ArgumentList "/q","/norestart","/CEIPOff" -Wait -PassThru
-            Write-Host "PE add-on installer exit: $($p2.ExitCode)"
+          if (-not (Test-KitsRoot)) {
+            Write-Host "direct base failed - trying choco windows-adk (base)"
+            choco install -y --no-progress windows-adk
           }
-          if (-not (Test-PeReady)) {
-            Write-Host "direct installers failed - trying choco WindowsADK.WinPE"
-            choco install -y --no-progress WindowsADK.WinPE
+          if (-not (Test-KitsRoot)) {
+            throw "ADK base dang chua co registry KitsRoot10 — xem adksetup.log artifact"
           }
+          Write-Host "ADK base OK (registry KitsRoot10 co) - cai PE add-on"
+          choco install -y --no-progress windows-adk-winpe
           if (-not (Test-PeReady)) {
             Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 40 -ExpandProperty FullName
             throw "ADK WinPE copype.cmd not found after all installers"
