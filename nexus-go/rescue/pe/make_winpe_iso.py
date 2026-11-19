@@ -15,6 +15,20 @@ except ImportError:
 iso = pycdlib.PyCdlib()
 iso.new(interchange_level=4, joliet=True)
 
+# Tao directory tree truoc (pycdlib khong tu tao parent)
+seen_dirs = set()
+for root, dirs, files in os.walk(STAGE):
+    rel = os.path.relpath(root, STAGE).replace("\\", "/")
+    if rel == ".":
+        continue
+    parts = [p for p in rel.split("/") if p]
+    acc = ""
+    for part in parts:
+        acc += "/" + part
+        if acc not in seen_dirs:
+            iso.add_directory(acc.upper(), joliet_path=acc)
+            seen_dirs.add(acc)
+
 count = 0
 for root, dirs, files in os.walk(STAGE):
     for f in files:
