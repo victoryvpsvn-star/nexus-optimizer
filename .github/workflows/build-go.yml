@@ -227,12 +227,16 @@ jobs:
           # kiem tra value rong thi bo qua oan ADK base -> copype khong tim amd64. Kiem NGHIEM:
           # WinPERoot phai co value + oscdimg.exe phai ton tai (oscdimg nam trong ADK base
           # Deployment Tools - PE add-on KHONG co). Dieu kien chot la oscdimg file thuc.
+          # Run 63: choco windows-adk "installed" NHUNG oscdimg khong nam o path doan truoc
+          # (registry stub VS SDK che KitsRoot10 + ADK 22621 co the giai nen khac) -> DO TIM
+          # oscdimg.exe DE QUY trong Windows Kits va ghi duong dan xuong file cho step ISO.
           function Test-Oscdimg {
-            $cands = @(
-              "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
-              "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
-            )
-            foreach ($c in $cands) { if (Test-Path $c) { return $true } }
+            $found = Get-ChildItem "C:\Program Files (x86)\Windows Kits","C:\Program Files\Windows Kits" -Recurse -Filter oscdimg.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+              $found.FullName | Out-File C:\oscdimg-path.txt -Encoding ascii
+              Write-Host "OSCDIMG FOUND: $($found.FullName)"
+              return $true
+            }
             return $false
           }
           function Test-KitsStrict {
@@ -319,8 +323,8 @@ jobs:
           & "$pe\MakeWinPEMedia.cmd" /ISO C:\winpe C:\out\windows-nexus.iso
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path C:\out\windows-nexus.iso)) {
             Write-Host "::warning::MakeWinPEMedia failed - oscdimg direct (hybrid BIOS+UEFI)"
-            $osc = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
-            if (-not (Test-Path $osc)) { $osc = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe" }
+            $osc = (Get-Content C:\oscdimg-path.txt -ErrorAction SilentlyContinue | Select-Object -First 1)
+            if (-not $osc) { throw "oscdimg.exe khong tim duoc - xem ADK install step" }
             & $osc -m -o -u2 -udfver102 "-bootdata:2#p0,e,bC:\winpe\media\Boot\etfsboot.com#pEF,e,bC:\winpe\media\efi\microsoft\boot\efisys.bin" C:\winpe\media C:\out\windows-nexus.iso
             if ($LASTEXITCODE -ne 0) { throw "oscdimg direct failed" }
           }
