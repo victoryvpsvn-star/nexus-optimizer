@@ -228,8 +228,6 @@ jobs:
         shell: powershell
         run: |
           $pe  = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          $adk = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit"
-          $err = "$adk\Windows Preinstallation Environment" ; # phong khi path khac (kiem ca Program Files khong (x86))
           if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
           & "$pe\copype.cmd" amd64 C:\winpe
           if ($LASTEXITCODE -ne 0) { throw "copype failed" }
