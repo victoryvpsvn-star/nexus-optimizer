@@ -212,13 +212,13 @@ jobs:
         run: |
           # Bai hoc run 58: winget cai ADK base FAIL 0x80070057 -> chi con PE add-on 26100
           # khong co base -> copype "architecture not found". Cai TRUC TIEP adksetup.exe
-          # voi CAP FWLINK DONG BO 24H2 (ADK 2289980 + PE add-on 2289981 — add-on nay da
+          # voi CAP FWLINK DONG BO 24H2 (ADK 2289980 + PE add-on 2289981 - add-on nay da
           # chung minh cai OK qua choco); choco la fallback cuoi.
           $pe86 = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           $pe64 = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           function Test-PeReady { (Test-Path "$pe86\copype.cmd") -or (Test-Path "$pe64\copype.cmd") }
           # Bai hoc run 58-60: PE add-on tu cai OK NHUNG khong ghi registry Installed Roots
-          # (KitsRoot10/WinPERoot) — chi ADK BASE ghi; copype.cmd doc registry -> khong co
+          # (KitsRoot10/WinPERoot) - chi ADK BASE ghi; copype.cmd doc registry -> khong co
           # base thi "architecture not found: amd64". Chia tang: vcredist2010 (dep quen cua
           # ADK, exit 1000 MSI hay do thieu runtime) -> adksetup truc tiep co /log ->
           # choco windows-adk (base) -> verify registry la dieu kien chot.
@@ -236,7 +236,7 @@ jobs:
             choco install -y --no-progress windows-adk
           }
           if (-not (Test-KitsRoot)) {
-            throw "ADK base dang chua co registry KitsRoot10 — xem adksetup.log artifact"
+            throw "ADK base dang chua co registry KitsRoot10 - xem adksetup.log artifact"
           }
           Write-Host "ADK base OK (registry KitsRoot10 co) - cai PE add-on"
           choco install -y --no-progress windows-adk-winpe
