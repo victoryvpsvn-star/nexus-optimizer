@@ -197,6 +197,7 @@ jobs:
   # boot ngoài Windows → dashboard cấu hình đầy đủ + NEXUS web qua LAN. Siêu nhẹ: chỉ WMI +
   # PowerShell + StorageWMI (SMART); không desktop env; mọi ghi chỉ trong RAM disk X:.
   build-windows-pe:
+    if: github.event_name == 'workflow_dispatch'
     name: Build Windows NEXUS ISO (WinPE gaming ultra-light)
     runs-on: windows-latest
     timeout-minutes: 45
