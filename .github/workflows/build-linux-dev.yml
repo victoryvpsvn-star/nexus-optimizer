@@ -20,28 +20,23 @@ jobs:
       - name: Validate package list (fail fast — không đợi live-build chết giữa đường)
         run: bash nexus-linux/validate-packages.sh nexus-linux/nexus-dev/config/package-lists/nexus-dev.list.chroot
 
-      - name: Cài live-build + bootloader deps (BIOS + UEFI)
+      - name: Build ISO trong container Debian bookworm (live-build của Debian — sinh suite security đúng)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends live-build xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux mtools dosfstools
-
-      - name: Build ISO
-        working-directory: nexus-linux/nexus-dev
-        run: |
-          sudo sh ./auto/config
-          sudo lb build 2>&1 | tee /tmp/lb.log
-          test -s live-image-amd64.iso || { echo "::error::lb build không xuất ISO — đuôi log:"; tail -60 /tmp/lb.log; exit 1; }
-          mv live-image-amd64.iso nexus-linux-dev.iso
-          sha256sum nexus-linux-dev.iso
-          ls -la nexus-linux-dev.iso
-
-      - name: Verify ISO (kích thước + boot BIOS/UEFI)
-        run: |
-          file nexus-linux/nexus-dev/nexus-linux-dev.iso
-          xorriso -indev nexus-linux/nexus-dev/nexus-linux-dev.iso -report_el_torito as_mkisofs | head -30
-          SIZE=$(stat -c%s nexus-linux/nexus-dev/nexus-linux-dev.iso)
-          test "$SIZE" -gt 300000000 || { echo "::error::ISO quá nhỏ: $SIZE"; exit 1; }
-          echo "ISO OK: $SIZE bytes"
+          docker run --rm --privileged -v "$PWD":/ws -w /ws debian:bookworm bash -euxo pipefail -c '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends live-build xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux mtools dosfstools >/dev/null
+            cd nexus-linux/nexus-dev
+            sh ./auto/config
+            lb build 2>&1 | tee /tmp/lb.log
+            test -s live-image-amd64.iso || { echo "::error::lb build không xuất ISO — đuôi log:"; tail -60 /tmp/lb.log; exit 1; }
+            mv live-image-amd64.iso nexus-linux-dev.iso
+            sha256sum nexus-linux-dev.iso
+            file nexus-linux-dev.iso
+            xorriso -indev nexus-linux-dev.iso -report_el_torito as_mkisofs | head -25
+            SIZE=$(stat -c%s nexus-linux-dev.iso)
+            test "$SIZE" -gt 300000000 || { echo "::error::ISO quá nhỏ: $SIZE"; exit 1; }
+            echo "ISO OK: $SIZE bytes"
+          ' 
 
       - name: Upload release nexus-linux-dev-v1
         uses: softprops/action-gh-release@v2
