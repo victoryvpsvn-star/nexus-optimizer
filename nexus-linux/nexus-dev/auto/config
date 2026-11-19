@@ -10,10 +10,7 @@ lb config noauto \
     --binary-images iso-hybrid \
     --debian-installer none \
     --iso-volume "NEXUS-Linux-Dev" \
-    --hostname nexus-dev \
-    --username nexus \
-    --password nexus \
-    --bootappend-live "boot=live components quiet" \
+    --bootappend-live "boot=live components quiet username=nexus password=nexus" \
     --mirror-bootstrap "http://deb.debian.org/debian" \
     --mirror-binary "http://deb.debian.org/debian" \
     "$@"
