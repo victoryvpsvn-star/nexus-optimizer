@@ -369,3 +369,70 @@ jobs:
         if: always()
         run: |
           [ -f nexus-go/ci/fps-summary.md ] && cat nexus-go/ci/fps-summary.md >> $GITHUB_STEP_SUMMARY || true
+
+  win11-iso:
+    name: Build Win11 Pro 24H2 Gaming ISO (Debloated + Tuned)
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fido Rufus -> lay link ISO Win11 24H2 chinh chu + tai ve (~5.5GB)
+        shell: powershell
+        timeout-minutes: 15
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\Fido | Out-Null
+          Invoke-WebRequest -Uri 'https://github.com/pbatard/Fido/raw/master/Fido.ps1' -OutFile C:\Fido\Fido.ps1 -UseBasicParsing
+          # Fido: Rufus chinh chu, lay link download ISO tu Microsoft (khong third-party)
+          $raw = & powershell -NoProfile -ExecutionPolicy Bypass -File C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang 'Vietnamese' -Arch x64 -GetUrl
+          $url = ($raw | Select-String -Pattern 'https://' | Select-Object -Last 1).Line.Trim()
+          Write-Host "ISO URL: $url"
+          if (-not $url) { throw "Fido khong tra ve URL" }
+          $url | Out-File C:\Fido\iso-url.txt -Encoding ascii
+          curl.exe -L --retry 3 --retry-delay 5 -o C:\win11-original.iso $url
+          $iso = Get-Item C:\win11-original.iso
+          Write-Host "ISO goc: $([math]::Round($iso.Length/1GB,2)) GB"
+          if ($iso.Length -lt 4GB) { throw "ISO goc qua nho - download loi?" }
+
+      - name: Tune install.wim (debloat AppX + registry offline + LabConfig + Pro-only)
+        shell: powershell
+        timeout-minutes: 35
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File nexus-go\rescue\win11\tune-install-wim.ps1 C:\win11-original.iso
+
+      - name: Tao ISO (pycdlib UDF) + verify
+        shell: powershell
+        timeout-minutes: 12
+        run: |
+          python nexus-go\rescue\win11\make_win11_iso.py
+          $iso = Get-Item C:\out\Win11Pro-NEXUS-24H2-Gaming.iso
+          Write-Host "ISO: $([math]::Round($iso.Length/1GB,2)) GB"
+          if ($iso.Length -lt 2.5GB) { throw "ISO qua nho" }
+          dism /Get-ImageInfo /ImageFile:C:\win11src\sources\install.wim
+          $info = Get-WindowsImage -ImagePath C:\win11src\sources\install.wim
+          if ($info.Count -ne 1) { throw "install.wim phai chi con 1 image (Pro)" }
+          Write-Host "Image duy nhat: $($info.ImageName)"
+
+      - name: 7z split <2GB + merge.bat + SHA256 (gioi han asset GitHub 2GB/file)
+        shell: powershell
+        timeout-minutes: 10
+        run: |
+          $sz = 'C:\Program Files\7-Zip\7z.exe'
+          & $sz a -t7z -mx=0 -v1900m C:\out\Win11NEXUS-24H2.7z C:\out\Win11Pro-NEXUS-24H2-Gaming.iso | Select-Object -Last 5
+          $parts = Get-ChildItem C:\out\Win11NEXUS-24H2.7z.* | Sort-Object Name
+          $parts | ForEach-Object { Write-Host "$($_.Name): $([math]::Round($_.Length/1GB,2)) GB" }
+          $merge = "@echo off`r`nREM Ghep lai: copy /b 001+002+003 -> ISO (hoac mo .001 bang 7-Zip/WinRAR de giai nen)`r`ncopy /b `"Win11NEXUS-24H2.7z.001`"+`"Win11NEXUS-24H2.7z.002`"+`"Win11NEXUS-24H2.7z.003`" `"Win11Pro-NEXUS-24H2-Gaming.iso`"`r`necho Done: Win11Pro-NEXUS-24H2-Gaming.iso`r`npause`r`n"
+          [IO.File]::WriteAllText('C:\out\merge.bat', $merge)
+          $readme = "NEXUS Win11 Pro 24H2 Gaming ISO - huong dan`r`n=============================================`r`n1. Tai du 3 phan: Win11NEXUS-24H2.7z.001/.002/.003 cung thu muc`r`n2. De giai nen: mo file .001 bang 7-Zip hoac WinRAR -> duoc file ISO`r`n   (hoac chay merge.bat de ghep thanh ISO roi ghi ra USB bang Rufus)`r`n3. Ghi USB: Rufus (chon GPT/UEFI), boot, cai dat`r`n`r`nDa san co:`r`n- Debloat: 25+ app UWP rac (Bing/Copilot/Teams/Skype/Solitaire/Maps/YourPhone...)`r`n- Game: HAGS bat, GameDVR tat (FPS tang), Game Mode bat, GPU Priority 8, timer resolution, Power Throttling tat, SysMain tat, Ultimate Performance (first boot)`r`n- Telemetry/ads tat, tat deal ao & suggest app, khoi 24H2 (khong tu nang cap LTS style)`r`n- Boot cu: bypass TPM/SecureBoot/RAM/CPU (may cu van cai duoc)`r`n- OOBE: user 'Gamer' (khong mat khau, tu dong dang nhap) - doi mat khau sau khi vao`r`n- FirstBoot tu chay: tune HKCU + power Ultimate + winget cai Discord/Steam/Chrome/Opera GX (can internet)`r`n- Da go OneDrive consumer - Store/Photos/Calculator/Notepad/Terminal/Xbox (Game Pass) giu nguyen`r`n`r`nSafety: Defender giu nguyen. Log first boot: C:\NEXUS\FirstBoot.log. Re-run apps: shortcut NEXUS Gaming Setup.`r`n"
+          [IO.File]::WriteAllText('C:\out\README-NEXUS-Win11.txt', $readme)
+          Get-ChildItem C:\out\Win11NEXUS-24H2.7z.* | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8 }
+          Get-FileHash C:\out\Win11Pro-NEXUS-24H2-Gaming.iso -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8
+
+      - name: Upload ISO parts vao release go-vN
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload go-v${{ github.run_number }} C:\out\Win11NEXUS-24H2.7z.001 C:\out\Win11NEXUS-24H2.7z.002 C:\out\Win11NEXUS-24H2.7z.003 C:\out\merge.bat C:\out\README-NEXUS-Win11.txt C:\out\SHA256.txt --repo ${{ github.repository }} --clobber
+          Write-Host "Uploaded Win11 ISO parts to release go-v${{ github.run_number }}"
