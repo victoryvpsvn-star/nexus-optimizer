@@ -31,7 +31,7 @@ jobs:
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: '22' // v4.4.0 (B-17): Node 20 EOL 2026
+          node-version: '22' # v4.4.0 (B-17): Node 20 EOL 2026
 
       - name: Cài dependencies
         # v4.4.0 (B-18): repo có bun.lock — dùng bun --frozen-lockfile, không còn resolve mới giữa các lần build
