@@ -28,8 +28,10 @@ jobs:
             cd nexus-linux/nexus-dev
             sh ./auto/config
             lb build 2>&1 | tee /tmp/lb.log
-            test -s live-image-amd64.iso || { echo "::error::lb build không xuất ISO — đuôi log:"; tail -60 /tmp/lb.log; exit 1; }
-            mv live-image-amd64.iso nexus-linux-dev.iso
+            ISO=$(ls -1 live-image-amd64*.iso 2>/dev/null | head -1 || true)
+            test -n "$ISO" || { echo "::error::lb build không xuất ISO — đuôi log:"; tail -60 /tmp/lb.log; exit 1; }
+            echo "lb output: $ISO"
+            mv "$ISO" nexus-linux-dev.iso
             sha256sum nexus-linux-dev.iso
             file nexus-linux-dev.iso
             xorriso -indev nexus-linux-dev.iso -report_el_torito as_mkisofs | head -25
