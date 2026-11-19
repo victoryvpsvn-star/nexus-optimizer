@@ -206,14 +206,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cai Windows ADK + WinPE add-on (choco)
+      - name: Cai Windows ADK + WinPE add-on (winget, fallback choco)
         shell: powershell
+        timeout-minutes: 35
         run: |
-          # ADK PE add-on keo luon ADK base; silent, khong mo UI
-          choco install -y --no-progress windows-adk-windows-pe-addon
-          $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          if (-not (Test-Path "$pe\copype.cmd")) { throw "ADK WinPE copype.cmd not found - check choco install" }
-          Write-Host "ADK OK: $pe"
+          # ADK base + PE add-on tu winget (chinh chu Microsoft, dong bo version);
+          # neu winget loi thi choco WindowsADK.WinPE lam phuong an du phong
+          $pe86 = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
+          $pe64 = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
+          function Test-PeReady { (Test-Path "$pe86\copype.cmd") -or (Test-Path "$pe64\copype.cmd") }
+          if (-not (Test-PeReady)) {
+            winget install --id Microsoft.WindowsADK --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+            winget install --id Microsoft.WindowsADKPEAddon --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          }
+          if (-not (Test-PeReady)) {
+            Write-Host "winget failed - trying choco WindowsADK.WinPE"
+            choco install -y --no-progress WindowsADK.WinPE
+          }
+          if (-not (Test-PeReady)) { throw "ADK WinPE copype.cmd not found after winget + choco" }
+          Write-Host "ADK PE OK"
 
       - name: Tai exe NEXUS tu release go-vN
         shell: powershell
