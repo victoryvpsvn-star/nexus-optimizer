@@ -1,5 +1,5 @@
-# NEXUS Rescue PE — dashboard cấu hình đầy đủ (gaming ultra-light, v4.5.0)
-# Chạy trong WinPE: PowerShell + WMI + StorageWMI (đã inject vào image).
+# NEXUS Rescue PE — dashboard cau hinh đay đu (gaming ultra-light, v4.5.0)
+# Chay trong WinPE: PowerShell + WMI + StorageWMI (đa inject vao image).
 $ErrorActionPreference = 'Continue'
 Clear-Host
 $line = '=' * 66
@@ -13,7 +13,7 @@ try {
   $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
   Write-Host '[CPU]'
   Write-Host ('  ' + $cpu.Name.Trim())
-  Write-Host ('  Số lõi xử lý: ' + $cpu.NumberOfCores + ' | Số luồng: ' + $cpu.NumberOfLogicalProcessors)
+  Write-Host ('  So loi xu ly: ' + $cpu.NumberOfCores + ' | So luong: ' + $cpu.NumberOfLogicalProcessors)
 } catch {
   Write-Host '[CPU] khong doc duoc WMI: ' $_.Exception.Message
 }
@@ -32,7 +32,7 @@ try {
 }
 Write-Host ''
 
-# --- Ổ đĩa — GB đã dùng ---
+# --- O đia — GB đa dung ---
 try {
   Write-Host '[O dia - GB da dung]'
   Get-CimInstance Win32_LogicalDisk -ErrorAction Stop | ForEach-Object {
@@ -48,7 +48,7 @@ try {
 }
 Write-Host ''
 
-# --- Ổ vật lý + S.M.A.R.T (StorageWMI) ---
+# --- O vat ly + S.M.A.R.T (StorageWMI) ---
 try {
   Write-Host '[O vat ly + SMART]'
   Get-PhysicalDisk -ErrorAction Stop | ForEach-Object {
@@ -70,7 +70,7 @@ try {
 }
 Write-Host ''
 
-# --- Mạng + địa chỉ web server ---
+# --- Mang + đia chi web server ---
 try {
   Write-Host '[Mang]'
   Get-CimInstance Win32_NetworkAdapterConfiguration -ErrorAction Stop |
