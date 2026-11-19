@@ -199,10 +199,9 @@ jobs:
   build-windows-pe:
     name: Build Windows NEXUS ISO (WinPE gaming ultra-light)
     runs-on: windows-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !cancelled() && needs.release.result == 'success'
     timeout-minutes: 45
     needs: [release]   # đoi release cat xong đe nap exe + upload ISO vao cung tag go-vN
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -38,6 +38,9 @@ jobs:
               alpine:3.21 sh /build/alpine/fetch_pkgs.sh "$V" /out
           done
 
+      - name: Cài pycdlib (bắt buộc cho make_iso.py)
+        run: pip install pycdlib
+
       - name: Tạo apkovl 3 variant
         run: |
           mkdir -p /tmp/nx/ov
