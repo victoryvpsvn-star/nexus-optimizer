@@ -3,7 +3,7 @@
 set timeout 480
 log_user 1
 log_file /tmp/serial.log
-spawn qemu-system-x86_64 -machine q35 -smp 2 -m 1024 -nographic -no-reboot \
+spawn qemu-system-x86_64 -machine q35 -smp 2 -m 1024 -nographic -no-reboot -nic user,model=virtio-net-pci \
     -drive file=/tmp/test.raw,format=raw,if=virtio \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd
@@ -40,9 +40,9 @@ for {set i 0} {$i < 7} {incr i} {
     sleep 10
 }
 if {$ipcnt < 1} {
-    send "\recho ==LINK==; ip -o link; echo ==RULES==; ls /etc/udev/rules.d/; echo ==DHC==; which dhclient; echo ==LOG==; sudo journalctl -b --no-pager 2>&1 | grep -iE 'networking|eth0|dhcp|nexus-net|renamed' | tail -14; echo ==END==\r"
+    send "\rM=LINK; echo ==\$M==; ip -o link; M=RULES; echo ==\$M==; ls /etc/udev/rules.d/; M=DHC; echo ==\$M==; which dhclient; M=LOG; echo ==\$M==; sudo journalctl -b --no-pager 2>&1 | grep -iE 'networking|eth0|dhcp|nexus-net|renamed' | tail -14\r"
     expect {
-        "==END==" {}
+        -re "nexus@nexus:~\$" {}
         timeout {}
     }
     puts "\nFAIL-IP: khong co IPv4 global sau 70s (DHCP/ifup loi) — xem DIAG o tren"
