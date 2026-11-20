@@ -79,12 +79,14 @@ PKGS=$(grep -v '^#' "$DEV/config/package-lists/nexus-dev.list.chroot" | grep -v 
        | grep -v -x -e 'live-boot' -e 'live-config' -e 'user-setup' -e 'linux-image-cloud-amd64' -e 'initramfs-tools')
 RUN1="sudo ifupdown openssh-server grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools $PKGS"
 chroot_env apt-get -y update -qq
-chroot_env apt-get -y install --no-install-recommends $RUN1 >/dev/null
+# force-confdef/confold: file config include sẵn giữ nguyên, dpkg không bao giờ hỏi conffile (EOF = chết)
+DPGOPT='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+chroot_env apt-get -y $DPGOPT install --no-install-recommends $RUN1 >/dev/null
 # chặn update-grub (grub.cfg viết tay ở bước 7)
 rm -f "$R/etc/kernel/postinst.d/zz-update-grub" "$R/etc/kernel/postrm.d/zz-update-grub"
 
 echo "=== [6/8] apt run 2: kernel cloud-amd64 (initramfs tự tạo) ==="
-chroot_env apt-get -y install --no-install-recommends linux-image-cloud-amd64 >/dev/null
+chroot_env apt-get -y $DPGOPT install --no-install-recommends linux-image-cloud-amd64 >/dev/null
 KVER=$(ls "$R"/boot/vmlinuz-* | sed 's|.*/vmlinuz-||' | head -1)
 echo "kernel: $KVER"
 
