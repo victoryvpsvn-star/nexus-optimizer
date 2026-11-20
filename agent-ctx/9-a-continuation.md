@@ -796,3 +796,12 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - Kết quả: ISO 1.5GB → **1.2GB (1201.8MB)**, CI xanh ngay lần 1 (44d98e3), release **nexus-linux-dev-v2** (sha dd2dec77…), đã tải download/nexus-linux-dev-v2-slim.iso + Discord (204).
 - Lỗi nhỏ đã vá: body release có placeholder [SIZE] → PATCH API xong. Sandbox recycle giữa turn mất ISO v1 local + repo local tụt về 7b59a4a → fetch+reset origin + stash pe/win11 junk (recoverable trong stash). V1 vẫn an toàn trên release nexus-linux-dev-v1.
 - Chưa đạt cực hạn: nếu bro muốn ISO <900MB nữa → v3: bỏ build-essential/nodejs/npm/gnupg (-150MB+) hoặc squashfs xz (-8%). Resource targets ĐÃ ĐẠT (RAM/CPU/disk là cái bro cần).
+
+
+## 17-p: NEXUS Linux Dev v3 ULTRA SLIM — XANH, 1.07GB (turn v3)
+- Bro: "nhẹ nhất có thể mà vẫn dùng tốt và xịn".
+- Triết lý v3: giữ tool identity (Kali-style + terminal xịn), cắt thứ nx install phục hồi trong 1 phút: build-essential/gdb/nodejs/npm/gnupg/neovim/aria2/p7zip-full/wfuzz (64 gói còn lại, validator 64/64 ✓).
+- 2 vòng fix squashfs: --squashfs-compression KHÔNG tồn tại trong lb bookworm (tra manpages.debian.org → đúng là --chroot-squashfs-compression-type/level); rồi mksquashfs 4.5 bookworm KHÔNG nhận -Xcompression-level cho xz (live-build hardcode) → bỏ level, giữ type xz. PHÁT HIỆN: bookworm default squashfs là xz sẵn → v2 đã xz từ trước, không có "10% win" như tính.
+- Kết quả: ISO **1075.2MB** (v1 1524 → v2 1202 → v3 1075), release nexus-linux-dev-v3 (sha 77543022…), PATCH body đúng size, đã tải download/nexus-linux-dev-v3-ultra-slim.iso + Discord (204).
+- UX mới trong v3: nx 1.1 TỰ apt-get update khi /var/lib/apt/lists trống (live-build không đóng gói lists — bug UX có từ v1); /etc/pip.conf break-system-packages=true kiểu Kali; dpkg excludes +info/bug/lintian (8 excludes tổng).
+- Nhận xét: 1.07GB là đáy hợp lý nếu giữ nmap/sqlmap/hydra/john/binwalk (identity Kali). V4 nếu cắt tiếp = mất chất (chỉ còn -100MB từ locales/console-setup/nmap/sqlmap). Resource targets (1GB RAM/0.25 core/disk 2GB) đã đạt từ v2 và giữ nguyên v3.
