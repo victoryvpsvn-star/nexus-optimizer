@@ -832,3 +832,12 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - FOLLOW-UP: poll run moi nhat sau push; neu IPCN van 0 sau 70s -> doc ==LINK==/==RULES==/==DHC==/==LOG== (lan nay se hien) -> chot nguyen nhan; xanh thi PATCH release nexus-linux-dev-vhdx + tai VHDX moi + Discord.
 - VHDX trong download/ van la ban CU. ISO v3 (user dang boot) la ban moi 06:04 UTC.
 - Luu y user: anh user gui = menu boot ISO live; SSH tren ISO live that bai thuong vi (1) live chi DHCP trong khi nha mang VPS VN nhieu noi cap IP TINH; (2) root trong live bi khoa -> dung nexus. Neu VPS IP tinh: phai config /etc/network/interfaces tay hoang qua console.
+
+
+## 17-t: GREEN — SSH fixed, VHDX boot-tested (commit cfc4dd4, run 44713318669 success 09:55 UTC)
+- Run cfc4dd4 XANH: boot smoke-test PASS — UEFI -> GRUB -> kernel -> autologin -> nexfetch -> SSHD=1 + IP + port 22. Gate grep "BOOT TEST PASS" qua.
+- Nghi phan cuoi chot: qemu test dung NIC mac dinh e1000e (spawn khong co -nic) — kernel cloud khong co driver e1000e. Doi `-nic user,model=virtio-net-pci` -> xanh. Hyper-V user khong anh huong (hv_storvsc/hv_netvsc co san).
+- Bai hoc: kernel cloud Debian cat sach driver (ahci, e1000e) — moi lan them hardware vao qemu test phai check driver co trong cloud kernel khong.
+- VHDX moi (1551892480 bytes) da tai ve /home/z/my-project/download/nexus-linux-dev.vhdx + release nexus-linux-dev-vhdx updated 09:55:58Z + PATCH release body (SSH FIXED + BOOT-TESTED + huong dan connect) + Discord green OK.
+- sshd_config.d/nexus.conf: PermitRootLogin yes + PasswordAuthentication yes; nexus-net.service DHCP sau udev-settle; udev rule eth0; initramfs drivers + rootdelay.
+- NEXT NEU BRO BAO LOI KHAC: doc DIAG block trong log CI (==LINK==/==RULES==/==DHC==/==LOG== da doc dung bang prompt-consume).
