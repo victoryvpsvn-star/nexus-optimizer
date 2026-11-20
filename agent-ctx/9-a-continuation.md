@@ -822,3 +822,13 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - Boot smoke-test qemu+OVMF+expect HOAT DONG: boot UEFI -> GRUB -> kernel -> autologin -> nexfetch banner -> SSHD=1 (sshd chay!). CON LAI duy nhat: IPCNT=0 (DHCP chua len) o run 2daced6/cb00435 — da them DIAG block (ip -o link, ls rules.d, which dhclient, journalctl networking) vao boot-test.exp push commit moi — vong sau doc DIAG de chot nguyen nhan (nghi van: udev rename chua kip/ifup timing, hoac rule file khong duoc copy).
 - Budget turn het ~25 phut truoc khi CI xong. FOLLOW-UP: poll run moi nhat, doc block ==LINK==/==RULES==/==DHC==/==LOG== trong log CI, fix DHCP, cho xanh -> PATCH release nexus-linux-dev-vhdx + tai VHDX moi + Discord.
 - VHDX trong download/ hien la ban CU (root SSH chan + thieu dhclient) — DOI ban moi sau khi CI xanh.
+
+
+## 17-s: (turn sau root cause SSH) DHCP van do — 2 fix moi push (commit sau bc6e4b4)
+- Run bc6e4b4: boot OK + SSHD=1 OK, IPCNT=0, DIAG van khong hien (expect chi doc pty khi goi lenh expect — send roi exit mat output).
+- Nghi phan chinh moi: CHECK IP QUASOM — nexus-net.service (After=udev-settle + dhclient) chua kip chay khi expect check (vai giay sau login, TCG rat cham). Da them retry-loop 7 lan x sleep 10s (~70s) truoc khi FAIL.
+- DIAG da chuyen vao dung cho (expect "==END==" doc het output truoc exit).
+- Ket qua bat duoc tu cac run: boot UEFI->GRUB->kernel->autologin->nexfetch OK; SSHD=1 (sshd chay OK); con duy nhat IP.
+- FOLLOW-UP: poll run moi nhat sau push; neu IPCN van 0 sau 70s -> doc ==LINK==/==RULES==/==DHC==/==LOG== (lan nay se hien) -> chot nguyen nhan; xanh thi PATCH release nexus-linux-dev-vhdx + tai VHDX moi + Discord.
+- VHDX trong download/ van la ban CU. ISO v3 (user dang boot) la ban moi 06:04 UTC.
+- Luu y user: anh user gui = menu boot ISO live; SSH tren ISO live that bai thuong vi (1) live chi DHCP trong khi nha mang VPS VN nhieu noi cap IP TINH; (2) root trong live bi khoa -> dung nexus. Neu VPS IP tinh: phai config /etc/network/interfaces tay hoang qua console.

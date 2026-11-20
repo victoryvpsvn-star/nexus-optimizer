@@ -27,16 +27,26 @@ expect {
     "SSHD=0" { puts "\nFAIL-SSHD: sshd khong chay"; exit 1 }
     timeout { puts "\nFAIL-SSHD: timeout"; exit 1 }
 }
-send "R=\$(ip -4 -o addr show scope global | grep -c inet); echo IPCNT=\$R\r"
-expect {
-    "IPCNT=1" {}
-    -re "IPCNT=\[2-9\]" {}
-    timeout {
-        send "\recho ==LINK==; ip -o link; echo ==RULES==; ls /etc/udev/rules.d/; echo ==DHC==; which dhclient; echo ==LOG==; sudo journalctl -b --no-pager 2>&1 | grep -iE 'networking|eth0|dhcp|nexus-net|renamed' | tail -14; echo ==END==\r"
-        sleep 5
-        puts "\nFAIL-IP: khong co IPv4 global (DHCP/ifup loi) — xem DIAG o tren"
-        exit 1
+# doi IP toi da ~70s (nexus-net chay sau udev-settle + dhclient — TCG rat cham)
+set ipcnt -1
+for {set i 0} {$i < 7} {incr i} {
+    send "R=\$(ip -4 -o addr show scope global | grep -c inet); echo IPCNT=\$R\r"
+    expect {
+        "IPCNT=1" { set ipcnt 1; break }
+        -re "IPCNT=\[2-9\]" { set ipcnt 2; break }
+        "IPCNT=0" { set ipcnt 0 }
+        timeout { set ipcnt -1 }
     }
+    sleep 10
+}
+if {$ipcnt < 1} {
+    send "\recho ==LINK==; ip -o link; echo ==RULES==; ls /etc/udev/rules.d/; echo ==DHC==; which dhclient; echo ==LOG==; sudo journalctl -b --no-pager 2>&1 | grep -iE 'networking|eth0|dhcp|nexus-net|renamed' | tail -14; echo ==END==\r"
+    expect {
+        "==END==" {}
+        timeout {}
+    }
+    puts "\nFAIL-IP: khong co IPv4 global sau 70s (DHCP/ifup loi) — xem DIAG o tren"
+    exit 1
 }
 send "R=\$(ss -tln | grep -q ':22 ' && echo OK || echo BAD); echo PORT22=\$R\r"
 expect {
