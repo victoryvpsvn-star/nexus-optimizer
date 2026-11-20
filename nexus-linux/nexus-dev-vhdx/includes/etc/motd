@@ -1,5 +1,6 @@
-NEXUS Linux Dev (Debian bookworm)
+NEXUS Linux Dev v4 (bookworm core) — hardened + optimized
+  PKG      : nx install|remove|update|upgrade|search|clean|autoremove  (DUNG NX — apt chi la engine noi bo)
   SSH      : nexus@<ip> | root@<ip>   (mat khau: nexus | root, sudo NOPASSWD)
   Disk to  : updisk  (sau khi enlarge disk tren Hyper-V)
-  Bao mat  : fail2ban (ban 1h+) + unattended-upgrades + sysctl hardening + BBR
-  Tool     : nx --help  |  nexfetch chi tren console
+  Bao mat  : fail2ban + unattended-upgrades + sysctl hardening + BBR
+  Nhe nhat : thoat SSH -> tu drop cache + dung timer nen (idle mode) — login lai la bat lai

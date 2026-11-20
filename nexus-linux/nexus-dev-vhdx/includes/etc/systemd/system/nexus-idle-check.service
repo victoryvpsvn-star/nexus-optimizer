@@ -1,0 +1,5 @@
+[Unit]
+Description=NEXUS: kiem tra idle — khong con session thi drop cache + dung timer
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nexus-session.sh timer

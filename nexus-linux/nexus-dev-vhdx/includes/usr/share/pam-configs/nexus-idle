@@ -1,0 +1,6 @@
+Name: NEXUS idle optimizer (drop cache + tat timer khi thoat)
+Default: yes
+Priority: 0
+Session-Type: additional
+Session:
+    optional    pam_exec.so    /usr/local/sbin/nexus-session.sh

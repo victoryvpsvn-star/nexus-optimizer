@@ -22,8 +22,9 @@ case "$1" in
   clean) exec $S apt-get clean ;;
   autoremove) exec $S apt-get autoremove -y ;;
   tools) cat /usr/share/nexus/tools.txt ;;
+  hogs) ps -eo pid,user,pmem,pcpu,comm --sort=-pmem | head -11 ;;
   *) cat <<'EOF'
-NEXUS nx 1.1 — dùng như apt trên NEXUS Linux Dev (backend apt):
+NEXUS nx 1.2 — trình quản lý gói DUY NHẤT của NEXUS (apt chỉ là engine nội bộ — giao diện là nx):
   nx install <gói>    cài gói (tự update lần đầu nếu lists trống)
   nx remove <gói>     gỡ gói
   nx purge <gói>      gỡ + xóa config
@@ -34,6 +35,7 @@ NEXUS nx 1.1 — dùng như apt trên NEXUS Linux Dev (backend apt):
   nx list             liệt kê gói đã cài
   nx tools            bảng tra cứu tool dev/security đã cài sẵn
   nx clean|autoremove dọn rác hệ thống
+  nx hogs             top 10 process ăn RAM/CPU nhiều nhất
 
 Phục hồi tool đã cắt trong 1 phút:
   nx install build-essential gdb    (compiler + debugger)

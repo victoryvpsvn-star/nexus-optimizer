@@ -51,6 +51,9 @@ EOF
 echo nexus > "$R/etc/hostname"
 printf '127.0.0.1\tlocalhost\n127.0.1.1\tnexus nexus\n::1\t\tlocalhost ip6-localhost ip6-loopback\n' > "$R/etc/hosts"
 printf 'LANG=C.UTF-8\n' > "$R/etc/default/locale"
+# branding NEXUS (ID=debian + debian_version giu nguyen — apt/unattended/fail2ban an toan)
+sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="NEXUS Linux Dev v4 (bookworm core)"/' "$R/usr/lib/os-release"
+sed -i 's/^NAME=.*/NAME="NEXUS Linux Dev"/' "$R/usr/lib/os-release"
 printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "$R/etc/resolv.conf"
 cat > "$R/etc/sudoers.d/nexus" <<'EOF'
 nexus ALL=(ALL) NOPASSWD:ALL
@@ -103,7 +106,10 @@ sed -i 's/^MODULES=.*/MODULES=most/'  "$R/etc/initramfs-tools/initramfs.conf"
 sed -i 's/^COMPRESS=.*/COMPRESS=zstd/' "$R/etc/initramfs-tools/initramfs.conf"
 
 # hardening/tuning services: fail2ban (sshd jail) + zram swap — enable tường minh cho chac
-chroot "$R" systemctl enable fail2ban.service zramswap.service >/dev/null 2>&1 || echo "WARN: enable fail2ban/zramswap loi (kiem tra log)"
+chroot "$R" systemctl enable fail2ban.service zramswap.service fstrim.timer >/dev/null 2>&1 || echo "WARN: enable fail2ban/zramswap/fstrim loi (kiem tra log)"
+# PAM: nhan nexus-idle hook (pam_exec) — phai sau khi libpam-runtime co mat (openssh run1)
+chroot "$R" pam-auth-update --package >/dev/null 2>&1 || echo "WARN: pam-auth-update loi (hook idle khong kich hoat)"
+grep -q pam_exec "$R/etc/pam.d/common-session" && echo "pam_exec nexus-idle: DA vao common-session" || echo "WARN: pam_exec chua co trong common-session"
 
 echo "=== [6/8] apt run 2: kernel cloud-amd64 (initramfs tự tạo) ==="
 chroot_env apt-get -y $DPGOPT install --no-install-recommends linux-image-cloud-amd64 >/dev/null
@@ -119,8 +125,9 @@ chroot "$R" bash -c 'echo nexus:nexus | chpasswd; echo root:root | chpasswd'
 ROOTUUID=$(uuidgen)
 ESPIMG_UUID=4E455853   # FAT UUID = 4E45-5853
 cat > "$R/etc/fstab" <<EOF
-UUID=$ROOTUUID  /         ext4  defaults,noatime       0 1
-UUID=4E45-5853  /boot/efi vfat  defaults,umask=0077    0 2
+UUID=$ROOTUUID  /         ext4  defaults,noatime,commit=60  0 1
+UUID=4E45-5853  /boot/efi vfat  defaults,umask=0077        0 2
+tmpfs           /tmp      tmpfs rw,nosuid,nodev,noexec,mode=1777,size=256M  0 0
 EOF
 cat > "$R/boot/grub/grub.cfg" <<EOF
 set default=0
