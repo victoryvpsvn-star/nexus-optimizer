@@ -52,7 +52,7 @@ cat > "$R/etc/sudoers.d/nexus" <<'EOF'
 nexus ALL=(ALL) NOPASSWD:ALL
 EOF
 chmod 0440 "$R/etc/sudoers.d/nexus"
-chroot "$R" systemd-machine-id-setup
+: > "$R/etc/machine-id"   # minbase chưa có systemd — để rỗng, systemd tự sinh lần boot đầu
 # chặn dịch vụ khởi động trong chroot
 echo exit 101 > "$R/usr/sbin/policy-rc.d"
 chmod +x "$R/usr/sbin/policy-rc.d"
