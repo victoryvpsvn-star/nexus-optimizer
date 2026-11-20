@@ -4,3 +4,4 @@ NEXUS Linux Dev v5 (bookworm core) — alpine-light + hardened
   Disk to  : updisk  (sau khi enlarge disk tren Hyper-V)
   Bao mat  : SSH rate-limit cap KERNEL (nftables, 0 RAM) + sshd hardening + unattended-upgrades + sysctl
   Nhe nhat : thoat SSH -> tu drop cache + dung timer nen (idle mode); zram zstd; BBR
+  NX cuu loi : fs read-only / journal aborted (I/O error) -> nx fsck + reboot; xem lai dung luong HOST chua VHDX

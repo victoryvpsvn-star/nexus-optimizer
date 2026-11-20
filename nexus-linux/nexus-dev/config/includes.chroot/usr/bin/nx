@@ -21,6 +21,9 @@ case "$1" in
   list) dpkg-query -W -f='${binary:Package}\t${Version}\n' 2>/dev/null ;;
   clean) exec $S apt-get clean ;;
   autoremove) exec $S apt-get autoremove -y ;;
+  fsck) $S touch /forcefsck 2>/dev/null && echo "[NEXUS] da tao /forcefsck — chay: sudo reboot" \
+      && echo "  -> lan boot sau fsck -y tu chay truoc mount (sua journal aborted / fs read-only)" \
+      || echo "[NEXUS] khong the tao /forcefsck (fs read-only?) — reboot van kich hoat fsck vi fs dirty" ;;
   tools) cat /usr/share/nexus/tools.txt ;;
   hogs) ps -eo pid,user,pmem,pcpu,comm --sort=-pmem | head -11 ;;
   *) cat <<'EOF'
@@ -35,6 +38,7 @@ NEXUS nx 1.2 — trình quản lý gói DUY NHẤT của NEXUS (apt chỉ là en
   nx list             liệt kê gói đã cài
   nx tools            bảng tra cứu tool dev/security đã cài sẵn
   nx clean|autoremove dọn rác hệ thống
+  nx fsck             đặt fsck tự sửa cho lần boot sau (fs read-only/journal abort)
   nx hogs             top 10 process ăn RAM/CPU nhiều nhất
 
 Phục hồi tool đã cắt trong 1 phút:

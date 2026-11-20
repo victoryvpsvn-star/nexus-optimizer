@@ -138,7 +138,7 @@ cat > "$R/boot/grub/grub.cfg" <<EOF
 set default=0
 set timeout=2
 menuentry 'NEXUS Linux Dev (installed)' {
-    linux /boot/vmlinuz-$KVER root=UUID=$ROOTUUID ro rootdelay=3 quiet console=tty1 console=ttyS0,115200n8
+    linux /boot/vmlinuz-$KVER root=UUID=$ROOTUUID ro rootdelay=3 fsck.repair=yes quiet console=tty1 console=ttyS0,115200n8
     initrd /boot/initrd.img-$KVER
 }
 EOF
