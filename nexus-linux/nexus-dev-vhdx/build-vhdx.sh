@@ -124,7 +124,7 @@ echo "--- driver trong initramfs (diagnostic):"
 chroot "$R" lsinitramfs "/boot/initrd.img-$KVER" | grep -E 'ahci\.ko|sd_mod\.ko|hv_storvsc\.ko|virtio_blk\.ko' | head -6 || echo "WARN: khong thay driver storage trong initramfs!"
 
 echo "=== [6.5/8] KERNEL NEXUS RIÊNG (kernel.org 6.1.100 → vmlinuz-*-nexus1) ==="
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends build-essential bc bison flex libelf-dev >/dev/null 2>&1 || true
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends build-essential bc bison flex libelf-dev libssl-dev >/dev/null 2>&1 || true
 cd /tmp
 [ -f linux-6.1.100.tar.xz ] || curl -fSL --retry 3 -o linux-6.1.100.tar.xz https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.1.100.tar.xz
 tar -xf linux-6.1.100.tar.xz
