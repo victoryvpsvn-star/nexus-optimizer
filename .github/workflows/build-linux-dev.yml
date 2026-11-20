@@ -44,7 +44,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nexus-linux-dev-v3
-          name: NEXUS Linux Dev v1 — Terminal cho dev (Debian base)
+          name: NEXUS Linux Dev v3 — Terminal cho dev (Debian base)
           body: |
             **NEXUS Linux Dev v3 (ULTRA SLIM)** — nhẹ nhất có thể mà vẫn xịn. Base Debian bookworm, KHÔNG Alpine, tool kiểu Kali, vẫn NEXUS OS.
 
@@ -63,6 +63,48 @@ jobs:
 
             Thêm tool: sửa `nexus-linux/nexus-dev/config/package-lists/nexus-dev.list.chroot` + push — CI tự build lại.
           files: nexus-linux/nexus-dev/nexus-linux-dev.iso
+
+  build-dev-vhdx:
+    name: NEXUS Linux Dev — VHDX cài sẵn (Hyper-V Gen 2 + updisk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build VHDX (debootstrap → ext4 tại offset + ESP mtools → qemu-img, không losetup)
+        run: |
+          docker run --rm --privileged -v "$PWD":/ws -w /ws debian:bookworm bash -euo pipefail -c '
+            bash nexus-linux/nexus-dev-vhdx/build-vhdx.sh 2>&1 | tee /tmp/vhdx.log
+            test -f nexus-linux-dev.vhdx || { echo "::error::không tạo được VHDX — đuôi log:"; tail -60 /tmp/vhdx.log; exit 1; }
+            ls -la nexus-linux-dev.vhdx
+          '
+
+      - name: Upload release nexus-linux-dev-vhdx
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nexus-linux-dev-vhdx
+          name: NEXUS Linux Dev — VHDX cài sẵn cho Hyper-V (boot UEFI Gen 2, lệnh updisk)
+          body: |
+            **NEXUS Linux Dev VHDX** — hệ Debian bookworm **CÀI SẴN** trong disk (không phải ISO/live), boot UEFI Hyper-V Gen 2, kèm lệnh `updisk`.
+
+            **Cách dùng:**
+            1. Tải `nexus-linux-dev.vhdx` → Hyper-V: New VM → **Generation 2** → Attach existing disk → chọn file vhdx → Security: **tắt Secure Boot**
+            2. RAM 1024MB+ / 1 vCPU đủ chạy. Boot xong tự login `nexus` (mật khẩu `nexus`, sudo NOPASSWD; root mật khẩu `root`)
+            3. **SSH được ngay**: `ssh nexus@<ip>` — openssh-server cài sẵn
+
+            **Lệnh `updisk`** — sau khi nâng disk VM (ví dụ 1GB → 8GB ở Hyper-V/panel): gõ `updisk` → tự growpart + resize2fs, rootfs chiếm hết vùng trống, không cần restart. Chưa nâng gì thì báo "không còn vùng trống".
+
+            **Trong đó:** toàn bộ toolset v3 (nmap, sqlmap, hydra, john, binwalk, python3+scapy+impacket, git, tmux, vim, ripgrep, fzf, ncdu, jq, sqlite3, btop, strace, zram swap + earlyoom), `nx install` tự apt-get update lần đầu, `pip install` kiểu Kali. Disk base tự đo dung lượng khi build (≥2GB). Kernel cloud-amd64 (Hyper-V/KVM).
+
+            Build script: `nexus-linux/nexus-dev-vhdx/build-vhdx.sh`.
+          files: nexus-linux-dev.vhdx
+
+      - name: Artifact dự phòng
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-linux-dev-vhdx
+          path: nexus-linux-dev.vhdx
+          retention-days: 7
 
       - name: Artifact dự phòng
         uses: actions/upload-artifact@v4

@@ -1,0 +1,25 @@
+#!/bin/bash
+# updisk — NEXUS: tự mở rộng partition + filesystem dùng HẾT dung lượng disk còn trống
+# Dùng khi: nâng disk VM ở Hyper-V (ví dụ 1GB → 8GB) rồi gõ 'updisk' — không cần restart
+S=""; [ "$(id -u)" -ne 0 ] && S="sudo"
+set -e
+ROOT=$($S findmnt -n -o SOURCE /)
+PKNAME=$($S lsblk -rno PKNAME "$ROOT" | head -1)
+PARTNO=$($S lsblk -rno PARTN "$ROOT" | head -1)
+DISK="/dev/$PKNAME"
+[ -n "$PKNAME" ] && [ -n "$PARTNO" ] || { echo "[updisk] Không nhận ra root device ($ROOT)"; exit 1; }
+echo "[updisk] root=$ROOT  disk=$DISK  part=$PARTNO"
+BEFORE=$($S df --output=size -B1 / | tail -1)
+OUT=$($S growpart "$DISK" "$PARTNO" 2>&1) || true
+echo "$OUT"
+if echo "$OUT" | grep -qi NOCHANGE; then
+    echo "[updisk] Disk không còn vùng trống — đã dùng hết. Nâng disk VM ở Hyper-V rồi chạy lại 'updisk'."
+    exit 0
+fi
+$S partprobe "$DISK" 2>/dev/null || $S blockdev --rereadpt "$DISK" 2>/dev/null || true
+sleep 1
+$S resize2fs "$ROOT"
+AFTER=$($S df --output=size -B1 / | tail -1)
+echo "[updisk] OK — rootfs: $(numfmt --to=iec $BEFORE) → $(numfmt --to=iec $AFTER)"
+$S df -h /
+$S lsblk "$DISK"
