@@ -1,4 +1,4 @@
 #!/bin/bash
-# NEXUS: 'apt' là engine nội bộ — giao diện chính thức là `nx`
-echo "[NEXUS] 'apt' chi la engine noi bo — dung: nx install|update|upgrade|remove|search (apt-get van chay cho script)" >&2
-exec /usr/bin/apt-get "$@"
+# NEXUS: khong co 'apt' tren he thong — giao dien duy nhat la 'nx'
+echo "[NEXUS] khong co apt tren NEXUS Linux — dung: nx install|update|upgrade|remove|search|clean (xem tat ca: nx)" >&2
+exit 1

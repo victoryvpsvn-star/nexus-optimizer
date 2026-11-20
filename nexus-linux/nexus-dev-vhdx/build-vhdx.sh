@@ -76,7 +76,7 @@ echo "=== [5/8] apt run 1: grub-efi + openssh + ifupdown + growpart + toolset v3
 # đọc package list v3, bỏ phần live-only
 PKGS=$(grep -v '^#' "$DEV/config/package-lists/nexus-dev.list.chroot" | grep -v '^$' \
        | grep -v -x -e 'live-boot' -e 'live-config' -e 'user-setup' -e 'linux-image-cloud-amd64' -e 'initramfs-tools')
-RUN1="sudo ifupdown openssh-server isc-dhcp-client fail2ban unattended-upgrades zram-tools iptables python3-systemd grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
+RUN1="sudo ifupdown openssh-server isc-dhcp-client nftables unattended-upgrades zram-tools grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
 chroot_env apt-get -y update -qq
 # force-confdef/confold: file config include sẵn giữ nguyên, dpkg không bao giờ hỏi conffile (EOF = chết)
 DPGOPT='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
@@ -106,7 +106,9 @@ sed -i 's/^MODULES=.*/MODULES=most/'  "$R/etc/initramfs-tools/initramfs.conf"
 sed -i 's/^COMPRESS=.*/COMPRESS=zstd/' "$R/etc/initramfs-tools/initramfs.conf"
 
 # hardening/tuning services: fail2ban (sshd jail) + zram swap — enable tường minh cho chac
-chroot "$R" systemctl enable fail2ban.service zramswap.service fstrim.timer >/dev/null 2>&1 || echo "WARN: enable fail2ban/zramswap/fstrim loi (kiem tra log)"
+chroot "$R" systemctl enable nftables.service zramswap.service fstrim.timer >/dev/null 2>&1 || echo "WARN: enable nftables/zramswap/fstrim loi (kiem tra log)"
+# alpine-grade: chi giu getty tty1 + serial — tty2-6 la RAM ao khong can
+for i in 2 3 4 5 6; do ln -sfn /dev/null "$R/etc/systemd/system/getty@tty$i.service"; done
 # PAM: nhan nexus-idle hook (pam_exec) — phai sau khi libpam-runtime co mat (openssh run1)
 chroot "$R" pam-auth-update --package >/dev/null 2>&1 || echo "WARN: pam-auth-update loi (hook idle khong kich hoat)"
 # pam-auth-update trong chroot khong nhat dinh nhan pam-configs ngoai dpkg -> ghi truc tiep cho chac
