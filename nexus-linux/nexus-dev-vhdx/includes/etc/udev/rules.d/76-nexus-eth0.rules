@@ -1,0 +1,3 @@
+# NEXUS: mọi NIC (Hyper-V hv_netvsc, KVM virtio, qemu ens3...) đều thành eth0
+# để "auto eth0" trong /etc/network/interfaces luôn khớp trên mọi hypervisor
+SUBSYSTEM=="net", ACTION=="add", KERNEL!="lo", NAME="eth0"
