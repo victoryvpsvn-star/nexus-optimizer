@@ -777,3 +777,14 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - Cơ chế boot: apkovl + /nxapks (repo tự ký abuild-sign, pub key trong apkovl /etc/apk/keys) + world → Alpine init cài world offline từ /media/cdrom/nxapks. Desktop/gaming: lightdm+dbus+networking runlevel; rescue: CLI.
 - Win family: gate workflow_dispatch (win11-iso + build-windows-pe) — bro không làm win nữa.
 - Nếu bro quay lại: có thể thêm variant (KDE/Hyper-V enhanced guests), hoặc fix win11 job (connector lấy SKU OK nhưng job fail sau đó — chưa debug).
+
+
+## 17-n: NEXUS Linux Dev — XANH + ĐÃ GIAO (turn dài, 6 fix CI)
+- Yêu cầu bro: bản terminal cho dev, CỰC NHẸ, KHÔNG Alpine (bro chê lỗi), nhiều tool kiểu Kali, vẫn NEXUS OS + nx install.
+- Module mới: nexus-linux/nexus-dev (live-build Debian bookworm) + nexus-linux/validate-packages.sh (check tên gói với Packages index TRƯỚC build — bắt được nikto không có trong bookworm main → thay wapiti, 80/80 xanh).
+- Chuỗi fix CI: (1) lb ubuntu không có --hostname/--username/--password → bootappend-live; (2) lb ubuntu sinh suite cũ bookworm/updates → includes sources.list nhưng bị lb đè → (3) build trong container debian:bookworm (live-build của Debian — đúng hẳn); (4) lb xuất live-image-amd64.hybrid.iso (đuôi .hybrid!) → glob; (5) container slim thiếu `file` → thêm vào apt install. Run 61500e8 SUCCESS.
+- Deliverable: release **nexus-linux-dev-v1** — nexus-linux-dev.iso ~1.5GB (e0aa269e…), đã tải về /home/z/my-project/download/ + Discord (204).
+- Login: nexus/nexus autologin tty1, sudo NOPASSWD (sudoers.d/90-nexus, hook chmod 0440), root:root.
+- LƯU Ý: 1.5GB chưa đúng "cực nhẹ" — lý do: recommends + man/docs + build chain. Bản slim sau: --apt-recommends false, rm man/doc/info, bỏ openssh-server?, mới chỉ = bro nói tiếp. ISO boot UEFI+BIOS đã verify bằng xorriso report trong CI.
+- nx (bash): install/remove/purge/update/upgrade/full-upgrade/search/info/list/clean/autoremove/tools — tools.txt ở /usr/share/nexus/tools.txt. nexfetch bash đọc dpkg-query.
+- Phiên sau nếu bro muốn: slim ISO (target <900MB), thêm variant (KDE?), hoặc quay lại win11 (connector SKU OK, job fail sau đó chưa debug).
