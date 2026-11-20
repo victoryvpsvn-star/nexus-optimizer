@@ -109,6 +109,9 @@ sed -i 's/^COMPRESS=.*/COMPRESS=zstd/' "$R/etc/initramfs-tools/initramfs.conf"
 chroot "$R" systemctl enable fail2ban.service zramswap.service fstrim.timer >/dev/null 2>&1 || echo "WARN: enable fail2ban/zramswap/fstrim loi (kiem tra log)"
 # PAM: nhan nexus-idle hook (pam_exec) — phai sau khi libpam-runtime co mat (openssh run1)
 chroot "$R" pam-auth-update --package >/dev/null 2>&1 || echo "WARN: pam-auth-update loi (hook idle khong kich hoat)"
+# pam-auth-update trong chroot khong nhat dinh nhan pam-configs ngoai dpkg -> ghi truc tiep cho chac
+grep -q pam_exec "$R/etc/pam.d/common-session" || \
+  echo 'session optional pam_exec.so /usr/local/sbin/nexus-session.sh' >> "$R/etc/pam.d/common-session"
 grep -q pam_exec "$R/etc/pam.d/common-session" && echo "pam_exec nexus-idle: DA vao common-session" || echo "WARN: pam_exec chua co trong common-session"
 
 echo "=== [6/8] apt run 2: kernel cloud-amd64 (initramfs tự tạo) ==="
