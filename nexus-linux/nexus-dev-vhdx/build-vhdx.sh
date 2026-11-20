@@ -130,7 +130,7 @@ start=$P2_START, size=$ROOT_SECTORS, type=83
 EOF
 
 # ESP: FAT32 dựng riêng rồi dd vào vị trí p1 — KHÔNG mount
-mkfs.vfat -q -C "$ESP" -F32 -i "$ESPIMG_UUID" -n ESP $((P1_SECTORS * 512 / 1024))
+mkfs.vfat -C "$ESP" -F32 -i "$ESPIMG_UUID" -n ESP $((P1_SECTORS * 512 / 1024))
 mmd -i "$ESP" ::/EFI ::/EFI/BOOT ::/EFI/debian
 mcopy -i "$ESP" "$R/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed" ::/EFI/BOOT/BOOTX64.EFI
 cat > /tmp/grub-stub.cfg <<EOF
