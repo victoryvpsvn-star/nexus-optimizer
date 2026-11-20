@@ -857,3 +857,11 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - BA BAT TRONG LOG v5: "WARN: pam_exec chua co trong common-session" — pam-auth-update --package trong chroot khong nhan pam-configs ngoai dpkg. FIX ab0524a: grep || echo line 'session optional pam_exec.so /usr/local/sbin/nexus-session.sh' >> common-session truc tiep. v5.1 = idle TUC THI khi logout (v5 chi qua timer 5p — van chay).
 - Turn sau: poll run ab0524a -> neu xanh + log co "DA vao common-session" -> tai VHDX 1551892480 bytes moi (updated sau 12:21Z) + PATCH release v5.1 ghi chu idle tuc thi + Discord. GPU: VM khong co GPU that — khong toi uu duoc (tranh buzzword).
 - VHDX hien trong download/ = v5 (12:21Z, timer-idle), khong phai v5.1.
+
+## 17-w: v6 NX-ONLY HOÀN TOÀN + alpine-grade (14ce704 XANH, run 44740878380; asset 771885761 updated 13:14:27Z — DA TAI VE download/)
+- User bat ky 2 lan: "van con apt??? chi con nx" + "nhe nhu alpine van du suc debian cho dev".
+- v6: (1) /usr/local/bin/apt STUB TU CHOI (echo chi dan nx, exit 1) — apt-get giu ngam PATH cho unattended-upgrades + backend nx (apt-cache) — KHONG DUOC STUB apt-get se vo hieu hoa auto-update; (2) BO fail2ban + python3-systemd + iptables KHOI RUN1 -> nftables.conf: inet nexus chain input policy accept, SSH rate 6 conn/min burst 10 (established,related accept truoc) + log gioi han 1/min burst 3 khi drop — 0 RAM 0 CPU kernel-level, enable nftables.service; (3) mask getty tty2-6 (ln /dev/null) chi giu tty1 + serial; (4) motd v6 "NEXUS Linux Dev v5 (bookworm core) — alpine-light + hardened".
+- v5.1 log CONFIRM: "pam_exec nexus-idle: DA vao common-session" + BOOT TEST PASS — idle mode TUC THI hoat dong (khong cho timer).
+- VHDX v6 (1551892480 bytes) da tai download/ + release PATCH v6 + Discord OK.
+- LUU Y: apt-cache van dung boi nx search/info; dpkg/apt-get con — neu user kiem tra "which apt" se thay /usr/local/bin/apt (stub). Neu doi hoi sau: khong duoc xoa python3 (unattended-upgrades can).
+- GPU: khong co GPU that tren VM — khong toi uu duoc (da noi thang voi user).
