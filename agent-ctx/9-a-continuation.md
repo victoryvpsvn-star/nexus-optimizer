@@ -865,3 +865,10 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - VHDX v6 (1551892480 bytes) da tai download/ + release PATCH v6 + Discord OK.
 - LUU Y: apt-cache van dung boi nx search/info; dpkg/apt-get con — neu user kiem tra "which apt" se thay /usr/local/bin/apt (stub). Neu doi hoi sau: khong duoc xoa python3 (unattended-upgrades can).
 - GPU: khong co GPU that tren VM — khong toi uu duoc (da noi thang voi user).
+
+## 17-x: v6.1 TỰ CHỮA host-storage lỗi (6386e9d XANH, run 44749058617; asset 772067674 updated 14:09:55Z — ĐÃ tải download/)
+- Bug user báo (screenshot): EXT4-fs (sda2) WRITE I/O error sector 411640 (superblock/journal đầu sda2) -> "Detected aborted journal" -> "Remounting filesystem read-only" -> spam loop journald.
+- CHẨN ĐOÁN: lỗi tầng block device HOST-SIDE (host chứa VHDX full/quota — dynamic VHDX phình; hoặc VHDX hỏng do copy thiếu; hoặc storage host lỗi) — KHÔNG phải image (CI boot-test ghi OK; sda = storvsc Hyper-V Gen2 ✓; sector 411640 ≈ đầu sda2 khớp superblock).
+- v6.1: (1) grub cmdline +fsck.repair=yes — reboot = fsck -y tự chạy không hỏi interactive (console VPS không gõ được — fs dirty tự fsck nhưng hỏi = kẹt); (2) nx fsck helper (touch /forcefsck + hướng dẫn; nếu fs RO thì báo reboot vẫn kích hoạt fsck vì dirty); (3) motd thêm dòng cứu lỗi.
+- ĐÃ TẢI VHDX v6.1 (1551892480 bytes) + release PATCH v6.1 (checklist xử lý 4 bước) + Discord.
+- NEXT: nếu user vẫn lỗi sau khi kiểm tra host + reboot -> khả năng VHDX file hỏng trên host -> hướng dẫn tải lại + sha256; nếu user đổi sang host khác chạy OK -> chốt host-side.
