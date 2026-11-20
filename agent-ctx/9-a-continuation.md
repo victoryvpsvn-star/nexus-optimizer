@@ -841,3 +841,11 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - VHDX moi (1551892480 bytes) da tai ve /home/z/my-project/download/nexus-linux-dev.vhdx + release nexus-linux-dev-vhdx updated 09:55:58Z + PATCH release body (SSH FIXED + BOOT-TESTED + huong dan connect) + Discord green OK.
 - sshd_config.d/nexus.conf: PermitRootLogin yes + PasswordAuthentication yes; nexus-net.service DHCP sau udev-settle; udev rule eth0; initramfs drivers + rootdelay.
 - NEXT NEU BRO BAO LOI KHAC: doc DIAG block trong log CI (==LINK==/==RULES==/==DHC==/==LOG== da doc dung bang prompt-consume).
+
+## 17-u: v4 HARDENED — nexfetch tty-only + bao mat + toi uu (commit 398dd6a, run 44721795433 success)
+- User phan hoi: luc SSH hien nexfetch "nho lo" -> bo. Nguyen nhan: /etc/profile.d/00-nexus.sh (tu includes.chroot cua live-build) chay nexfetch moi login shell.
+- Fix: VHDX includes/etc/profile.d/00-nexus.sh override — nexfetch chi chay tren /dev/tty[0-9]*|/dev/ttyS[0-9]* (SSH pts/* tinh sac). motd override gon 5 dong (bo append trong build script).
+- Bao mat: sshd_config.d/nexus.conf them MaxAuthTries 4/LoginGraceTime 30/ClientAlive 300x2/UseDNS no/X11Forwarding no/Ciphers chacha20+aesgcm/MACs etm/Kex curve25519+dh16-18; fail2ban (jail.local backend=systemd, sshd aggressive, bantime 1h increment x2) + iptables + python3-systemd RUN1; unattended-upgrades (20auto-upgrades); sysctl 99-nexus-hardening (kptr 2, dmesg 1, bpf_jit_harden 2, redirect/source-route 0, log_martians, protected_regular/fifos 2).
+- Toi uu: BBR + fq + tcp_fastopen + slow_start_after_idle 0 + port_range; zram-tools zstd 50% (enable tường minh + zramswap.service); nofile 65535 (limits.d + system.conf.d DefaultLimitNOFILE); journald persistent/compress/200M; apt 99nexus (retries 3, timeout 15); ssh client config.d (ServerAlive 60x3, HashKnownHosts).
+- Run 398dd6a XANH lan dau — boot test khong bi hardening pha. VHDX tai ve download/ (background, cho xong confirm size).
+- ISO live CHUA ap dung lo nay (rieng build) — neu can lam tuong tu cho ISO turn sau.
