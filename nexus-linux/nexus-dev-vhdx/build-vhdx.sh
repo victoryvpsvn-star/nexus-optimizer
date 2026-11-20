@@ -143,7 +143,7 @@ sed -i 's/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-nexus1"/' .config
 grep -q '^CONFIG_LOCALVERSION=' .config || echo 'CONFIG_LOCALVERSION="-nexus1"' >> .config
 make olddefconfig
 echo "NEXUS kernel overrides: $(grep -c CONFIG_ "$VHDXDIR/kernel/nexus.config") | LOCALVERSION=$(grep '^CONFIG_LOCALVERSION=' .config)"
-make -j"$(nproc)" bzImage
+make -j"$(nproc)"
 KVN=$(make -s kernelrelease)
 echo "NEXUS kernel release (sau build): $KVN"
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends kmod >/dev/null 2>&1 || true
