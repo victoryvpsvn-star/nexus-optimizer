@@ -1,5 +1,7 @@
 # NEXUS OPTIMIZER — Bộ công cụ hệ thống đa năng (Sakura Edition)
 
+[![OctoCounts](https://api.octocounts.com/badge/victoryvpsvn-star/nexus-optimizer/branch/main)](https://octocounts.com/github/victoryvpsvn-star/nexus-optimizer/tree/main)
+
 Dashboard giám sát + tối ưu hệ thống tất-cả-trong-một với giao diện **Sakura hồng dịu**, bo góc mềm, không còn góc nhọn nào. Mở app lên là sakura màu hồng với cánh hoa rơi.
 
 ## Tính năng
