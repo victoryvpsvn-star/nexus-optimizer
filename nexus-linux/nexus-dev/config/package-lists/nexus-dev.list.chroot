@@ -1,8 +1,8 @@
-## NEXUS Linux Dev SLIM — terminal cho dev, mục tiêu: VM 1-1.5GB RAM / 0.25-0.5 core / disk 2GB vẫn sống
+## NEXUS Linux Dev ULTRA SLIM v3 — nhẹ nhất có thể mà vẫn xịn
+## Triết lý: giữ tool identity (Kali-style + terminal xịn), cắt thứ `nx install` phục hồi trong 1 phút.
 ## Tên gói được validate bởi nexus-linux/validate-packages.sh TRƯỚC khi build.
-## Thêm tool mới: thêm 1 dòng vào đây + push — CI tự build lại ISO.
 
-## base live system — kernel CLOUD (nhỏ hơn ~250MB, tối ưu VM: Hyper-V/KVM/Azure; máy thật có thể thiếu driver)
+## base live system — kernel CLOUD (tối ưu VM Hyper-V/KVM; máy thật có thể thiếu driver)
 linux-image-cloud-amd64
 initramfs-tools
 live-boot
@@ -14,32 +14,27 @@ locales
 console-setup
 bash-completion
 
-## dev core (giữ compiler; đã cắt cmake/ltrace cho nhẹ)
-build-essential
-gdb
-strace
+## scripting/dev core — compiler + node đã cắt (nx install build-essential | nodejs npm khi cần)
 python3
 python3-pip
 python3-venv
 python3-requests
 python3-scapy
 python3-impacket
-nodejs
-npm
 openssl
 sqlite3
 jq
+strace
 
-## terminal & tiện ích (+ zram swap & earlyoom cho máy 1GB RAM)
+## terminal xịn
 git
 curl
 wget
-aria2
 rsync
 openssh-client
 tmux
+vim
 nano
-neovim
 less
 ripgrep
 fd-find
@@ -49,10 +44,8 @@ tree
 file
 zip
 unzip
-p7zip-full
 xz-utils
 bzip2
-gnupg
 btop
 net-tools
 iputils-ping
@@ -60,7 +53,7 @@ iproute2
 zram-tools
 earlyoom
 
-## network / recon (đã cắt tshark — tcpdump là đủ)
+## network / recon
 traceroute
 bind9-dnsutils
 whois
@@ -70,14 +63,12 @@ masscan
 tcpdump
 sshuttle
 
-## web/appsec/crack kiểu Kali (đã cắt hashcat/aircrack-ng — vô dụng trên VM không GPU/WiFi)
+## web/appsec/crack kiểu Kali
 sqlmap
 hydra
-john
 macchanger
 proxychains4
 dirb
-wfuzz
 whatweb
 binwalk
 steghide

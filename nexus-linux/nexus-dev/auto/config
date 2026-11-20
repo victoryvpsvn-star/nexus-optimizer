@@ -8,6 +8,7 @@ lb config noauto \
     --architectures amd64 \
     --archive-areas "main contrib non-free non-free-firmware" \
     --apt-recommends false \
+    --squashfs-compression xz \
     --binary-images iso-hybrid \
     --debian-installer none \
     --iso-volume "NEXUS-Linux-Dev" \

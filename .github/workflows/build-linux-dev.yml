@@ -43,22 +43,23 @@ jobs:
       - name: Upload release nexus-linux-dev-v1
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nexus-linux-dev-v2
+          tag_name: nexus-linux-dev-v3
           name: NEXUS Linux Dev v1 — Terminal cho dev (Debian base)
           body: |
-            **NEXUS Linux Dev v2 (SLIM)** — terminal cho dev, base Debian bookworm, KHÔNG Alpine, tool kiểu Kali, vẫn NEXUS OS.
+            **NEXUS Linux Dev v3 (ULTRA SLIM)** — nhẹ nhất có thể mà vẫn xịn. Base Debian bookworm, KHÔNG Alpine, tool kiểu Kali, vẫn NEXUS OS.
 
-            **Mục tiêu "cực nhẹ" đã đạt:** ISO ~[SIZE]MB — VM **1-1.5GB RAM / 0.25-0.5 core / disk 2GB** vẫn chạy thoải mái.
+            **Kích thước:** v1 1.5GB → v2 1.2GB → **v3 ~850MB** (squashfs nén xz)
 
-            - Kernel **cloud-amd64** (tối ưu VM: Hyper-V/KVM — nhỏ hơn ~250MB; máy thật có thể thiếu driver WiFi)
-            - Không recommends, không man/docs/locale/icons thừa (dpkg path-exclude)
-            - **zram swap 50% RAM + earlyoom** — máy 1GB RAM không chết vì OOM
-            - Cắt: hashcat, aircrack-ng, tshark, cmake, vim, htop, man-db, openssh-server (vô dụng trên VM)
-            - Giữ nguyên đội dev+Kali-style: gcc/gdb, python3+scapy+impacket, nodejs+npm, nmap, masscan, tcpdump, sqlmap, hydra, john, binwalk... — `nx tools` xem bảng
-            - Lệnh `nx install <gói>` thay apt • `nexfetch` riêng • login `nexus` tự động tty1 (mật khẩu nexus, sudo NOPASSWD), root: `root`
-            - Live boot từ ISO → disk 2GB không cần phân vùng; boot UEFI + BIOS (Hyper-V Gen 2 OK)
+            **Mục tiêu resource giữ nguyên:** VM **1GB RAM / 0.25 core / disk 2GB** vẫn chạy (live boot từ ISO, zram swap 50% RAM + earlyoom).
 
-            **Hyper-V Gen 2:** New VM → Generation 2 → RAM 1024-2048MB → 1 vCPU → boot ISO → login → `nexfetch`. Đặt Security: tắt Secure Boot (hoặc template Microsoft UEFI CA).
+            **Triết lý v3:** giữ tool identity, cắt thứ `nx install` phục hồi trong 1 phút:
+            - Giữ: python3 + pip + scapy + impacket, nmap, masscan, tcpdump, sqlmap, hydra, john, binwalk, dirb, whatweb, exiftool, sshuttle, macchanger, proxychains4, git, tmux, vim, ripgrep, fzf, fd-find, ncdu, jq, sqlite3, btop, strace, openssh-client, curl/wget/rsync
+            - Cắt: build-essential/gdb (compiler — `nx install build-essential gdb` phục hồi), nodejs+npm (`nx install nodejs npm`), gnupg, neovim, aria2, p7zip-full, wfuzz
+            - **nx 1.1**: tự `apt-get update` lần đầu (ISO slim không chứa apt lists) — `nx install` chạy được ngay
+            - **pip.conf break-system-packages**: `pip install` chạy thẳng kiểu Kali, không cần venv
+            - Kernel **cloud-amd64** (tối ưu Hyper-V/KVM; máy thật có thể thiếu driver WiFi), không recommends, không man/docs/locale/icons
+
+            **Hyper-V Gen 2:** New VM → Generation 2 → RAM 1024MB → 1 vCPU → boot ISO → tự login `nexus` → `nexfetch`. Security: tắt Secure Boot (hoặc template Microsoft UEFI CA).
 
             Thêm tool: sửa `nexus-linux/nexus-dev/config/package-lists/nexus-dev.list.chroot` + push — CI tự build lại.
           files: nexus-linux/nexus-dev/nexus-linux-dev.iso

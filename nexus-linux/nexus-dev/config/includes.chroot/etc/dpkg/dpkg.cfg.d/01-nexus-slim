@@ -6,3 +6,6 @@ path-exclude=/usr/share/locale/*
 path-exclude=/usr/share/icons/*
 path-include=/usr/share/locale/en/LC_MESSAGES/*
 path-include=/usr/share/locale/en_GB/LC_MESSAGES/*
+path-exclude=/usr/share/info/*
+path-exclude=/usr/share/bug/*
+path-exclude=/usr/share/lintian/*

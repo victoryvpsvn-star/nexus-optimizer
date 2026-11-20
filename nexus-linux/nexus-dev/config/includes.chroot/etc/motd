@@ -1,7 +1,8 @@
-NEXUS Linux 1.0 Dev Terminal (Slim) — welcome bro!
+NEXUS Linux 1.0 Dev Terminal (Ultra Slim v3) — welcome bro!
 
-  Cai goi       : nx install <goi>    (thay apt)
+  Cai goi       : nx install <goi>   (tu update lan dau, thay apt)
   Tra tool      : nx tools
   Info he thong : nexfetch
-  Tieu chi nhe  : VM 1-1.5GB RAM / 0.25-0.5 core / disk 2GB van chay
-                  (live boot tu ISO, zram swap + earlyoom da bat san)
+  Phuc hoi tool : nx install build-essential gdb | nodejs npm (1 phut)
+  Tieu chi nhe  : VM 1GB RAM / 0.25 core / disk 2GB van chay
+                  (zram swap + earlyoom da bat san)
