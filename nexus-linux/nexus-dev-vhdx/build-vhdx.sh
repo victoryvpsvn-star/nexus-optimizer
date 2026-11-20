@@ -77,7 +77,7 @@ echo "=== [5/8] apt run 1: grub-efi + openssh + ifupdown + growpart + toolset v3
 # đọc package list v3, bỏ phần live-only
 PKGS=$(grep -v '^#' "$DEV/config/package-lists/nexus-dev.list.chroot" | grep -v '^$' \
        | grep -v -x -e 'live-boot' -e 'live-config' -e 'user-setup' -e 'linux-image-cloud-amd64' -e 'initramfs-tools')
-RUN1="sudo ifupdown openssh-server grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools $PKGS"
+RUN1="sudo ifupdown openssh-server grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
 chroot_env apt-get -y update -qq
 # force-confdef/confold: file config include sẵn giữ nguyên, dpkg không bao giờ hỏi conffile (EOF = chết)
 DPGOPT='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
@@ -118,6 +118,9 @@ RAW_MB=$(( (USED_MB * 13 / 10 + 500 + 255) / 256 * 256 ))
 ROOT_SECTORS=$(( (RAW_MB - 202) * 2048 ))
 ROOT_BLOCKS=$(( ROOT_SECTORS * 512 / 4096 ))
 echo "rootfs dùng ${USED_MB}MB → disk ${RAW_MB}MB (p2 ${ROOT_BLOCKS} blocks)"
+
+# file raw SPARSE — qemu-img convert sau đó sẽ bỏ vùng trống → VHDX file nhỏ gọn
+truncate -s $((RAW_MB * 1024 * 1024)) "$IMG"
 
 sfdisk --force "$IMG" <<EOF
 label: dos
