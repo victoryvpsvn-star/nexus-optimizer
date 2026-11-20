@@ -10,6 +10,12 @@ spawn qemu-system-x86_64 -machine q35 -smp 2 -m 1024 -nographic -no-reboot \
 expect {
     -re "nexus@nexus" {}
     -re "login:" { send "nexus\r"; expect "Password:"; send "nexus\r" }
+    -re "\(initramfs\)" {
+        send "cat /proc/partitions; ls /dev/sd* 2>&1; ls /dev/vd* 2>&1\r"
+        sleep 3
+        puts "\nFAIL-DIAG: initramfs khong tim thay root device — xem /proc/partitions + /dev o tren"
+        exit 1
+    }
     timeout { puts "\nFAIL-NOLOGIN: khong thay login/autologin trong 480s — boot UEFI hoac systemd loi"; exit 1 }
     eof { puts "\nFAIL-EOF: qemu ket thuc som (kernel panic/reboot loop?)"; exit 1 }
 }

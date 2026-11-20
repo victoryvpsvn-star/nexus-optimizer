@@ -85,10 +85,33 @@ chroot_env apt-get -y $DPGOPT install --no-install-recommends $RUN1 >/dev/null
 # chặn update-grub (grub.cfg viết tay ở bước 7)
 rm -f "$R/etc/kernel/postinst.d/zz-update-grub" "$R/etc/kernel/postrm.d/zz-update-grub"
 
+# BẮT BUỘC driver storage/mang vào initramfs — 'most' của initramfs-tools đã bỏ sót AHCI
+# (boot test qemu bắt được: "Gave up waiting for root file system device")
+cat > "$R/etc/initramfs-tools/modules" <<'EOF'
+ahci
+sd_mod
+ata_piix
+hv_storvsc
+hv_netvsc
+virtio_blk
+virtio_scsi
+virtio_net
+virtio_pci
+nvme
+xhci_pci
+ehci_pci
+usb_storage
+uas
+EOF
+sed -i 's/^MODULES=.*/MODULES=most/'  "$R/etc/initramfs-tools/initramfs.conf"
+sed -i 's/^COMPRESS=.*/COMPRESS=zstd/' "$R/etc/initramfs-tools/initramfs.conf"
+
 echo "=== [6/8] apt run 2: kernel cloud-amd64 (initramfs tự tạo) ==="
 chroot_env apt-get -y $DPGOPT install --no-install-recommends linux-image-cloud-amd64 >/dev/null
 KVER=$(ls "$R"/boot/vmlinuz-* | sed 's|.*/vmlinuz-||' | head -1)
 echo "kernel: $KVER"
+echo "--- driver trong initramfs (diagnostic):"
+chroot "$R" lsinitramfs "/boot/initrd.img-$KVER" | grep -E 'ahci\.ko|sd_mod\.ko|hv_storvsc\.ko|virtio_blk\.ko' | head -6 || echo "WARN: khong thay driver storage trong initramfs!"
 
 echo "=== [7/8] user + UUID + grub.cfg + image ==="
 chroot "$R" useradd -m -s /bin/bash -G sudo nexus
@@ -104,7 +127,7 @@ cat > "$R/boot/grub/grub.cfg" <<EOF
 set default=0
 set timeout=2
 menuentry 'NEXUS Linux Dev (installed)' {
-    linux /boot/vmlinuz-$KVER root=UUID=$ROOTUUID ro quiet console=tty1 console=ttyS0,115200n8
+    linux /boot/vmlinuz-$KVER root=UUID=$ROOTUUID ro rootdelay=3 quiet console=tty1 console=ttyS0,115200n8
     initrd /boot/initrd.img-$KVER
 }
 EOF
