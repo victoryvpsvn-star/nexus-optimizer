@@ -77,12 +77,12 @@ jobs:
             bash nexus-linux/nexus-dev-vhdx/build-vhdx.sh 2>&1 | tee /tmp/vhdx.log
             test -f nexus-linux-dev.vhdx || { echo "::error::không tạo được VHDX — đuôi log:"; tail -60 /tmp/vhdx.log; exit 1; }
             ls -la nexus-linux-dev.vhdx
-            echo '=== boot smoke-test: qemu + OVMF UEFI (proof: boot + ssh + network + port 22) ==='
+            echo "=== boot smoke-test: qemu + OVMF UEFI (proof: boot + ssh + network + port 22) ==="
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends qemu-system-x86 ovmf expect >/dev/null
             qemu-img convert -O raw nexus-linux-dev.vhdx /tmp/test.raw
             cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/OVMF_VARS.fd
             expect -f nexus-linux/nexus-dev-vhdx/boot-test.exp 2>&1 | tee /tmp/boot-test.log
-            grep -q 'BOOT TEST PASS' /tmp/boot-test.log
+            grep -q "BOOT TEST PASS" /tmp/boot-test.log
           '
 
       - name: Upload release nexus-linux-dev-vhdx
