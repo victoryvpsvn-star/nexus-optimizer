@@ -134,7 +134,8 @@ while IFS= read -r line; do
     case "$line" in
         CONFIG_*=y) opt="${line#CONFIG_}"; scripts/config --enable "${opt%=y}" ;;
         CONFIG_*=n) opt="${line#CONFIG_}"; scripts/config --disable "${opt%=n}" ;;
-        CONFIG_*=*\"*) opt="${line#CONFIG_}"; key="${opt%%=*}"; val="${opt#*=}"; val="${val%\"}"; val="${val#\"}"; scripts/config --set-str "$key" "$val" ;;
+        CONFIG_LOCALVERSION=*) raw="${line#CONFIG_LOCALVERSION=}"; raw="${raw%\\"}"; raw="${raw#\\"}"; scripts/config --set-str LOCALVERSION "$raw" ;;
+        CONFIG_DEFAULT_HOSTNAME=*) raw="${line#CONFIG_DEFAULT_HOSTNAME=}"; raw="${raw%\\"}"; raw="${raw#\\"}"; scripts/config --set-str DEFAULT_HOSTNAME "$raw" ;;
     esac
 done < "$VHDXDIR/kernel/nexus.config"
 make olddefconfig
