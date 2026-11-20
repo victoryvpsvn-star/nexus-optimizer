@@ -24,7 +24,7 @@ jobs:
         run: |
           docker run --rm --privileged -v "$PWD":/ws -w /ws debian:bookworm bash -euxo pipefail -c '
             apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends live-build xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux mtools dosfstools >/dev/null
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends live-build xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux mtools dosfstools file >/dev/null
             cd nexus-linux/nexus-dev
             sh ./auto/config
             lb build 2>&1 | tee /tmp/lb.log
