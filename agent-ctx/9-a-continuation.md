@@ -788,3 +788,11 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - LƯU Ý: 1.5GB chưa đúng "cực nhẹ" — lý do: recommends + man/docs + build chain. Bản slim sau: --apt-recommends false, rm man/doc/info, bỏ openssh-server?, mới chỉ = bro nói tiếp. ISO boot UEFI+BIOS đã verify bằng xorriso report trong CI.
 - nx (bash): install/remove/purge/update/upgrade/full-upgrade/search/info/list/clean/autoremove/tools — tools.txt ở /usr/share/nexus/tools.txt. nexfetch bash đọc dpkg-query.
 - Phiên sau nếu bro muốn: slim ISO (target <900MB), thêm variant (KDE?), hoặc quay lại win11 (connector SKU OK, job fail sau đó chưa debug).
+
+
+## 17-o: NEXUS Linux Dev v2 SLIM — XANH LẦN 1, đạt target resource (turn ngắn)
+- Bro yêu cầu: nhẹ hơn + VM 1.5/1GB RAM + 0.25-0.5 core + disk 2GB vẫn sống.
+- 5 lớp slim: (1) linux-image-cloud-amd64 thay amd64 (-250MB, tối ưu VM Hyper-V/KVM; máy thật thiếu driver — đã cảnh báo); (2) --apt-recommends false; (3) dpkg path-exclude docs/man/locale/icons qua includes/etc/dpkg/dpkg.cfg.d/01-nexus-slim (path-include en messages); (4) cắt hashcat/aircrack-ng/tshark/cmake/vim/ltrace/htop/man-db/openssh-server (vô dụng trên VM); (5) thêm zram-tools (ALGO=zstd PERCENT=50 /etc/default/zramswap) + earlyoom + user-setup (bảo hiểm live user khi recommends=false). 73/73 gói hợp lệ (validator bắt sẵn).
+- Kết quả: ISO 1.5GB → **1.2GB (1201.8MB)**, CI xanh ngay lần 1 (44d98e3), release **nexus-linux-dev-v2** (sha dd2dec77…), đã tải download/nexus-linux-dev-v2-slim.iso + Discord (204).
+- Lỗi nhỏ đã vá: body release có placeholder [SIZE] → PATCH API xong. Sandbox recycle giữa turn mất ISO v1 local + repo local tụt về 7b59a4a → fetch+reset origin + stash pe/win11 junk (recoverable trong stash). V1 vẫn an toàn trên release nexus-linux-dev-v1.
+- Chưa đạt cực hạn: nếu bro muốn ISO <900MB nữa → v3: bỏ build-essential/nodejs/npm/gnupg (-150MB+) hoặc squashfs xz (-8%). Resource targets ĐÃ ĐẠT (RAM/CPU/disk là cái bro cần).
