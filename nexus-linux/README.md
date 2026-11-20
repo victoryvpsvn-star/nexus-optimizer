@@ -1,6 +1,6 @@
 # NEXUS Linux Dev — bản terminal cho dev (Debian base)
 
-Bản **NEXUS OS** dành cho dev: chỉ terminal, cực nhẹ, base **Debian bookworm**
+Bản **NEXUS OS** dành cho dev: chỉ terminal, cực nhẹ (mục tiêu VM 1GB RAM / 0.25 core / disk 2GB), base **Debian bookworm**
 (không Alpine), đội tool security/dev kiểu Kali. Boot UEFI + BIOS → Hyper-V Gen 2 OK.
 
 ## Bản sắc

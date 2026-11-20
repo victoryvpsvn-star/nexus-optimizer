@@ -1,0 +1,3 @@
+# NEXUS: zram swap trong RAM — may 1GB RAM van thoai mai
+ALGO=zstd
+PERCENT=50

@@ -1,24 +1,23 @@
-## NEXUS Linux Dev — terminal cho dev + bộ tool kiểu Kali (Debian bookworm main)
+## NEXUS Linux Dev SLIM — terminal cho dev, mục tiêu: VM 1-1.5GB RAM / 0.25-0.5 core / disk 2GB vẫn sống
 ## Tên gói được validate bởi nexus-linux/validate-packages.sh TRƯỚC khi build.
 ## Thêm tool mới: thêm 1 dòng vào đây + push — CI tự build lại ISO.
 
-## base live system
-linux-image-amd64
+## base live system — kernel CLOUD (nhỏ hơn ~250MB, tối ưu VM: Hyper-V/KVM/Azure; máy thật có thể thiếu driver)
+linux-image-cloud-amd64
 initramfs-tools
 live-boot
 live-config
 systemd-sysv
+user-setup
 sudo
 locales
 console-setup
 bash-completion
 
-## dev core
+## dev core (giữ compiler; đã cắt cmake/ltrace cho nhẹ)
 build-essential
 gdb
 strace
-ltrace
-cmake
 python3
 python3-pip
 python3-venv
@@ -31,16 +30,14 @@ openssl
 sqlite3
 jq
 
-## terminal & tiện ích
+## terminal & tiện ích (+ zram swap & earlyoom cho máy 1GB RAM)
 git
 curl
 wget
 aria2
 rsync
 openssh-client
-openssh-server
 tmux
-vim
 nano
 neovim
 less
@@ -56,30 +53,27 @@ p7zip-full
 xz-utils
 bzip2
 gnupg
-man-db
-htop
 btop
 net-tools
 iputils-ping
 iproute2
+zram-tools
+earlyoom
 
-## network / recon
+## network / recon (đã cắt tshark — tcpdump là đủ)
 traceroute
 bind9-dnsutils
 whois
 mtr-tiny
 nmap
 masscan
-tshark
+tcpdump
 sshuttle
 
-## web / appsec / crack (kiểu Kali)
-wapiti
+## web/appsec/crack kiểu Kali (đã cắt hashcat/aircrack-ng — vô dụng trên VM không GPU/WiFi)
 sqlmap
 hydra
 john
-hashcat
-aircrack-ng
 macchanger
 proxychains4
 dirb
@@ -90,4 +84,3 @@ steghide
 libimage-exiftool-perl
 socat
 netcat-openbsd
-tcpdump

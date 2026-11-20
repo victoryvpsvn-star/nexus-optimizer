@@ -1,8 +1,9 @@
-== NEXUS Linux Dev — tool đã cài (thêm mới: nx install <gói>) ==
-Recon/Quét     : nmap masscan whatweb dig(bind9-dnsutils) whois mtr
-Sniff/Mạng     : tcpdump tshark socat netcat macchanger sshuttle proxychains4
-Web/AppSec     : wapiti sqlmap dirb wfuzz binwalk steghide exiftool
-Brute/Crack    : hydra john hashcat aircrack-ng
+== NEXUS Linux Dev SLIM — tool da cai (them moi: nx install <goi>) ==
+Recon/Quet     : nmap masscan whatweb dig(bind9-dnsutils) whois mtr
+Sniff/Mang     : tcpdump socat netcat macchanger sshuttle proxychains4
+Web/AppSec     : sqlmap dirb wfuzz whatweb binwalk steghide exiftool
+Brute/Crack    : hydra john
 Exploit/Script : python3 + scapy + impacket
-Dev            : gcc g++ make cmake gdb strace ltrace python3 nodejs npm git tmux neovim ripgrep fzf fd ncdu jq sqlite3
-Tìm thêm       : nx search <từ>  |  cài mới: nx install <gói>
+Dev            : gcc g++ make gdb strace python3 nodejs npm git tmux neovim ripgrep fzf fd ncdu jq sqlite3 btop
+He thong       : zram swap 50% RAM (zram-tools) + earlyoom chong OOM — may 1GB RAM van song
+Tim them       : nx search <tu>  |  cai moi: nx install <goi>

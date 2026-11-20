@@ -1,0 +1,8 @@
+# NEXUS slim: bo docs/man/locale/icons ngay luc dpkg unzip — tiet ~200-300MB
+path-exclude=/usr/share/doc/*
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/man/**
+path-exclude=/usr/share/locale/*
+path-exclude=/usr/share/icons/*
+path-include=/usr/share/locale/en/LC_MESSAGES/*
+path-include=/usr/share/locale/en_GB/LC_MESSAGES/*

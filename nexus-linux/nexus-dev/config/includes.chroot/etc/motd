@@ -1,6 +1,7 @@
-NEXUS Linux 1.0 Dev Terminal — welcome bro!
+NEXUS Linux 1.0 Dev Terminal (Slim) — welcome bro!
 
-  Cài gói       : nx install <gói>    (thay apt)
+  Cai goi       : nx install <goi>    (thay apt)
   Tra tool      : nx tools
-  Info hệ thống : nexfetch
-  Đã cài sẵn    : 70+ tool dev/security kiểu Kali — gõ `nx tools` xem bảng
+  Info he thong : nexfetch
+  Tieu chi nhe  : VM 1-1.5GB RAM / 0.25-0.5 core / disk 2GB van chay
+                  (live boot tu ISO, zram swap + earlyoom da bat san)
