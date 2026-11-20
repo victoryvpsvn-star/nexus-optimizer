@@ -33,6 +33,9 @@ expect {
     -re "IPCNT=\[2-9\]" {}
     timeout { puts "\nFAIL-IP: khong co IPv4 global (DHCP/ifup loi)"; exit 1 }
 }
+# DIAG khi den day: dump link + rules + dhclient + log networking de tim nguyen nhan
+send "\recho ==LINK==; ip -o link; echo ==RULES==; ls /etc/udev/rules.d/; echo ==DHC==; which dhclient dhclient-script; ps -ef | grep -c dhclient; echo ==LOG==; sudo journalctl -b -u networking --no-pager 2>&1 | tail -8; echo ==END==\r"
+sleep 4
 send "R=\$(ss -tln | grep -q ':22 ' && echo OK || echo BAD); echo PORT22=\$R\r"
 expect {
     "PORT22=OK" {}
