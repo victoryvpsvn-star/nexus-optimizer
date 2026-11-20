@@ -21,7 +21,7 @@ echo "=== [1/8] deps container ==="
 apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     debootstrap qemu-utils dosfstools mtools uuid-runtime gpgv debian-archive-keyring \
-    fdisk e2fsprogs util-linux file >/dev/null
+    fdisk e2fsprogs util-linux file xz-utils curl ca-certificates >/dev/null
 
 echo "=== [2/8] debootstrap minbase bookworm ==="
 rm -rf "$R" "$IMG" "$ESP" "$OUT"
@@ -76,7 +76,7 @@ echo "=== [5/8] apt run 1: grub-efi + openssh + ifupdown + growpart + toolset v3
 # đọc package list v3, bỏ phần live-only
 PKGS=$(grep -v '^#' "$DEV/config/package-lists/nexus-dev.list.chroot" | grep -v '^$' \
        | grep -v -x -e 'live-boot' -e 'live-config' -e 'user-setup' -e 'linux-image-cloud-amd64' -e 'initramfs-tools')
-RUN1="sudo ifupdown openssh-server isc-dhcp-client nftables unattended-upgrades zram-tools grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
+RUN1="sudo ifupdown openssh-server isc-dhcp-client nftables unattended-upgrades zram-tools libncursesw6 grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
 chroot_env apt-get -y update -qq
 # force-confdef/confold: file config include sẵn giữ nguyên, dpkg không bao giờ hỏi conffile (EOF = chết)
 DPGOPT='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
@@ -123,6 +123,51 @@ echo "kernel: $KVER"
 echo "--- driver trong initramfs (diagnostic):"
 chroot "$R" lsinitramfs "/boot/initrd.img-$KVER" | grep -E 'ahci\.ko|sd_mod\.ko|hv_storvsc\.ko|virtio_blk\.ko' | head -6 || echo "WARN: khong thay driver storage trong initramfs!"
 
+echo "=== [6.5/8] KERNEL NEXUS RIÊNG (kernel.org 6.1.100 → vmlinuz-*-nexus1) ==="
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends build-essential bc bison flex libelf-dev >/dev/null 2>&1 || true
+cd /tmp
+[ -f linux-6.1.100.tar.xz ] || curl -fSL --retry 3 -o linux-6.1.100.tar.xz https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.1.100.tar.xz
+tar -xf linux-6.1.100.tar.xz
+cd linux-6.1.100
+make defconfig
+while IFS= read -r line; do
+    case "$line" in
+        CONFIG_*=y) opt="${line#CONFIG_}"; scripts/config --enable "${opt%=y}" ;;
+        CONFIG_*=n) opt="${line#CONFIG_}"; scripts/config --disable "${opt%=n}" ;;
+        CONFIG_*=*\"*) opt="${line#CONFIG_}"; key="${opt%%=*}"; val="${opt#*=}"; val="${val%\"}"; val="${val#\"}"; scripts/config --set-str "$key" "$val" ;;
+    esac
+done < "$VHDXDIR/kernel/nexus.config"
+make olddefconfig
+KVN=$(make -s kernelrelease)
+echo "NEXUS kernel: $KVN ($(grep -c CONFIG_ "$VHDXDIR/kernel/nexus.config") overrides trên defconfig)"
+make -j"$(nproc)" bzImage
+make INSTALL_MOD_PATH="$R" INSTALL_MOD_STRIP=1 modules_install >/dev/null 2>&1
+cp arch/x86/boot/bzImage "$R/boot/vmlinuz-$KVN"
+chroot "$R" depmod -a "$KVN" 2>/dev/null || true
+chroot "$R" mkinitramfs -o "/boot/initrd.img-$KVN" "$KVN"
+cd /tmp
+
+echo "=== [6.6/8] NPS — gói NEXUS tự build từ source (tree, htop) → .nxp → repo nội bộ ==="
+chmod 755 "$R/usr/lib/nexus/nxpkg"
+grep -q '^deb-src' /etc/apt/sources.list 2>/dev/null || echo "deb-src http://deb.debian.org/debian bookworm main" >> /etc/apt/sources.list
+apt-get update -qq
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends autoconf automake pkg-config libncurses-dev dpkg-dev >/dev/null 2>&1 || true
+mkdir -p "$R/var/lib/nx/repo" "$R/var/lib/nx/db"
+NPSSRC=$(mktemp -d); cd "$NPSSRC"
+if apt-get source tree >/dev/null 2>&1; then
+    TRDIR=$(find . -maxdepth 1 -type d -name 'tree-*' | head -1)
+    make -C "$TRDIR" -j"$(nproc)" >/dev/null 2>&1 && cp "$TRDIR/tree" "$R/usr/bin/tree" && chmod 755 "$R/usr/bin/tree" && echo "tree: build OK"
+fi
+if apt-get source htop >/dev/null 2>&1; then
+    HTDIR=$(find . -maxdepth 1 -type d -name 'htop-*' | head -1)
+    ( cd "$HTDIR" && { [ -x ./configure ] || ./autogen.sh >/dev/null 2>&1; } && ./configure --prefix=/usr >/dev/null 2>&1 && make -j"$(nproc)" >/dev/null 2>&1 ) && cp "$HTDIR/htop" "$R/usr/bin/htop" && chmod 755 "$R/usr/bin/htop" && echo "htop: build OK"
+fi
+NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" build tree 2.1.0 "NEXUS tree — liệt kê thư mục dạng cây (build từ source)" /usr/bin/tree || echo "WARN: nxp tree"
+NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" build htop 3.2.2 "NEXUS htop — monitor process (build từ source)" /usr/bin/htop || echo "WARN: nxp htop"
+NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" install tree >/dev/null 2>&1 || true
+NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" install htop >/dev/null 2>&1 || true
+cd /tmp
+
 echo "=== [7/8] user + UUID + grub.cfg + image ==="
 chroot "$R" useradd -m -s /bin/bash -G sudo nexus
 chroot "$R" bash -c 'echo nexus:nexus | chpasswd; echo root:root | chpasswd'
@@ -136,12 +181,19 @@ tmpfs           /tmp      tmpfs rw,nosuid,nodev,noexec,mode=1777,size=256M  0 0
 EOF
 cat > "$R/boot/grub/grub.cfg" <<EOF
 set default=0
-set timeout=2
-menuentry 'NEXUS Linux Dev (installed)' {
+set timeout=3
+menuentry 'NEXUS Linux Dev — kernel NEXUS ($KVN)' {
+    linux /boot/vmlinuz-$KVN root=UUID=$ROOTUUID ro rootdelay=3 fsck.repair=yes quiet console=tty1 console=ttyS0,115200n8
+    initrd /boot/initrd.img-$KVN
+}
+menuentry 'NEXUS Linux Dev — kernel Debian cloud (fallback)' {
     linux /boot/vmlinuz-$KVER root=UUID=$ROOTUUID ro rootdelay=3 fsck.repair=yes quiet console=tty1 console=ttyS0,115200n8
     initrd /boot/initrd.img-$KVER
 }
 EOF
+
+# NPS runtime thuần NEXUS: gỡ repo Debian khỏi image (nx apt-on bật lại khi thật sự cần)
+mv "$R/etc/apt/sources.list" "$R/etc/apt/sources.list.nexus-disabled" 2>/dev/null || true
 
 # đo dung lượng → chia partition vừa đủ (+25% slack, min 2GB, max 4GB)
 umount -l "$R/proc" 2>/dev/null || true; umount -l "$R/sys" 2>/dev/null || true; umount -l "$R/dev" 2>/dev/null || true

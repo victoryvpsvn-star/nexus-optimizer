@@ -1,50 +1,90 @@
 #!/bin/bash
-# NEXUS nx — trình quản lý gói của NEXUS Linux Dev (thay apt, backend apt-get)
+# NEXUS nx v2.0 — trình quản lý gói DUY NHẤT của NEXUS Linux
+# VHDX (NPS mode): backend = nxpkg — repo nội bộ NEXUS, KHÔNG có repo Debian/Ubuntu/Kali/Alpine
+# ISO (live): fallback apt engine
 S=""
 [ "$(id -u)" -ne 0 ] && S="sudo"
-# ISO slim không đóng gói apt lists — tự update lần đầu
+NPS=/usr/lib/nexus/nxpkg
+NPSMODE=0
+[ -x "$NPS" ] && NPSMODE=1
+
+if [ "$NPSMODE" = 1 ]; then
+    case "$1" in
+        install|i) shift; exec $S $NPS install "$@" ;;
+        remove|r) shift; exec $S $NPS remove "$@" ;;
+        purge) shift; exec $S $NPS remove "$@" ;;
+        update) exec $S $NPS update ;;
+        upgrade|full-upgrade) shift; exec $S $NPS upgrade "$@" ;;
+        search|s) shift; exec $NPS search "$@" ;;
+        info|show) shift; exec $NPS info "$@" ;;
+        list) exec $NPS list ;;
+        verify) exec $NPS verify ;;
+        clean) echo "[nx] NPS không có cache — repo nội bộ nằm ở /var/lib/nx/repo" ;;
+        autoremove) echo "[nx] NPS không theo dependency — không rác để dọn" ;;
+        apt-on)
+            $S mv /etc/apt/sources.list.nexus-disabled /etc/apt/sources.list 2>/dev/null || { echo "[nx] không có sources.list bị tắt"; exit 1; }
+            $S apt-get update && echo "[nx] repo Debian ĐÃ BẬT (nx apt-off để tắt lại)" ;;
+        apt-off)
+            $S mv /etc/apt/sources.list /etc/apt/sources.list.nexus-disabled 2>/dev/null || { echo "[nx] Debian repo đang TẮT"; exit 1; }
+            echo "[nx] repo Debian ĐÃ TẮT — hệ chạy thuần NPS (repo nội bộ NEXUS)" ;;
+        hogs) ps -eo pid,user,pmem,pcpu,comm --sort=-pmem | head -11 ;;
+        fsck)
+            $S touch /forcefsck 2>/dev/null && echo "[NEXUS] da tao /forcefsck — chay: sudo reboot" \
+                && echo "  -> lan boot sau fsck -y tu chay truoc mount (sua journal aborted / fs read-only)" \
+                || echo "[NEXUS] khong the tao /forcefsck (fs read-only?) — reboot van kich hoat fsck vi fs dirty" ;;
+        tools) cat /usr/share/nexus/tools.txt ;;
+        *)
+            cat <<'EOF'
+NEXUS nx v2.0 — NEXUS Package System (NPS)
+Repo duy nhất của hệ: NỘI BỘ NEXUS (/var/lib/nx/repo) — KHÔNG dùng repo Debian/Ubuntu/Kali/Alpine
+  nx install <gói>    cài từ repo nội bộ (mỗi gói .nxp được xác minh sha256)
+  nx remove <gói>     gỡ gói
+  nx update           quét lại repo nội bộ
+  nx upgrade          nâng cấp từ repo nội bộ
+  nx search [từ]      repo có gì
+  nx info <gói>       thông tin gói
+  nx list             gói đã cài qua NPS
+  nx verify           kiểm tra checksum toàn bộ repo
+  nx hogs             top 10 process ăn RAM/CPU
+  nx fsck             đặt fsck tự sửa cho lần boot sau
+  nx tools            bảng tra tool dev/security có sẵn
+  nx apt-on|apt-off   BẬT/TẮT repo Debian khi thật sự cần (mặc định TẮT — thuần NEXUS)
+
+Ví dụ: nx install tree | nx search | nx verify
+EOF
+            ;;
+    esac
+    exit 0
+fi
+
+# ---------- ISO/live fallback: apt engine ----------
 ensure_lists() {
-  if ! ls /var/lib/apt/lists/*Packages* >/dev/null 2>&1; then
-    echo "[nx] apt lists trống (ISO slim) — chạy apt-get update lần đầu..."
-    $S apt-get update
-  fi
+    if ! ls /var/lib/apt/lists/*Packages* >/dev/null 2>&1; then
+        echo "[nx] apt lists trống (ISO slim) — chạy apt-get update lần đầu..."
+        $S apt-get update
+    fi
 }
 case "$1" in
-  install|i) shift; ensure_lists; exec $S apt-get install -y "$@" ;;
-  remove|r) shift; exec $S apt-get remove -y "$@" ;;
-  purge) shift; exec $S apt-get purge -y "$@" ;;
-  update) exec $S apt-get update ;;
-  upgrade) shift; ensure_lists; exec $S apt-get upgrade -y "$@" ;;
-  full-upgrade) shift; ensure_lists; exec $S apt-get full-upgrade -y "$@" ;;
-  search|s) shift; ensure_lists; exec apt-cache search "$@" ;;
-  info|show) shift; ensure_lists; exec apt-cache show "$@" ;;
-  list) dpkg-query -W -f='${binary:Package}\t${Version}\n' 2>/dev/null ;;
-  clean) exec $S apt-get clean ;;
-  autoremove) exec $S apt-get autoremove -y ;;
-  fsck) $S touch /forcefsck 2>/dev/null && echo "[NEXUS] da tao /forcefsck — chay: sudo reboot" \
-      && echo "  -> lan boot sau fsck -y tu chay truoc mount (sua journal aborted / fs read-only)" \
-      || echo "[NEXUS] khong the tao /forcefsck (fs read-only?) — reboot van kich hoat fsck vi fs dirty" ;;
-  tools) cat /usr/share/nexus/tools.txt ;;
-  hogs) ps -eo pid,user,pmem,pcpu,comm --sort=-pmem | head -11 ;;
-  *) cat <<'EOF'
-NEXUS nx 1.2 — trình quản lý gói DUY NHẤT của NEXUS (apt chỉ là engine nội bộ — giao diện là nx):
-  nx install <gói>    cài gói (tự update lần đầu nếu lists trống)
-  nx remove <gói>     gỡ gói
-  nx purge <gói>      gỡ + xóa config
-  nx update           cập nhật index
-  nx upgrade          nâng cấp toàn bộ
-  nx search <từ>      tìm gói
-  nx info <gói>       thông tin gói
-  nx list             liệt kê gói đã cài
-  nx tools            bảng tra cứu tool dev/security đã cài sẵn
-  nx clean|autoremove dọn rác hệ thống
-  nx fsck             đặt fsck tự sửa cho lần boot sau (fs read-only/journal abort)
-  nx hogs             top 10 process ăn RAM/CPU nhiều nhất
-
-Phục hồi tool đã cắt trong 1 phút:
-  nx install build-essential gdb    (compiler + debugger)
-  nx install nodejs npm             (Node.js dev)
-  nx install gnupg aria2 neovim     (tiện ích đã slim)
+    install|i) shift; ensure_lists; exec $S apt-get install -y "$@" ;;
+    remove|r) shift; exec $S apt-get remove -y "$@" ;;
+    purge) shift; exec $S apt-get purge -y "$@" ;;
+    update) exec $S apt-get update ;;
+    upgrade) shift; ensure_lists; exec $S apt-get upgrade -y "$@" ;;
+    full-upgrade) shift; ensure_lists; exec $S apt-get full-upgrade -y "$@" ;;
+    search|s) shift; ensure_lists; exec apt-cache search "$@" ;;
+    info|show) shift; ensure_lists; exec apt-cache show "$@" ;;
+    list) dpkg-query -W -f='${binary:Package}\t${Version}\n' 2>/dev/null ;;
+    hogs) ps -eo pid,user,pmem,pcpu,comm --sort=-pmem | head -11 ;;
+    fsck)
+        $S touch /forcefsck 2>/dev/null && echo "[NEXUS] da tao /forcefsck — chay: sudo reboot" \
+            && echo "  -> lan boot sau fsck -y tu chay truoc mount" \
+            || echo "[NEXUS] khong the tao /forcefsck — reboot van kich hoat fsck vi fs dirty" ;;
+    clean) exec $S apt-get clean ;;
+    autoremove) exec $S apt-get autoremove -y ;;
+    tools) cat /usr/share/nexus/tools.txt ;;
+    *) cat <<'EOF'
+NEXUS nx v2.0 — giao diện gói của NEXUS Linux (ISO live: backend apt)
+  nx install|remove|update|upgrade|search|info|list|clean|autoremove|fsck|hogs|tools
 EOF
- ;;
+    ;;
 esac

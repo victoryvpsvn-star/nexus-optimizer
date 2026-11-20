@@ -1,0 +1,155 @@
+#!/bin/bash
+# nxpkg — NEXUS Package System (NPS) engine v1.0
+# Repo nội bộ: /var/lib/nx/repo (*.nxp) | DB cài đặt: /var/lib/nx/db | Index: /var/lib/nx/index
+# .nxp = tar.gz gồm CONTROL (name/ver/desc/files) + các file theo path tương đối (không /)
+# NPSROOT env: dùng khi đóng gói từ rootfs build (mặc định /)
+
+NPSROOT="${NPSROOT:-/}"
+REPO="$NPSROOT/var/lib/nx/repo"
+DB="$NPSROOT/var/lib/nx/db"
+IDX="$NPSROOT/var/lib/nx/index"
+
+ensure_dirs() { mkdir -p "$REPO" "$DB"; }
+
+control_of() { tar -xzf "$1" -O CONTROL 2>/dev/null; }
+
+index_add() {
+    local name="$1" ver="$2" desc="$3" sha="$4" f="$5"
+    grep -v "^$name|" "$IDX" > "$IDX.tmp" 2>/dev/null || true
+    mv "$IDX.tmp" "$IDX" 2>/dev/null || true
+    printf '%s|%s|%s|%s|%s\n' "$name" "$ver" "$desc" "$sha" "$f" >> "$IDX"
+}
+
+cmd_update() {
+    ensure_dirs
+    : > "$IDX"
+    local n=0
+    for p in "$REPO"/*.nxp; do
+        [ -e "$p" ] || continue
+        local c name ver desc sha
+        c=$(control_of "$p") || { echo "[nxpkg] WARN: không đọc được CONTROL: $(basename "$p")" >&2; continue; }
+        name=$(sed -n 's/^name=//p' <<<"$c")
+        ver=$(sed -n 's/^ver=//p' <<<"$c")
+        desc=$(sed -n 's/^desc=//p' <<<"$c")
+        sha=$(sha256sum "$p" | cut -d' ' -f1)
+        index_add "$name" "$ver" "$desc" "$sha" "$(basename "$p")"
+        n=$((n + 1))
+    done
+    echo "[nxpkg] repo nội bộ NEXUS: $n gói (index cập nhật)"
+}
+
+repo_file_for() { sed -n "s/^$1|[^|]*|[^|]*|[^|]*|\(.*\)$/\1/p" "$IDX" 2>/dev/null | head -1; }
+
+cmd_install() {
+    ensure_dirs
+    [ -s "$IDX" ] || cmd_update
+    local rc=0
+    for name in "$@"; do
+        local f c files
+        f=$(repo_file_for "$name")
+        if [ -z "$f" ] || [ ! -e "$REPO/$f" ]; then
+            echo "[nxpkg] '$name' không có trong repo NEXUS — xem: nx search" >&2
+            rc=1
+            continue
+        fi
+        c=$(control_of "$REPO/$f")
+        files=$(sed -n 's/^files=//p' <<<"$c")
+        tar -xzf "$REPO/$f" -C "$NPSROOT"
+        printf '%s\n' "$files" | tr ' ' '\n' > "$DB/$name"
+        echo "[nxpkg] cài: $name $(sed -n 's/^ver=//p' <<<"$c") — repo nội bộ NEXUS ✓"
+    done
+    return $rc
+}
+
+cmd_remove() {
+    local rc=0
+    for name in "$@"; do
+        if [ ! -e "$DB/$name" ]; then
+            echo "[nxpkg] '$name' chưa cài qua NPS" >&2
+            rc=1
+            continue
+        fi
+        while IFS= read -r f; do
+            [ -n "$f" ] && [ -f "$NPSROOT/$f" ] && rm -f "$NPSROOT/$f"
+        done < "$DB/$name"
+        rm -f "$DB/$name"
+        echo "[nxpkg] gỡ: $name"
+    done
+    return $rc
+}
+
+cmd_list() { ls "$DB" 2>/dev/null; }
+
+cmd_search() {
+    [ -s "$IDX" ] || cmd_update
+    if [ $# -eq 0 ]; then
+        awk -F'|' '{printf "%-12s %-8s %s\n", $1, $2, $3}' "$IDX"
+    else
+        grep -i -- "$1" "$IDX" | awk -F'|' '{printf "%-12s %-8s %s\n", $1, $2, $3}'
+    fi
+}
+
+cmd_info() {
+    [ -s "$IDX" ] || cmd_update
+    awk -F'|' -v n="$1" '$1 == n { print "name: "$1"\nver : "$2"\ndesc: "$3"\nrepo: nội bộ NEXUS ("$5")" }' "$IDX"
+    [ -n "$(repo_file_for "$1")" ] || { echo "[nxpkg] không tìm thấy: $1" >&2; return 1; }
+}
+
+cmd_upgrade() {
+    [ -s "$IDX" ] || cmd_update
+    local rc=0
+    for name in $(cmd_list); do
+        repo_file_for "$name" >/dev/null || { echo "[nxpkg] repo không còn: $name — giữ nguyên" >&2; continue; }
+        cmd_install "$name" || rc=1
+    done
+    return $rc
+}
+
+cmd_verify() {
+    [ -s "$IDX" ] || cmd_update
+    local p want got rc=0
+    for p in "$REPO"/*.nxp; do
+        [ -e "$p" ] || continue
+        want=$(sed -n "s/^[^|]*|[^|]*|[^|]*|\([^|]*\)|$(basename "$p")$/\1/p" "$IDX")
+        got=$(sha256sum "$p" | cut -d' ' -f1)
+        if [ "$want" = "$got" ]; then
+            echo "OK  $(basename "$p")"
+        else
+            echo "BROKEN $(basename "$p")"
+            rc=1
+        fi
+    done
+    return $rc
+}
+
+cmd_build() {
+    local name="$1" ver="$2" desc="$3"
+    shift 3
+    local ST rels="" f
+    ST=$(mktemp -d)
+    for f in "$@"; do
+        [ -e "$NPSROOT$f" ] || { echo "[nxpkg] build: thiếu $NPSROOT$f" >&2; rm -rf "$ST"; return 1; }
+        mkdir -p "$ST$(dirname "$f")"
+        cp -a "$NPSROOT$f" "$ST$f"
+        rels="$rels ${f#/}"
+    done
+    printf 'name=%s\nver=%s\ndesc=%s\nfiles=%s\n' "$name" "$ver" "$desc" "$*" > "$ST/CONTROL"
+    ensure_dirs
+    tar -czf "$REPO/$name-$ver.nxp" -C "$ST" CONTROL $rels
+    rm -rf "$ST"
+    cmd_update
+    echo "[nxpkg] đóng gói: $name-$ver.nxp ($(du -h "$REPO/$name-$ver.nxp" | cut -f1))"
+}
+
+case "$1" in
+    install)   shift; cmd_install "$@" ;;
+    remove)    shift; cmd_remove "$@" ;;
+    update)    cmd_update ;;
+    upgrade)   cmd_upgrade ;;
+    search)    shift; cmd_search "$@" ;;
+    info)      shift; cmd_info "$@" ;;
+    list)      cmd_list ;;
+    verify)    cmd_verify ;;
+    build)     shift; cmd_build "$@" ;;
+    *) echo "nxpkg v1.0 — NEXUS Package System engine (install|remove|update|upgrade|search|info|list|verify|build)" ;;
+esac

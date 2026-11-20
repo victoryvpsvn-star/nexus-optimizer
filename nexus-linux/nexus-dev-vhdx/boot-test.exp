@@ -54,7 +54,26 @@ expect {
     "PORT22=BAD" { puts "\nFAIL-PORT22: sshd khong nghe port 22"; exit 1 }
     timeout { puts "\nFAIL-PORT22: timeout"; exit 1 }
 }
-puts "\nBOOT TEST PASS: boot UEFI + autologin + sshd running + DHCP IP + port 22 listening"
+# NPS E2E: nx install tree tu repo noi bo NEXUS + htop bake san qua NPS
+send "R=$(sudo nx install tree >/dev/null 2>&1 && echo INSTALLED-OK); echo NPSTREE=$R\r"
+expect {
+    -re "NPSTREE=INSTALLED-OK" {}
+    -re "NPSTREE=\s*$" { puts "\nFAIL-NPS: nx install tree that bai (repo noi bo/NPS loi)"; exit 1 }
+    timeout { puts "\nFAIL-NPS: timeout"; exit 1 }
+}
+send "T=$(tree --version | head -c6); echo TREEV=$T\r"
+expect {
+    -re "TREEV=tree v" {}
+    -re "TREEV=\s*$" { puts "\nFAIL-NPS: tree khong chay sau khi cai qua NPS"; exit 1 }
+    timeout { puts "\nFAIL-NPS: timeout"; exit 1 }
+}
+send "H=$(htop --version 2>/dev/null | head -1); echo NPSHTOP=$H\r"
+expect {
+    -re "NPSHTOP=htop 3" {}
+    -re "NPSHTOP=\s*$" { puts "\nFAIL-NPS: htop khong co (bake NPS loi)"; exit 1 }
+    timeout { puts "\nFAIL-NPS: timeout"; exit 1 }
+}
+puts "\nBOOT TEST PASS: boot UEFI + autologin + sshd + DHCP IP + port 22 + NPS (kernel nexus + nx install tree + htop)"
 send "sudo poweroff\r"
 expect eof
 exit 0
