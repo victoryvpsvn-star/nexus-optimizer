@@ -35,7 +35,11 @@ chmod +x "$R/usr/bin/nx" "$R/usr/bin/nexfetch" "$R/usr/bin/updisk"
 chmod 0440 "$R/etc/sudoers.d/nexus" 2>/dev/null || true
 
 # dọn docs/locale mà debootstrap đã bung (path-exclude chỉ có tác dụng sau khi copy cfg)
-rm -rf "$R/usr/share/doc"/* "$R/usr/share/man"/* "$R/usr/share/info"/* "$R/usr/share/locale"/* "$R/usr/share/icons"/* 2>/dev/null || true
+# LƯU Ý: phải GIỮ cấu trúc dir en + en_GB — dpkg path-include cần parent dirs, thiếu → ENOENT khi bung .mo
+rm -rf "$R/usr/share/doc"/* "$R/usr/share/man"/* "$R/usr/share/info"/* "$R/usr/share/icons"/* 2>/dev/null || true
+find "$R/usr/share/locale" -mindepth 1 -maxdepth 1 -type d ! -name en ! -name en_GB -exec rm -rf {} + 2>/dev/null || true
+rm -f "$R/usr/share/locale/en"/*/*.mo "$R/usr/share/locale/en_GB"/*/*.mo 2>/dev/null || true
+mkdir -p "$R/usr/share/locale/en/LC_MESSAGES" "$R/usr/share/locale/en_GB/LC_MESSAGES"
 
 echo "=== [4/8] config hệ thống ==="
 mkdir -p "$R/etc/apt" "$R/boot/grub" "$R/boot/efi"
