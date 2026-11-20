@@ -139,10 +139,15 @@ while IFS= read -r line; do
     esac
 done < "$VHDXDIR/kernel/nexus.config"
 make olddefconfig
-KVN=$(make -s kernelrelease)
-echo "NEXUS kernel: $KVN ($(grep -c CONFIG_ "$VHDXDIR/kernel/nexus.config") overrides trên defconfig)"
+sed -i 's/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-nexus1"/' .config
+grep -q '^CONFIG_LOCALVERSION=' .config || echo 'CONFIG_LOCALVERSION="-nexus1"' >> .config
+make olddefconfig
+echo "NEXUS kernel overrides: $(grep -c CONFIG_ "$VHDXDIR/kernel/nexus.config") | LOCALVERSION=$(grep '^CONFIG_LOCALVERSION=' .config)"
 make -j"$(nproc)" bzImage
-make INSTALL_MOD_PATH="$R" INSTALL_MOD_STRIP=1 modules_install >/dev/null 2>&1
+KVN=$(make -s kernelrelease)
+echo "NEXUS kernel release (sau build): $KVN"
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends kmod >/dev/null 2>&1 || true
+make INSTALL_MOD_PATH="$R" INSTALL_MOD_STRIP=1 modules_install
 cp arch/x86/boot/bzImage "$R/boot/vmlinuz-$KVN"
 chroot "$R" depmod -a "$KVN" 2>/dev/null || true
 chroot "$R" mkinitramfs -o "/boot/initrd.img-$KVN" "$KVN"
