@@ -63,7 +63,7 @@ chmod +x "$R/usr/sbin/policy-rc.d"
 # motd: thêm hướng dẫn updisk + SSH
 cat >> "$R/etc/motd" <<'EOF'
   Nâng disk VM  : updisk  (sau khi enlarge disk ở Hyper-V — tự growpart + resize2fs)
-  SSH           : ssh nexus@<ip> (mat khau nexus, sudo NOPASSWD) — root mat khau 'root'
+  SSH           : ssh nexus@<ip> hoac ssh root@<ip> (mat khau: nexus / root — PermitRootLogin yes)
 EOF
 
 # mount proc/dev/sys cho chroot (privileged container — ssh-keygen, depmod cần /dev)
@@ -77,7 +77,7 @@ echo "=== [5/8] apt run 1: grub-efi + openssh + ifupdown + growpart + toolset v3
 # đọc package list v3, bỏ phần live-only
 PKGS=$(grep -v '^#' "$DEV/config/package-lists/nexus-dev.list.chroot" | grep -v '^$' \
        | grep -v -x -e 'live-boot' -e 'live-config' -e 'user-setup' -e 'linux-image-cloud-amd64' -e 'initramfs-tools')
-RUN1="sudo ifupdown openssh-server grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
+RUN1="sudo ifupdown openssh-server isc-dhcp-client grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
 chroot_env apt-get -y update -qq
 # force-confdef/confold: file config include sẵn giữ nguyên, dpkg không bao giờ hỏi conffile (EOF = chết)
 DPGOPT='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'

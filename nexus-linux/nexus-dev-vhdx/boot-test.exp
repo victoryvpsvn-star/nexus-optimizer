@@ -1,0 +1,37 @@
+#!/usr/bin/expect -f
+# NEXUS VHDX boot smoke-test — qemu + OVMF UEFI: assert autologin + ssh/networking active + DHCP IP + port 22
+set timeout 480
+log_user 1
+log_file /tmp/serial.log
+spawn qemu-system-x86_64 -machine q35 -smp 2 -m 1024 -nographic -no-reboot \
+    -drive file=/tmp/test.raw,format=raw,media=disk \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd
+expect {
+    -re "nexus@nexus" {}
+    -re "login:" { send "nexus\r"; expect "Password:"; send "nexus\r" }
+    timeout { puts "\nFAIL-NOLOGIN: khong thay login/autologin trong 480s — boot UEFI hoac systemd loi"; exit 1 }
+    eof { puts "\nFAIL-EOF: qemu ket thuc som (kernel panic/reboot loop?)"; exit 1 }
+}
+sleep 5
+send "\rR=\$(systemctl is-active ssh)/\$(systemctl is-active networking); echo SVC=\$R\r"
+expect {
+    "SVC=active/active" {}
+    timeout { puts "\nFAIL-SVC: ssh hoac networking khong active"; exit 1 }
+}
+send "R=\$(ip -4 -o addr show scope global | grep -c inet); echo IPCNT=\$R\r"
+expect {
+    "IPCNT=1" {}
+    -re "IPCNT=\[2-9\]" {}
+    timeout { puts "\nFAIL-IP: khong co IPv4 global (DHCP/ifup loi)"; exit 1 }
+}
+send "R=\$(sudo ss -tln | grep -q ':22 ' && echo OK || echo BAD); echo PORT22=\$R\r"
+expect {
+    "PORT22=OK" {}
+    "PORT22=BAD" { puts "\nFAIL-PORT22: sshd khong nghe port 22"; exit 1 }
+    timeout { puts "\nFAIL-PORT22: timeout"; exit 1 }
+}
+puts "\nBOOT TEST PASS: UEFI boot + autologin + ssh active + networking active + DHCP IP + port 22 listening"
+send "sudo poweroff\r"
+expect eof
+exit 0
