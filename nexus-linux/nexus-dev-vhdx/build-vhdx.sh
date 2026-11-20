@@ -60,11 +60,7 @@ chmod 0440 "$R/etc/sudoers.d/nexus"
 # chặn dịch vụ khởi động trong chroot
 echo exit 101 > "$R/usr/sbin/policy-rc.d"
 chmod +x "$R/usr/sbin/policy-rc.d"
-# motd: thêm hướng dẫn updisk + SSH
-cat >> "$R/etc/motd" <<'EOF'
-  Nâng disk VM  : updisk  (sau khi enlarge disk ở Hyper-V — tự growpart + resize2fs)
-  SSH           : ssh nexus@<ip> hoac ssh root@<ip> (mat khau: nexus / root — PermitRootLogin yes)
-EOF
+# motd: override gon tu includes/etc/motd (banner nexfetch chi tren console qua profile.d)
 
 # mount proc/dev/sys cho chroot (privileged container — ssh-keygen, depmod cần /dev)
 mount -t proc proc "$R/proc" 2>/dev/null || true
@@ -77,7 +73,7 @@ echo "=== [5/8] apt run 1: grub-efi + openssh + ifupdown + growpart + toolset v3
 # đọc package list v3, bỏ phần live-only
 PKGS=$(grep -v '^#' "$DEV/config/package-lists/nexus-dev.list.chroot" | grep -v '^$' \
        | grep -v -x -e 'live-boot' -e 'live-config' -e 'user-setup' -e 'linux-image-cloud-amd64' -e 'initramfs-tools')
-RUN1="sudo ifupdown openssh-server isc-dhcp-client grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
+RUN1="sudo ifupdown openssh-server isc-dhcp-client fail2ban unattended-upgrades zram-tools iptables python3-systemd grub-efi-amd64 grub-efi-amd64-signed shim-signed cloud-guest-utils parted initramfs-tools zstd $PKGS"
 chroot_env apt-get -y update -qq
 # force-confdef/confold: file config include sẵn giữ nguyên, dpkg không bao giờ hỏi conffile (EOF = chết)
 DPGOPT='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
@@ -105,6 +101,9 @@ uas
 EOF
 sed -i 's/^MODULES=.*/MODULES=most/'  "$R/etc/initramfs-tools/initramfs.conf"
 sed -i 's/^COMPRESS=.*/COMPRESS=zstd/' "$R/etc/initramfs-tools/initramfs.conf"
+
+# hardening/tuning services: fail2ban (sshd jail) + zram swap — enable tường minh cho chac
+chroot "$R" systemctl enable fail2ban.service zramswap.service >/dev/null 2>&1 || echo "WARN: enable fail2ban/zramswap loi (kiem tra log)"
 
 echo "=== [6/8] apt run 2: kernel cloud-amd64 (initramfs tự tạo) ==="
 chroot_env apt-get -y $DPGOPT install --no-install-recommends linux-image-cloud-amd64 >/dev/null

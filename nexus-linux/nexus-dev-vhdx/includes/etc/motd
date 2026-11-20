@@ -1,0 +1,5 @@
+NEXUS Linux Dev (Debian bookworm)
+  SSH      : nexus@<ip> | root@<ip>   (mat khau: nexus | root, sudo NOPASSWD)
+  Disk to  : updisk  (sau khi enlarge disk tren Hyper-V)
+  Bao mat  : fail2ban (ban 1h+) + unattended-upgrades + sysctl hardening + BBR
+  Tool     : nx --help  |  nexfetch chi tren console
