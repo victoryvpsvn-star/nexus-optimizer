@@ -1,5 +1,3 @@
+# NEXUS: DHCP do nexus-net.service dam nhiem (sau udev coldplug) — khong dung ifup de tranh race
 auto lo
 iface lo inet loopback
-
-auto eth0
-iface eth0 inet dhcp

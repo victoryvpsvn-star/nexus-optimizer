@@ -1,0 +1,13 @@
+[Unit]
+Description=NEXUS: DHCP len eth0 (deterministic — sau udev coldplug)
+Wants=systemd-udev-settle.service
+After=systemd-udev-settle.service network.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip link set eth0 up
+ExecStart=/sbin/dhclient -v -1 eth0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
