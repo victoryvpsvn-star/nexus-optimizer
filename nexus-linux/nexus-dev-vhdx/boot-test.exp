@@ -4,7 +4,7 @@ set timeout 480
 log_user 1
 log_file /tmp/serial.log
 spawn qemu-system-x86_64 -machine q35 -smp 2 -m 1024 -nographic -no-reboot \
-    -drive file=/tmp/test.raw,format=raw,media=disk \
+    -drive file=/tmp/test.raw,format=raw,if=virtio \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd
 expect {
