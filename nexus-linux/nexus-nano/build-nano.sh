@@ -47,6 +47,10 @@ cd /tmp
 echo "=== [3/6] userland: busybox + dropbear + nft + bash + users ==="
 cp /bin/busybox "$R/bin/busybox"
 chroot "$R" /bin/busybox --install -s /bin >/dev/null 2>&1
+ln -s /bin/busybox "$R/sbin/init"
+ln -s /bin/busybox "$R/sbin/reboot"
+ln -s /bin/busybox "$R/sbin/poweroff"
+ln -s /bin/busybox "$R/bin/sh"
 cp -L /bin/bash "$R/bin/bash"
 cp /usr/sbin/dropbear "$R/usr/sbin/dropbear"
 cp /usr/bin/dropbearkey "$R/usr/bin/dropbearkey"
@@ -160,7 +164,7 @@ cat > "$R/boot/grub/grub.cfg" <<EOF
 set default=0
 set timeout=1
 menuentry 'NEXUS NANO (kernel nexus)' {
-    linux /boot/vmlinuz-$KVN root=UUID=$ROOTUUID ro rootwait quiet console=ttyS0,115200n8
+    linux /boot/vmlinuz-$KVN root=UUID=$ROOTUUID ro rootwait loglevel=7 panic=10 console=ttyS0,115200n8
 }
 EOF
 mke2fs -q -t ext4 -b 4096 -L NEXUS-NANO -U "$ROOTUUID" \

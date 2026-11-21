@@ -9,7 +9,7 @@ spawn qemu-system-x86_64 -machine q35 -smp 2 -m 1024 -nographic -no-reboot -nic 
     -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd
 expect {
     -re "nexus@nexus" {}
-    -re "login:" { send "nexus\r"; expect "Password:"; send "nexus\r" }
+    -re "login:" { send "root\r"; expect "Password:"; send "root\r" }
     -re "\(initramfs\)" {
         send "cat /proc/partitions; ls /dev/sd* 2>&1; ls /dev/vd* 2>&1\r"
         sleep 3
@@ -42,7 +42,7 @@ for {set i 0} {$i < 7} {incr i} {
 if {$ipcnt < 1} {
     send "\rM=LINK; echo ==\$M==; ip -o link; M=RULES; echo ==\$M==; ls /etc/udev/rules.d/; M=DHC; echo ==\$M==; which dhclient; M=LOG; echo ==\$M==; sudo journalctl -b --no-pager 2>&1 | grep -iE 'networking|eth0|dhcp|nexus-net|renamed' | tail -14\r"
     expect {
-        -re "nexus@nexus:~\$" {}
+        -re ":~[#$]" {}
         timeout {}
     }
     puts "\nFAIL-IP: khong co IPv4 global sau 70s (DHCP/ifup loi) — xem DIAG o tren"
@@ -54,8 +54,19 @@ expect {
     "PORT22=BAD" { puts "\nFAIL-PORT22: sshd khong nghe port 22"; exit 1 }
     timeout { puts "\nFAIL-PORT22: timeout"; exit 1 }
 }
+# sudo NOPASSWD (motd quang cao) — sudo -n khong bao gio treo; BAD kem diag
+send "R=\$(if [ \"\$(id -u)\" = \"0\" ]; then su nexus -c 'sudo -n true' >/dev/null 2>&1 && echo OK || echo BAD; else sudo -n true >/dev/null 2>&1 && echo OK || echo BAD; fi); echo SUDOER=\$R\r"
+expect {
+    "SUDOER=OK" {}
+    "SUDOER=BAD" {
+        send "D=\$(su nexus -c 'sudo -n true 2>&1' | head -c 150 | tr '\\n' ' '); echo SUDODIAG=\$D\r"
+        expect -re "SUDODIAG=.*"
+        puts "\nFAIL-SUDOER: sudo NOPASSWD cho nexus hong (xem SUDODIAG tren)"; exit 1
+    }
+    timeout { puts "\nFAIL-SUDOER: timeout"; exit 1 }
+}
 # NPS E2E: nx install tree tu repo noi bo NEXUS + htop bake san qua NPS
-send "R=\$(sudo nx install tree >/dev/null 2>&1 && echo INSTALLED-OK); echo NPSTREE=\$R\r"
+send "R=\$(if [ \"\$(id -u)\" = \"0\" ]; then nx install tree >/dev/null 2>&1; else sudo -n nx install tree >/dev/null 2>&1; fi && echo INSTALLED-OK); echo NPSTREE=\$R\r"
 expect {
     -re "NPSTREE=INSTALLED-OK" {}
     -re "NPSTREE=\s*$" { puts "\nFAIL-NPS: nx install tree that bai (repo noi bo/NPS loi)"; exit 1 }
@@ -74,6 +85,6 @@ expect {
     timeout { puts "\nFAIL-NPS: timeout"; exit 1 }
 }
 puts "\nBOOT TEST PASS: boot UEFI + autologin + sshd + DHCP IP + port 22 + NPS (kernel nexus + nx install tree + htop)"
-send "sudo poweroff\r"
+send "if [ \"\$(id -u)\" = \"0\" ]; then poweroff; else sudo -n poweroff; fi\r"
 expect eof
 exit 0
