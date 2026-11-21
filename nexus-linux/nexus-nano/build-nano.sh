@@ -7,7 +7,7 @@ NANODIR="$(pwd)"
 R=/tmp/nano-rootfs
 IMG=/tmp/nano.raw
 ESP=/tmp/nano-esp.img
-OUT=nexus-linux-nano.vhdx
+OUT="$NANODIR/../../nexus-linux-nano.vhdx"
 
 echo "=== [1/6] deps container ==="
 apt-get update -qq
