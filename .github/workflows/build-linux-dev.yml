@@ -118,3 +118,45 @@ jobs:
           name: nexus-linux-dev-iso
           path: nexus-linux/nexus-dev/nexus-linux-dev.iso
           retention-days: 7
+
+  build-nano-vhdx:
+    name: NEXUS NANO — VHDX siêu nhẹ (kernel mini + busybox + dropbear + NPS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build NANO VHDX (kernel 6.1.100-nexus1 mini + busybox + dropbear + NPS — không systemd/modules/initramfs)
+        run: |
+          docker run --rm --privileged -v "$PWD":/ws -w /ws debian:bookworm bash -euo pipefail -c '
+            bash nexus-linux/nexus-nano/build-nano.sh 2>&1 | tee /tmp/nano.log
+            test -f nexus-linux-nano.vhdx || { echo "::error::không tạo được NANO VHDX — đuôi log:"; tail -60 /tmp/nano.log; exit 1; }
+            NANO_SIZE=$(stat -c%s nexus-linux-nano.vhdx)
+            echo "NANO VHDX: $NANO_SIZE bytes"
+            test "$NANO_SIZE" -lt 200000000 || { echo "::error::NANO quá nặng: $NANO_SIZE (mục tiêu <= ~160MB)"; exit 1; }
+            echo "=== boot smoke-test NANO: qemu + OVMF UEFI (kernel + dropbear 22 + NPS) ==="
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends qemu-system-x86 ovmf expect >/dev/null
+            qemu-img convert -O raw nexus-linux-nano.vhdx /tmp/nano-test.raw
+            cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/OVMF_VARS.fd
+            expect -f nexus-linux/nexus-nano/boot-test-nano.exp 2>&1 | tee /tmp/nano-boot.log
+            grep -q "NANO TEST PASS" /tmp/nano-boot.log
+          '
+
+      - name: Upload release nexus-nano-v1
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nexus-nano-v1
+          name: NEXUS NANO v1 — VHDX siêu nhẹ (kernel nexus mini + busybox + dropbear + NPS)
+          body: |
+            **NEXUS NANO v1** — bản siêu nhẹ tự build 100%: kernel NEXUS mini 6.1.100-nexus1 (allnoconfig, driver builtin, KHÔNG modules, KHÔNG initramfs, KHÔNG systemd) + busybox + dropbear + NPS (nx).
+
+            **Mục tiêu resource: disk VHDX ~<=160MB · RAM idle ~20-50MB · CPU ~0 (0.25 vCPU vẫn dư)**
+
+            **Cách dùng:** Hyper-V Gen 2 → RAM 512MB đủ → 0.25-1 vCPU → attach disk → tắt Secure Boot → SSH root@ip (mk: root). Console serial có sh trực tiếp.
+
+            **Có gì:** nx install|remove|search|info|list|verify (NPS — repo nội bộ NEXUS), SSH rate-limit nftables (kernel, 0 RAM), zram 32MB, udhcpc DHCP.
+
+            **Lưu ý thẳng thắn:** nano KHÔNG có gcc/node/python (dev toolchain không thể vừa disk ~100MB — riêng gcc cần ~350MB) — dev thật dùng bản Dev (kernel full + userland Debian, đã gỡ repo ngoài). Nano hợp cho: VPS 0.25 vCPU, jump box, router/tunnel, cứu hộ, học Linux.
+
+            Build script: `nexus-linux/nexus-nano/build-nano.sh`.
+          files: nexus-linux-nano.vhdx

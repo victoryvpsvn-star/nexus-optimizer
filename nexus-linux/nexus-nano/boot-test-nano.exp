@@ -1,0 +1,50 @@
+#!/usr/bin/expect -f
+# NEXUS NANO boot test — qemu + OVMF UEFI: kernel nexus + dropbear 22 + NPS (nx install tree)
+set timeout 480
+log_user 1
+log_file /tmp/nano-serial.log
+spawn qemu-system-x86_64 -machine q35 -smp 1 -m 512 -nographic -no-reboot -nic user,model=virtio-net-pci \
+    -drive file=/tmp/nano-test.raw,format=raw,if=virtio \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd
+expect {
+    -re "NANO-READY" {}
+    -re "\(initramfs\)" { puts "\nFAIL-NANO: khong duoc co initramfs (thiet ke: all-builtin)"; exit 1 }
+    timeout { puts "\nFAIL-NANO: khong thay NANO-READY trong 480s (boot/init loi)"; exit 1 }
+    eof { puts "\nFAIL-NANO: qemu ket thuc som (panic/reboot loop?)"; exit 1 }
+}
+sleep 2
+# kernel nexus đúng phiên bản
+send "\rR=\$(uname -r); echo NK=\$R\r"
+expect {
+    -re "NK=6.1.100-nexus1" {}
+    timeout { puts "\nFAIL-NANO: kernel khong phai 6.1.100-nexus1"; exit 1 }
+}
+# dropbear nghe port 22
+send "\rB=\$(netstat -tln 2>/dev/null | grep -c ':22 ' || echo 0); echo DB22=\$B\r"
+expect {
+    -re "DB22=\\[1-9\\]" {}
+    -re "DB22=0" { puts "\nFAIL-NANO: dropbear khong nghe port 22"; exit 1 }
+    timeout { puts "\nFAIL-NANO: timeout dropbear"; exit 1 }
+}
+# NPS E2E: cài tree từ repo nội bộ + chạy được
+send "\rT=\$(nx install tree >/dev/null 2>&1 && echo OK); echo NPST=\$T\r"
+expect {
+    -re "NPST=OK" {}
+    -re "NPST=\\s*$" { puts "\nFAIL-NANO: NPS install that bai"; exit 1 }
+    timeout { puts "\nFAIL-NANO: timeout NPS"; exit 1 }
+}
+send "\rV=\$(tree --version | head -c6); echo TV=\$V\r"
+expect {
+    -re "TV=tree v" {}
+    timeout { puts "\nFAIL-NANO: tree khong chay sau khi cai"; exit 1 }
+}
+# đo RAM available + disk (log để đối chứng mục tiêu 50MB RAM / 100MB disk)
+send "\rA=\$(grep MemAvailable /proc/meminfo | tr -dc '0-9'); echo MEMAVAILKB=\$A\r"
+expect -re "MEMAVAILKB=\\[0-9\\]+"
+send "\rD=\$(df -m / | tail -1 | awk '{print \$2}'); echo DISKMB=\$D\r"
+expect -re "DISKMB=\\[0-9\\]+"
+puts "\nNANO TEST PASS: boot UEFI + kernel nexus + dropbear 22 + NPS (MEMAVAILKB/DISKMB trong log tren)"
+send "\rsync\r"
+expect eof
+exit 0
