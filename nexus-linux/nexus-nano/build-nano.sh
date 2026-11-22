@@ -136,7 +136,7 @@ fi
 NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" build tree 2.1.0 "NEXUS tree — cây thư mục (build từ source)" /usr/bin/tree || echo "WARN: nxp tree"
 NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" install tree >/dev/null 2>&1 || true
 test -x "$R/usr/bin/tree" && echo "[nx] tree co trong rootfs" || echo "[nx] WARN: tree khong co trong rootfs"
-ls "$R"/var/lib/nexus/nps/repo/*.nxp >/dev/null 2>&1 && echo "[nx] repo nxp OK: $(ls "$R"/var/lib/nexus/nps/repo/ | tr '\n' ' ')" || echo "[nx] WARN: repo khong co nxp — nxpkg build tree that bai?"
+ls "$R"/var/lib/nx/repo/*.nxp >/dev/null 2>&1 && echo "[nx] repo nxp OK: $(ls "$R"/var/lib/nx/repo/ | tr '\n' ' ')" || echo "[nx] WARN: repo khong co nxp ($REPO trong VM la /var/lib/nx/repo)"
 chroot "$R" /usr/bin/tree --version >/dev/null 2>&1 && echo "[nx] tree --version OK (rootfs)" || echo "[nx] WARN: tree khong chay trong rootfs"
 cd /tmp
 
