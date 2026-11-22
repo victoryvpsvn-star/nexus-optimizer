@@ -1,0 +1,70 @@
+# Hyper-V real boot test — CHẠY TRÊN MÁY WINDOWS CÓ HYPER-V (self-hosted runner), KHÔNG qemu.
+# GitHub-hosted runner KHÔNG chạy được Hyper-V (không có nested virtualization) — job này
+# chỉ có tác dụng khi bro đã cài self-hosted runner trên máy mình:
+#   1. GitHub → repo → Settings → Actions → Runners → New self-hosted runner → Windows → X64
+#   2. Tải + giải nén runner, rồi trong PowerShell Admin tại thư mục runner:
+#        ./config.cmd --url https://github.com/victoryvpsvn-star/nexus-optimizer --token <TOKEN_TỪ_TRANG_4> --labels hyperv
+#        ./run.cmd          (giữ cửa sổ chạy — chạy bằng account admin có quyền Hyper-V)
+#   3. Vào tab Actions → workflow này → Run workflow → chọn target (iso / vhdx / both)
+# Report + serial log sẽ nằm ở artifact "hyperv-report" của run.
+name: Hyper-V real boot test (self-hosted Windows — không qemu)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'iso | vhdx | both'
+        required: false
+        default: 'both'
+
+permissions:
+  contents: read
+
+jobs:
+  hyperv-test:
+    name: Boot thật trên Hyper-V (ISO + VHDX, COM pipe, check trong guest)
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tải artifact mới nhất từ release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.event.inputs.target }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          New-Item -ItemType Directory -Force -Path .\hv-artifacts | Out-Null
+          $hdr = @{ Authorization = "Bearer $env:GH_TOKEN" }
+          $repo = "${{ github.repository }}"
+          function Get-Asset([string]$tag, [string]$asset, [string]$out) {
+            if (Test-Path $out) { return }
+            $rel = Invoke-RestMethod -Headers $hdr -Uri "https://api.github.com/repos/$repo/releases/tags/$tag"
+            $a = $rel.assets | Where-Object { $_.name -eq $asset } | Select-Object -First 1
+            if (-not $a) { throw "Khong thay asset $asset trong $tag" }
+            Invoke-WebRequest -Headers $hdr -Uri $a.browser_download_url -OutFile $out -UseBasicParsing
+            Write-Host "da tai $asset"
+          }
+          if ($env:TARGET -ne 'vhdx') { Get-Asset 'nexus-nano-v2' 'nexus-v2.iso' '.\hv-artifacts\nexus-v2.iso' }
+          if ($env:TARGET -ne 'iso')  { Get-Asset 'nexus-nano-v1' 'nexus-linux-nano.vhdx' '.\hv-artifacts\nexus-linux-nano.vhdx' }
+
+      - name: Chạy Hyper-V boot test (COM pipe + check trong guest)
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.event.inputs.target }}
+        run: |
+          $arg = @()
+          if ($env:TARGET -ne 'vhdx') { $arg += @('-IsoPath', '.\hv-artifacts\nexus-v2.iso') }
+          if ($env:TARGET -ne 'iso')  { $arg += @('-VhdxPath', '.\hv-artifacts\nexus-linux-nano.vhdx') }
+          & .\scripts\hyperv-test.ps1 @arg
+
+      - name: Upload report + serial log + samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyperv-report
+          path: nexus-hyperv-report/**
+          retention-days: 14
