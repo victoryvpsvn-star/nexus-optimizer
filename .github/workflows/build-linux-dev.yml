@@ -217,14 +217,36 @@ jobs:
 
   dispatch-hyperv-test:
     name: Bắn Hyper-V real test sang máy có self-hosted runner
-    needs: [build-dev-iso, build-dev-vhdx, build-nano-vhdx, build-nano-iso]
+    needs: [build-dev-iso, build-dev-vhdx, build-nano-vhdx, build-nano-iso, ps1-lint]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: gh workflow run hyperv-test.yml (chạy THẬT trên Hyper-V của máy bro — không qemu)
+      - name: Bắn hyperv-test CHỈ khi có runner 'hyperv' online (tránh run kẹt queued)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run hyperv-test.yml --repo "${{ github.repository }}" -f target=both \
-            && echo "✅ Đã bắn hyperv-test — chạy khi self-hosted runner online (./run.cmd). Report nằm ở artifact 'hyperv-report' của run đó." \
-            || echo "::warning::Không bắn được hyperv-test.yml — kiểm tra quyền actions:write / tồn tại workflow"
+          ONLINE=$(gh api "repos/${{ github.repository }}/actions/runners" --jq '[.runners[] | select(.online == true and (.labels | map(.name) | index("hyperv") != null))] | length' || echo 0)
+          if [ "$ONLINE" -eq 0 ]; then
+            echo "::warning::Không có runner 'hyperv' nào online — bỏ qua bắn hyperv-test. Mở ./run.cmd trên máy Windows (self-hosted runner) rồi bấm Run workflow 'Hyper-V real boot test' thủ công."
+          else
+            gh workflow run hyperv-test.yml --repo "${{ github.repository }}" -f target=both \
+              && echo "✅ Đã bắn hyperv-test (runner online). Report nằm ở artifact 'hyperv-report' của run đó."
+          fi
+
+  ps1-lint:
+    name: Syntax-check hyperv-test.ps1 (hosted Windows — không cần Hyper-V)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: PowerShell parser — 0 lỗi mới cho qua
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\scripts\hyperv-test.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Host "::error file=scripts/hyperv-test.ps1::$($_.Message) (line $($_.Extent.StartLineNumber))" }
+            exit 1
+          }
+          Write-Host "OK — hyperv-test.ps1 parse sạch, $($tokens.Count) tokens"
