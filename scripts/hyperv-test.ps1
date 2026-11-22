@@ -1,4 +1,4 @@
-# hyperv-test.ps1 — NEXUS NANO: boot test THẬT trên Hyper-V (không qemu)
+﻿# hyperv-test.ps1 — NEXUS NANO: boot test THẬT trên Hyper-V (không qemu)
 # Tự tạo VM Gen 2 riêng (không đụng VM đang có), boot ISO/VHDX, đọc COM1 qua named pipe,
 # chạy check trong guest qua serial (giống CI expect nhưng trên phần cứng ảo thật của bro),
 # đo thời gian boot thật, sample CPUUsage/Heartbeat/Uptime, xuất report + serial log.
