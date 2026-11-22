@@ -35,6 +35,10 @@ make olddefconfig
 sed -i 's/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-nexus1"/' .config
 grep -q '^CONFIG_LOCALVERSION=' .config || echo 'CONFIG_LOCALVERSION="-nexus1"' >> .config
 make olddefconfig
+for k in VIRTIO_MENU VIRTIO VIRTIO_PCI VIRTIO_BLK VIRTIO_NET EXT4_FS DEVTMPFS SERIAL_8250_CONSOLE BINFMT_ELF ACPI PCI HYPERV SCSI BLK_DEV_SD NF_TABLES_INET ZRAM; do
+    grep -q "^CONFIG_${k}=y" .config || { echo "::error::CONFIG_${k} mat trong .config (guard menuconfig bi allnoconfig cat)"; grep "CONFIG_${k}[= ]" .config || true; exit 1; }
+done
+echo "CONFIG assert OK"
 make -j"$(nproc)"
 KVN=$(make -s kernelrelease)
 echo "NANO kernel release: $KVN"

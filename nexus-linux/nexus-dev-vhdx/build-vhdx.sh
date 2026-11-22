@@ -179,6 +179,20 @@ cd /tmp
 echo "=== [7/8] user + UUID + grub.cfg + image ==="
 chroot "$R" useradd -m -s /bin/bash -G sudo nexus
 chroot "$R" bash -c 'echo nexus:nexus | chpasswd; echo root:root | chpasswd'
+# Verify sudo NOPASSWD ngay tai build (fail fast); self-heal bang cach ghi lai sudoers.d/00-nexus
+if ! chroot "$R" sh -c 'su nexus -c "sudo -n true"' >/dev/null 2>&1; then
+    echo "[nx] sudo verify FAIL — ghi lai sudoers.d/00-nexus + visudo -c"
+    chroot "$R" sh -c 'echo "nexus ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/00-nexus && chmod 0440 /etc/sudoers.d/00-nexus && visudo -c' || true
+    chroot "$R" sh -c 'su nexus -c "sudo -n true"' >/dev/null 2>&1 || {
+        echo "::error::sudo NOPASSWD van hong sau self-heal — diag:"
+        echo "--- ls sudoers.d:"; ls -la "$R/etc/sudoers.d/" 2>&1 || true
+        echo "--- cat sudoers.d:"; cat "$R/etc/sudoers.d"/* 2>&1 || true
+        echo "--- sudoers cuoi file:"; tail -5 "$R/etc/sudoers" 2>&1
+        echo "--- sudo -n true loi:"; chroot "$R" sh -c 'su nexus -c "sudo -n true" 2>&1; id; sudo -V 2>&1 | head -1' || true
+        exit 1
+    }
+fi
+echo "[nx] sudo NOPASSWD verify OK"
 
 ROOTUUID=$(uuidgen)
 ESPIMG_UUID=4E455853   # FAT UUID = 4E45-5853
