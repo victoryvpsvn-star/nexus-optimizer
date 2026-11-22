@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build-dev-iso:
@@ -213,3 +214,17 @@ jobs:
           name: nexus-nano-iso
           path: nexus-v2.iso
           retention-days: 7
+
+  dispatch-hyperv-test:
+    name: Bắn Hyper-V real test sang máy có self-hosted runner
+    needs: [build-dev-iso, build-dev-vhdx, build-nano-vhdx, build-nano-iso]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: gh workflow run hyperv-test.yml (chạy THẬT trên Hyper-V của máy bro — không qemu)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run hyperv-test.yml --repo "${{ github.repository }}" -f target=both \
+            && echo "✅ Đã bắn hyperv-test — chạy khi self-hosted runner online (./run.cmd). Report nằm ở artifact 'hyperv-report' của run đó." \
+            || echo "::warning::Không bắn được hyperv-test.yml — kiểm tra quyền actions:write / tồn tại workflow"

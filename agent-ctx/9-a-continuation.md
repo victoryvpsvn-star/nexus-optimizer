@@ -976,3 +976,9 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - Verify local thêm: boot OVMF -cdrom KHÔNG disk → NANO-READY + NK=6.1.100-nexus1 + BRO-SHELL-OK (shell serial thực thi) + CDMOUNT-OK (mount /dev/sr0 iso9660).
 - Kiến thức chốt cho repo: (1) El Torito ESP KHÔNG được OVMF/Hyper-V expose như block device cho grub đọc → grub.cfg/kernel/initrd phải nằm trên ISO9660; (2) initramfs rootfs phải tự mount devtmpfs (kernel chỉ automount ở prepare_namespace cho root= device) → thiếu /dev/ttyS0 → shell/dropbear chết nhưng NANO-READY vẫn in (rcS chạy qua /dev/console kernel-node).
 - Scripts local tái sử dụng: scripts/qemu-local.sh (qemu 10.0.13 vào /home/z/qroot không root), scripts/iso-mech-test.sh, scripts/test-shell.sh (gõ lệnh serial qua stdin pipe — không cần expect).
+
+## 17-w: nối chuỗi workflow GitHub — build xong tự bắn Hyper-V test
+- build-linux-dev.yml: permissions thêm actions:write; thêm job cuối dispatch-hyperv-test (needs cả 4 job build-dev-iso/build-dev-vhdx/build-nano-vhdx/build-nano-iso) → gh workflow run hyperv-test.yml -f target=both sau khi build+release xanh; dispatch fail chỉ ::warning:: không làm đỏ build.
+- hyperv-test.yml thêm concurrency group hyperv-test cancel-in-progress:true — dồn dập auto-dispatch thì giữ run mới nhất, không dồn hàng đợi.
+- Vòng hoàn chỉnh: push nexus-linux/** → build-linux-dev (qemu smoke + release 4 artifact) → tự dispatch hyperv-test → chạy trên máy bro (./run.cmd) → artifact hyperv-report (serial log + report.json + samples CSV).
+- trace_id 1a202031fd0d4ea5: grep agent-ctx/scripts/work.txt không thấy — chỉ dùng để tham chiếu trong webhook báo cáo.

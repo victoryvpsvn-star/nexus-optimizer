@@ -20,6 +20,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: hyperv-test
+  cancel-in-progress: true
+
 jobs:
   hyperv-test:
     name: Boot thật trên Hyper-V (ISO + VHDX, COM pipe, check trong guest)
