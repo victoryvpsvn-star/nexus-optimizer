@@ -81,7 +81,7 @@ expect {
     -re "TREEV=\s*$" { puts "\nFAIL-NPS: tree khong chay sau khi cai qua NPS"; exit 1 }
     timeout { puts "\nFAIL-NPS: timeout"; exit 1 }
 }
-send "H=\$(htop --version 2>/dev/null | head -1); echo NPSHTOP=\$H\r"
+send "H=\$(TERM=xterm htop --version 2>&1 | head -c 120); echo NPSHTOP=\$H\r"
 expect {
     -re "NPSHTOP=htop 3" {}
     -re "NPSHTOP=\s*$" { puts "\nFAIL-NPS: htop khong co (bake NPS loi)"; exit 1 }
