@@ -23,7 +23,7 @@ expect {
 # dropbear nghe port 22
 send "\rB=\$(netstat -tln 2>/dev/null | grep -c ':22 ' || echo 0); echo DB22=\$B\r"
 expect {
-    -re "DB22=\\[1-9\\]" {}
+    -re "DB22=\[1-9\]" {}
     -re "DB22=0" { puts "\nFAIL-NANO: dropbear khong nghe port 22"; exit 1 }
     timeout { puts "\nFAIL-NANO: timeout dropbear"; exit 1 }
 }
@@ -41,9 +41,9 @@ expect {
 }
 # đo RAM available + disk (log để đối chứng mục tiêu 50MB RAM / 100MB disk)
 send "\rA=\$(grep MemAvailable /proc/meminfo | tr -dc '0-9'); echo MEMAVAILKB=\$A\r"
-expect -re "MEMAVAILKB=\\[0-9\\]+"
+expect -re "MEMAVAILKB=\[0-9\]+"
 send "\rD=\$(df -m / | tail -1 | awk '{print \$2}'); echo DISKMB=\$D\r"
-expect -re "DISKMB=\\[0-9\\]+"
+expect -re "DISKMB=\[0-9\]+"
 puts "\nNANO TEST PASS: boot UEFI + kernel nexus + dropbear 22 + NPS (MEMAVAILKB/DISKMB trong log tren)"
 send "\rsync\r"
 expect eof
