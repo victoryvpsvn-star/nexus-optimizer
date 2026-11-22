@@ -193,6 +193,11 @@ if ! chroot "$R" sh -c 'su nexus -c "sudo -n true"' >/dev/null 2>&1; then
     }
 fi
 echo "[nx] sudo NOPASSWD verify OK"
+# uid 1001 (runner) lot vao rootfs qua cp -a tu mount host -> sudo tu choi sudoers.d ("owned by uid 1001")
+# -> chown lai toan bo rootfs ve root, giu nexus (1000) cho /home/nexus
+chown -R root:root "$R" 2>/dev/null || true
+chown -R 1000:1000 "$R/home/nexus" 2>/dev/null || true
+echo "[nx] chown rootfs -> root OK (nexus giu 1000)"
 
 ROOTUUID=$(uuidgen)
 ESPIMG_UUID=4E455853   # FAT UUID = 4E45-5853

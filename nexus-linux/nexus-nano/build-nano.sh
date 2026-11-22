@@ -171,8 +171,14 @@ menuentry 'NEXUS NANO (kernel nexus)' {
     linux /boot/vmlinuz-$KVN root=UUID=$ROOTUUID ro rootwait loglevel=7 panic=10 console=ttyS0,115200n8
 }
 EOF
-mke2fs -q -t ext4 -b 4096 -L NEXUS-NANO -U "$ROOTUUID" \
-    -E offset=$((P2_START * 512)) -d "$R" "$IMG" "$ROOT_BLOCKS"
+# fs standalone de -U chac chan ap dung (quirk mke2fs -E offset) + verify doc lai + dd vao vi tri
+truncate -s $((ROOT_SECTORS * 512)) /tmp/nano-root.img
+mke2fs -q -t ext4 -b 4096 -L NEXUS-NANO -U "$ROOTUUID" -d "$R" /tmp/nano-root.img "$ROOT_BLOCKS"
+U=$(blkid -o value -s UUID -p /tmp/nano-root.img 2>/dev/null || true)
+[ "$U" = "$ROOTUUID" ] || { echo "::error::UUID ext4 khong khop: build=$ROOTUUID fs=$U"; exit 1; }
+echo "[nx] rootfs UUID verify OK: $U"
+dd if=/tmp/nano-root.img of="$IMG" bs=512 seek=$P2_START conv=notrunc status=none
+rm -f /tmp/nano-root.img
 rm -rf "$R" "$ESP"
 
 echo "=== [6/6] qemu-img → VHDX dynamic ==="
