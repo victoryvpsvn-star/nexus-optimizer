@@ -969,3 +969,10 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - Verify local TRƯỚC khi đốt CI (scripts/test-shell.sh): kernel thật run-16 + busybox thật từ rootfs VHDX + inittab/rcS y CI → qemu OVMF -cdrom không disk, gõ lệnh qua serial stdin → NANO-READY + NK=6.1.100-nexus1 + SHELLWORKS-42 = shell thực thi thật. PASS.
 - Bug local đã gặp: loop `busybox --list` symlink tạo bin/busybox→/bin/busybox ghi đè binary thật → /init dangling → prepare_namespace panic. CI không dính (chroot --install chuẩn). Chú ý cho lần sau.
 - Run 18: chỉ ISO job cần lại xanh → release nexus-nano-v2 + nexus-v2.iso.
+
+## 17-u: ✅ NANO v2 LIVE ISO XANH (run 18 bff139d) — verified local 2 lớp
+- Run 18: NANO ISO job SUCCESS lần đầu (dev ISO ✓ nano VHDX ✓ nano ISO ✓; dev VHDX job flake đột xuất ở assert "tree khong chay sau khi cai" NPS — 2 run trước cùng test đều xanh, release nexus-linux-dev-vhdx vẫn giữ bản run-16 xanh, không ảnh hưởng user; rerun sau nếu cần).
+- nexus-v2.iso: 25116672 bytes, sha256 18c1355bfbd68fabac81d7feafe16e169105a96baeb793c77c07e169e8e85857 — release nexus-nano-v2 + download/. CI expect full (NK + DB22 + NPST + TV + CD9660 + MEMAVAILKB) PASS.
+- Verify local thêm: boot OVMF -cdrom KHÔNG disk → NANO-READY + NK=6.1.100-nexus1 + BRO-SHELL-OK (shell serial thực thi) + CDMOUNT-OK (mount /dev/sr0 iso9660).
+- Kiến thức chốt cho repo: (1) El Torito ESP KHÔNG được OVMF/Hyper-V expose như block device cho grub đọc → grub.cfg/kernel/initrd phải nằm trên ISO9660; (2) initramfs rootfs phải tự mount devtmpfs (kernel chỉ automount ở prepare_namespace cho root= device) → thiếu /dev/ttyS0 → shell/dropbear chết nhưng NANO-READY vẫn in (rcS chạy qua /dev/console kernel-node).
+- Scripts local tái sử dụng: scripts/qemu-local.sh (qemu 10.0.13 vào /home/z/qroot không root), scripts/iso-mech-test.sh, scripts/test-shell.sh (gõ lệnh serial qua stdin pipe — không cần expect).
