@@ -239,14 +239,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: PowerShell parser — 0 lỗi mới cho qua
+      - name: PowerShell parser - 0 errors or fail
         shell: powershell
         run: |
           $tokens = $null
           $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\scripts\hyperv-test.ps1", [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Host "::error file=scripts/hyperv-test.ps1::$($_.Message) (line $($_.Extent.StartLineNumber))" }
-            exit 1
-          }
-          Write-Host "OK — hyperv-test.ps1 parse sạch, $($tokens.Count) tokens"
+          $path = Join-Path $env:GITHUB_WORKSPACE 'scripts\hyperv-test.ps1'
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
+          Write-Host ("parsed: {0} errors" -f $errors.Count)
+          $errors | ForEach-Object { Write-Host ("::error file=scripts/hyperv-test.ps1::line {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message) }
+          if ($errors.Count -gt 0) { exit 1 }
+          Write-Host ("OK - clean parse, {0} tokens" -f $tokens.Count)
