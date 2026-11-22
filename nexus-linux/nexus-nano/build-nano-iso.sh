@@ -142,16 +142,16 @@ IRSIZE=$(stat -c%s /tmp/nano-initrd.gz)
 KIMG=/tmp/linux-6.1.100/arch/x86/boot/bzImage
 KSIZE=$(stat -c%s "$KIMG")
 echo "initramfs: $IRSIZE bytes · bzImage: $KSIZE bytes"
-test $((KSIZE + IRSIZE)) -lt 45000000 || { echo "::error::kernel+initrd ($((KSIZE+IRSIZE)) bytes) vượt ESP 48MB"; exit 1; }
+test "$IRSIZE" -lt 60000000 || { echo "::error::initramfs quá lớn: $IRSIZE bytes"; exit 1; }
 
-echo "=== [6/7] ESP FAT48 + grub unsigned (search --file — không phụ thuộc thứ tự device) ==="
+echo "=== [6/7] ESP FAT16 16MB (chỉ grub) + grub unsigned có iso9660 — grub.cfg/kernel/initrd nằm trên ISO9660 ==="
 cat > /tmp/nano-early.cfg <<'EOF'
-search --no-floppy --file --set=root /EFI/BOOT/grub.cfg
-set prefix=($root)/EFI/BOOT
+search --no-floppy --file --set=root /boot/grub/grub.cfg
+set prefix=($root)/boot/grub
 normal
 EOF
 grub-mkimage -O x86_64-efi -o /tmp/grubx64.efi -p '/EFI/BOOT' -c /tmp/nano-early.cfg \
-  search search_fs_file fat linux normal echo boot ls part_gpt part_msdos efi_gop
+  search search_fs_file fat iso9660 linux normal echo boot ls part_gpt part_msdos efi_gop
 cat > /tmp/nano-grub.cfg <<'EOF'
 set default=0
 set timeout=3
@@ -181,23 +181,21 @@ Hyper-V Gen 2:
 5. SSH: root@<ip> mật khẩu root  (hoặc sh trực tiếp trên COM)
 6. Trong hệ: mount -t iso9660 /dev/sr0 /mnt để đọc lại CD này
 
-Kernel + config nằm sẵn: /boot/vmlinuz-nexus, /boot/config-nexus.txt (trên ESP)
+Kernel + config nằm sẵn trên CD: /boot/vmlinuz-nexus, /boot/config-nexus.txt (đọc bằng mount -t iso9660)
 EOF
-mkfs.vfat -C "$ESP" -F32 -n NEXUSBOOT 49152
-mmd -i "$ESP" ::/EFI ::/EFI/BOOT ::/EFI/debian ::/boot
+mkfs.vfat -C "$ESP" -F16 -n NEXUSBOOT 16384
+mmd -i "$ESP" ::/EFI ::/EFI/BOOT ::/EFI/debian
 mcopy -i "$ESP" /tmp/grubx64.efi ::/EFI/BOOT/BOOTX64.EFI
 mcopy -i "$ESP" /tmp/nano-grub.cfg ::/EFI/BOOT/grub.cfg
 mcopy -i "$ESP" /tmp/nano-grub.cfg ::/EFI/debian/grub.cfg
-mcopy -i "$ESP" "$KIMG" ::/boot/vmlinuz-nexus
-mcopy -i "$ESP" /tmp/nano-initrd.gz ::/boot/initrd.gz
-mcopy -i "$ESP" /tmp/linux-6.1.100/.config ::/boot/config-nexus.txt
-mcopy -i "$ESP" /tmp/nano-readme.txt ::/README.txt
 
 echo "=== [7/7] ISO El Torito UEFI (xorriso) ==="
-rm -rf /tmp/isodir && mkdir -p /tmp/isodir
+rm -rf /tmp/isodir && mkdir -p /tmp/isodir/boot/grub
 cp "$ESP" /tmp/isodir/efiboot.img
-cp "$KIMG" /tmp/isodir/vmlinuz-nexus
-cp /tmp/nano-initrd.gz /tmp/isodir/initrd.gz
+cp "$KIMG" /tmp/isodir/boot/vmlinuz-nexus
+cp /tmp/nano-initrd.gz /tmp/isodir/boot/initrd.gz
+cp /tmp/linux-6.1.100/.config /tmp/isodir/boot/config-nexus.txt
+cp /tmp/nano-grub.cfg /tmp/isodir/boot/grub/grub.cfg
 cp /tmp/nano-readme.txt /tmp/isodir/README.txt
 xorriso -as mkisofs -V NEXUS_NANO_V2 -r -J -joliet-long \
   -e efiboot.img -no-emul-boot \
