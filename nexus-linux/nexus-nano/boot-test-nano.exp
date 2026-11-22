@@ -31,7 +31,14 @@ expect {
 send "\rT=\$(nx install tree >/dev/null 2>&1 && echo OK); echo NPST=\$T\r"
 expect {
     -re "NPST=OK" {}
-    -re "NPST=\\s*$" { puts "\nFAIL-NANO: NPS install that bai"; exit 1 }
+    -re "NPST=\\s*$" {
+        send "\rE=\$(nx install tree 2>&1 | head -c 200 | tr '\\n' ' '); echo NPSERR=\$E\r"
+        expect {
+            -re {:~[#$]} {}
+            timeout {}
+        }
+        puts "\nFAIL-NANO: NPS install that bai (NPSERR ben tren)"; exit 1
+    }
     timeout { puts "\nFAIL-NANO: timeout NPS"; exit 1 }
 }
 send "\rV=\$(tree --version | head -c6); echo TV=\$V\r"
