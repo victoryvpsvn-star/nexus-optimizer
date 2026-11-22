@@ -176,6 +176,8 @@ NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" build tree 2.1.0 "NEXUS tree — liệt k�
 NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" build htop 3.2.2 "NEXUS htop — monitor process (build từ source)" /usr/bin/htop || echo "WARN: nxp htop"
 NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" install tree >/dev/null 2>&1 || true
 NPSROOT="$R" "$R/usr/lib/nexus/nxpkg" install htop >/dev/null 2>&1 || true
+# fail fast: htop phai ton tai trong rootfs ngay tai build (runtime VM khac env chroot — khong de boot test do)
+test -x "$R/usr/bin/htop" || { echo "::error::htop khong duoc bake vao rootfs (apt-get source/configure/make loi - xem log tren)"; exit 1; }
 # verify binary chay duoc ngay trong rootfs (bat loi lib/thieu cau hinh som, khong doi boot test)
 chroot "$R" /usr/bin/tree --version >/dev/null 2>&1 && echo "[nx] tree --version OK (rootfs)" || echo "[nx] WARN: tree khong chay trong rootfs"
 chroot "$R" sh -c 'TERM=xterm /usr/bin/htop --version >/dev/null 2>&1' && echo "[nx] htop --version OK (rootfs)" || { echo "[nx] htop KHONG CHAY trong rootfs — diag:"; chroot "$R" sh -c 'ldd /usr/bin/htop 2>&1 | grep -iE "not found|linux-vdso" | head -3; TERM=xterm /usr/bin/htop --version 2>&1 | head -3' || true; }
