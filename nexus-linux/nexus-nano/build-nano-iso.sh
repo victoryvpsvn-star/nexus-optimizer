@@ -96,6 +96,13 @@ ttyS0::respawn:/bin/sh -i
 EOF
 cat > "$R/etc/rcS" <<'EOF'
 #!/bin/sh
+# initramfs KHONG duoc kernel auto-mount devtmpfs (prepare_namespace chi chay cho root= device)
+# — phải tự mount để có /dev/ttyS0 (shell serial + dropbear) và /dev/urandom
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+[ -c /dev/ttyS0 ] || mknod /dev/ttyS0 c 4 64 2>/dev/null || true
+[ -c /dev/console ] || mknod /dev/console c 5 1 2>/dev/null || true
+[ -c /dev/null ] || mknod /dev/null c 1 3 2>/dev/null || true
+[ -c /dev/urandom ] || mknod /dev/urandom c 1 9 2>/dev/null || true
 mount -t proc proc /proc 2>/dev/null
 mount -t sysfs sysfs /sys 2>/dev/null
 mkdir -p /dev/pts /dev/shm /var/run /var/log /tmp

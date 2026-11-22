@@ -962,3 +962,10 @@ TIẾP THEO (phiên sau): (1) xem run của commit này — job 'Build Win11 Pro
 - Lỗi run 16: ESP 48MB FAT32 > 65535 sector El Torito + sâu hơn: OVMF/Hyper-V KHÔNG expose El Torito ESP như block device cho GRUB → search --file /EFI/BOOT/grub.cfg fail ("no such device") → grub shell, timeout 480s.
 - Fix (đã test local pass với kernel thật run-16 + busybox thật từ rootfs): ESP 16MB FAT16 CHỈ chứa BOOTX64.EFI; grub-mkimage +iso9660 module; early.cfg search /boot/grub/grub.cfg (trên ISO9660 — chuẩn grub-mkrescue); grub.cfg + vmlinuz-nexus + initrd.gz + config-nexus.txt nằm ở /boot trên ISO9660. Local: qemu OVMF -cdrom KHÔNG disk → NANO-LOCAL-TEST-OK.
 - build-nano-iso.sh đã sửa theo đúng cơ chế này → run 17 phải xanh toàn bộ. Scripts test local: /home/z/my-project/scripts/iso-mech-test.sh, qemu local ở /home/z/qroot (qemu 10.0.13 + OVMF, không root).
+
+## 17-t: ROOT CAUSE run 17 ISO fail + fix verified local — SHELL TEST PASS
+- Run 17: ISO boot OK trong CI (NANO-READY 03:41:51 ✓ cơ chế ISO9660 chuẩn) nhưng sau đó KHÔNG có shell: lệnh bị tty echo nhưng không ai thực thi, không dropbear log. Nguyên nhân: initramfs rootfs KHÔNG được kernel automount devtmpfs (prepare_namespace chỉ chạy cho root= device — VHDX đi đường đó nên OK; initramfs bỏ qua) → /dev/ttyS0 + /dev/urandom không tồn tại → busybox init không spawn được sh trên ttyS0, dropbear chết.
+- Fix rcS của ISO (build-nano-iso.sh): mount -t devtmpfs devtmpfs /dev || true + mknod fallback ttyS0/console/null/urandom trước các mount khác. VHDX giữ rcS cũ (không cần).
+- Verify local TRƯỚC khi đốt CI (scripts/test-shell.sh): kernel thật run-16 + busybox thật từ rootfs VHDX + inittab/rcS y CI → qemu OVMF -cdrom không disk, gõ lệnh qua serial stdin → NANO-READY + NK=6.1.100-nexus1 + SHELLWORKS-42 = shell thực thi thật. PASS.
+- Bug local đã gặp: loop `busybox --list` symlink tạo bin/busybox→/bin/busybox ghi đè binary thật → /init dangling → prepare_namespace panic. CI không dính (chroot --install chuẩn). Chú ý cho lần sau.
+- Run 18: chỉ ISO job cần lại xanh → release nexus-nano-v2 + nexus-v2.iso.
