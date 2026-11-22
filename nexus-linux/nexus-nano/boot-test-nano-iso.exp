@@ -1,0 +1,63 @@
+#!/usr/bin/expect -f
+# NEXUS NANO v2 ISO boot test — qemu + OVMF UEFI + -cdrom, KHÔNG disk:
+# rootfs nằm trong initramfs → boot được mà không cần driver disk nào (đúng thiết kế ISO chẩn đoán)
+set timeout 480
+log_file /tmp/nano-iso-serial.log
+spawn qemu-system-x86_64 -machine q35 -smp 1 -m 512 -nographic -no-reboot -nic user,model=virtio-net-pci \
+    -cdrom /tmp/nexus-test.iso \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd
+expect {
+    -re "NANO-READY" {}
+    timeout { puts "\nFAIL-ISO: khong thay NANO-READY trong 480s (grub/kernel/initramfs loi)"; exit 1 }
+    eof { puts "\nFAIL-ISO: qemu ket thuc som (panic/reboot loop?)"; exit 1 }
+}
+sleep 2
+# kernel nexus đúng phiên bản
+send "\rR=\$(uname -r); echo NK=\$R\r"
+expect {
+    -re "NK=6.1.100-nexus1" {}
+    timeout { puts "\nFAIL-ISO: kernel khong phai 6.1.100-nexus1"; exit 1 }
+}
+# dropbear nghe port 22
+send "\rB=\$(netstat -tln 2>/dev/null | grep -c ':22 ' || echo 0); echo DB22=\$B\r"
+expect {
+    -re "DB22=\[1-9\]" {}
+    -re "DB22=0" { puts "\nFAIL-ISO: dropbear khong nghe port 22"; exit 1 }
+    timeout { puts "\nFAIL-ISO: timeout dropbear"; exit 1 }
+}
+# NPS E2E: cài tree từ repo nội bộ (trong initramfs) + chạy được
+send "\rT=\$(nx install tree >/dev/null 2>&1 && echo OK); echo NPST=\$T\r"
+expect {
+    -re "NPST=OK" {}
+    timeout { puts "\nFAIL-ISO: NPS timeout (repo/initramfs sai)"; exit 1 }
+}
+send "\rV=\$(tree --version | head -c6); echo TV=\$V\r"
+expect {
+    -re "TV=tree v" {}
+    timeout { puts "\nFAIL-ISO: tree khong chay sau khi cai"; exit 1 }
+}
+# mount lại CD iso9660 (sr + ahci + iso9660 builtin — chứng minh driver CD hoạt động)
+send "\rM=\$(mount -t iso9660 /dev/sr0 /mnt 2>&1 && echo MOK); echo CD9660=\$M\r"
+expect {
+    -re "CD9660=MOK" {}
+    timeout { puts "\nFAIL-ISO: khong mount duoc CD (sr/iso9660/ahci thieu)"; exit 1 }
+}
+send "\rF=\$(ls /mnt | head -c 60 | tr '\\n' ' '); echo CDF=\$F; umount /mnt\r"
+expect {
+    -re {#} {}
+    timeout {}
+}
+# đo RAM available (log để đối chứng mục tiêu RAM thấp)
+send "\rA=\$(grep MemAvailable /proc/meminfo | tr -dc '0-9'); echo MEMAVAILKB=\$A\r"
+expect {
+    -re "MEMAVAILKB=\[0-9\]+" {}
+    timeout { puts "\nFAIL-ISO: khong doc duoc meminfo"; exit 1 }
+}
+send "\recho NANO ISO TEST PASS\r"
+expect {
+    -re "NANO ISO TEST PASS" {}
+    timeout { puts "\nFAIL-ISO: khong in PASS"; exit 1 }
+}
+puts "\nNANO ISO TEST PASS: boot UEFI DVD + initramfs + dropbear 22 + NPS + mount CD OK"
+exit 0

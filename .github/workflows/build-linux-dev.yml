@@ -160,3 +160,56 @@ jobs:
 
             Build script: `nexus-linux/nexus-nano/build-nano.sh`.
           files: nexus-linux-nano.vhdx
+
+  build-nano-iso:
+    name: NEXUS NANO v2 — LIVE ISO (rootfs trong RAM, boot DVD Hyper-V Gen 2 không cần driver disk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build NANO v2 ISO + boot test UEFI (qemu OVMF, -cdrom, KHÔNG disk)
+        run: |
+          docker run --rm --privileged -v "$PWD":/ws -w /ws debian:bookworm bash -euo pipefail -c '
+            bash nexus-linux/nexus-nano/build-nano-iso.sh 2>&1 | tee /tmp/nano-iso.log
+            test -f nexus-v2.iso || { echo "::error::không tạo được ISO — đuôi log:"; tail -60 /tmp/nano-iso.log; exit 1; }
+            ls -la nexus-v2.iso
+            sha256sum nexus-v2.iso
+            echo "=== boot test ISO: qemu + OVMF UEFI + -cdrom (rootfs initramfs trong RAM) ==="
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends qemu-system-x86 ovmf expect >/dev/null
+            cp nexus-v2.iso /tmp/nexus-test.iso
+            cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/OVMF_VARS.fd
+            expect -f nexus-linux/nexus-nano/boot-test-nano-iso.exp 2>&1 | tee /tmp/nano-iso-boot.log
+            grep -q "NANO ISO TEST PASS" /tmp/nano-iso-boot.log
+          '
+
+      - name: Upload release nexus-nano-v2
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nexus-nano-v2
+          name: NEXUS NANO v2 — LIVE ISO (kernel nexus, rootfs trong RAM)
+          body: |
+            **NEXUS NANO v2** — LIVE ISO chẩn đoán/cứu hộ: kernel NEXUS mini 6.1.100-nexus1 + **rootfs nằm trong initramfs (RAM)** → boot từ DVD **không cần driver disk nào** (storvsc/ahci/virtio không cần để lên hệ).
+
+            **Dùng để chẩn đoán Hyper-V:** gắn ISO vào VM (DVD, GIỮ nguyên disk VHDX cũ):
+            - Nếu ISO boot (thấy `NANO-READY` qua COM hoặc ssh được `root`) trong khi VHDX đứng im sau GRUB → vấn đề nằm ở đường disk (storvsc) chứ không phải kernel.
+            - Nếu ISO cũng không lên → mở log serial COM để xem kernel chết ở dòng nào.
+
+            **Hyper-V Gen 2:**
+            1. `Set-VMDvdDrive -VMName nexus -Path .\nexus-v2.iso`
+            2. **Tắt Secure Boot** (kernel unsigned): `Set-VMFirmware -VMName nexus -EnableSecureBoot Off`
+            3. COM đọc log: `Set-VMComPort -VMName nexus -Number 1 -Path \\.\pipe\nexus` → PuTTY Serial `\\.\pipe\nexus` 115200 (màn hình video KHÔNG bao giờ in gì sau GRUB — kernel không có framebuffer console)
+            4. Boot → `NANO-READY` trên COM → ssh `root@<ip>` (mk `root`) hoặc sh trực tiếp trên COM
+            5. `mount -t iso9660 /dev/sr0 /mnt` đọc lại CD (CI test sẵn)
+
+            Boot UEFI only (Gen 2). KHÔNG BIOS/Gen 1. Kernel + config nằm sẵn trên ISO (`/boot/config-nexus.txt` trong ESP).
+
+            Build script: `nexus-linux/nexus-nano/build-nano-iso.sh`.
+          files: nexus-v2.iso
+
+      - name: Artifact dự phòng
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-nano-iso
+          path: nexus-v2.iso
+          retention-days: 7
