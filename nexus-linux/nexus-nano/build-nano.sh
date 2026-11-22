@@ -149,6 +149,7 @@ ESPIMG_UUID=4E455853
 truncate -s $((IMG_SECTORS * 512)) "$IMG"
 sfdisk --force "$IMG" <<EOF
 label: dos
+label-id: 0x4e455853
 unit: sectors
 start=$P1_START, size=$P1_SECTORS, type=ef
 start=$P2_START, size=$ROOT_SECTORS, type=83
@@ -168,7 +169,7 @@ cat > "$R/boot/grub/grub.cfg" <<EOF
 set default=0
 set timeout=1
 menuentry 'NEXUS NANO (kernel nexus)' {
-    linux /boot/vmlinuz-$KVN root=UUID=$ROOTUUID ro rootwait loglevel=7 panic=10 console=ttyS0,115200n8
+    linux /boot/vmlinuz-$KVN root=PARTUUID=4e455853-02 ro rootwait loglevel=7 panic=10 console=ttyS0,115200n8
 }
 EOF
 # fs standalone de -U chac chan ap dung (quirk mke2fs -E offset) + verify doc lai + dd vao vi tri

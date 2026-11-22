@@ -33,6 +33,8 @@ cp -a "$DEV/config/includes.chroot/." "$R/"
 cp -a "$VHDXDIR/includes/." "$R/"
 chmod +x "$R/usr/bin/nx" "$R/usr/bin/nexfetch" "$R/usr/bin/updisk"
 chmod 0440 "$R/etc/sudoers.d/nexus" 2>/dev/null || true
+# uid 1001 (runner) lot vao rootfs qua cp -a tu mount host — sudo tu choi sudoers.d neu thu muc khong owned root
+chown -R root:root "$R" 2>/dev/null || true
 
 # dọn docs/locale mà debootstrap đã bung (path-exclude chỉ có tác dụng sau khi copy cfg)
 # LƯU Ý: phải GIỮ cấu trúc dir en + en_GB — dpkg path-include cần parent dirs, thiếu → ENOENT khi bung .mo
