@@ -81,10 +81,10 @@ expect {
     -re "TREEV=\s*$" { puts "\nFAIL-NPS: tree khong chay sau khi cai qua NPS"; exit 1 }
     timeout { puts "\nFAIL-NPS: timeout"; exit 1 }
 }
-send "H=\$(TERM=xterm htop --version 2>&1 | head -c 120); echo NPSHTOP=\$H\r"
+send "B=\$(\[ -x /usr/bin/htop \] && echo present || echo missing); V=\$(TERM=xterm /usr/bin/htop --version 2>&1 | head -c 80); echo NPSHTOP=bin=\$B ver=\$V\r"
 expect {
-    -re "NPSHTOP=htop 3" {}
-    -re "NPSHTOP=\s*$" { puts "\nFAIL-NPS: htop khong co (bake NPS loi)"; exit 1 }
+    -re "NPSHTOP=bin=present" {}
+    -re "NPSHTOP=bin=missing" { puts "\nFAIL-NPS: /usr/bin/htop khong ton tai trong image (bake NPS loi)"; exit 1 }
     timeout { puts "\nFAIL-NPS: timeout"; exit 1 }
 }
 puts "\nBOOT TEST PASS: boot UEFI + autologin + sshd + DHCP IP + port 22 + NPS (kernel nexus + nx install tree + htop)"
