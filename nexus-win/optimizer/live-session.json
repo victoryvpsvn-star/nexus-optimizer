@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "91093083",
-    "run":  "45167309682",
-    "pw_b64":  "anlscThoYjkxMg==",
-    "pass":  9,
+    "id":  "233616874",
+    "run":  "45172418905",
+    "pw_b64":  "cnh5Y3FhanQyOA==",
+    "pass":  6,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -30,26 +30,21 @@
                           "n":  "set-password"
                       },
                       {
-                          "d":  "ID=91093083",
+                          "d":  "ID=233616874 (nguon: CLI --get-id)",
                           "ok":  true,
                           "n":  "get-id"
                       },
                       {
-                          "d":  "TCP rs-ny.rustdesk.com:21116 = OPEN",
-                          "ok":  true,
+                          "d":  "KHÔNG thấy password trong config nào — service sẽ từ chối pw",
+                          "ok":  false,
+                          "n":  "service-password-config"
+                      },
+                      {
+                          "d":  "TCP rs-ny.rustdesk.com:21116 = BLOCKED",
+                          "ok":  false,
                           "n":  "relay-reachable"
-                      },
-                      {
-                          "d":  "live-session.json (7/7 PASS trước bước này)",
-                          "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  9,
+    "total":  8,
     "minutes":  30
 }
