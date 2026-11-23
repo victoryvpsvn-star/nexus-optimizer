@@ -1,5 +1,5 @@
-﻿NEXUS RUSTDESK SESSION — RUN #16 — 2026-11-23 12:15 UTC
-KET QUA: 8/10 PASS
+﻿NEXUS RUSTDESK SESSION — RUN #16 — 2026-11-23 12:16 UTC
+KET QUA: 7/8 PASS
 RUSTDESK_ID=233616874
 PASSWORD: xem trong log cua run nay (khong ghi vao file de tranh secret-scanning mask)
 Session giu: 30 phut (bat dau sau khi co ID)
@@ -12,7 +12,5 @@ CHECKLIST:
   [PASS] set-password — CLI trả lời 2/2 (không timeout)
   [PASS] get-id — ID=233616874 (nguon: CLI --get-id)
   [FAIL] service-password-config — KHÔNG thấy password trong config nào — service sẽ từ chối pw
-  [FAIL] relay-reachable — TCP rs-ny.rustdesk.com:21116 = BLOCKED
-  [PASS] publish-session — live-session.json (6/8 PASS trước bước này)
-  [PASS] launch-wizard — schtasks NEXUSWizardLive đã chạy (console session)
+  [PASS] relay-reachable — TCP rs-ny.rustdesk.com:21116 = OPEN
 
