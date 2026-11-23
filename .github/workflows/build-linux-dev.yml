@@ -81,8 +81,15 @@ jobs:
             echo "=== boot smoke-test: qemu + OVMF UEFI (proof: boot + ssh + network + port 22) ==="
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends qemu-system-x86 ovmf expect >/dev/null
             qemu-img convert -O raw nexus-linux-dev.vhdx /tmp/test.raw
-            cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/OVMF_VARS.fd
-            expect -f nexus-linux/nexus-dev-vhdx/boot-test.exp 2>&1 | tee /tmp/boot-test.log
+            # NPS E2E co the flaky tren TCG (nx install tree doc repo trong RAM) — run #57 fail / #58 xanh cung commit
+            # -> retry toi da 2 lan; ca 2 fail moi coi la loi that
+            ok=0
+            for attempt in 1 2; do
+              cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/OVMF_VARS.fd
+              if expect -f nexus-linux/nexus-dev-vhdx/boot-test.exp 2>&1 | tee /tmp/boot-test.log; then ok=1; break; fi
+              echo "=== boot-test lan $attempt FAIL — retry ==="
+            done
+            [ "$ok" = "1" ] || { echo "::error::boot smoke-test fail ca 2 lan"; exit 1; }
             grep -q "BOOT TEST PASS" /tmp/boot-test.log
           '
 

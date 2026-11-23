@@ -206,24 +206,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cai WinPE add-on (choco) - ISO tao bang pycdlib, khong can ADK base
+      - name: Cai WinPE add-on (setup chinh chu MS - choco windows-adk-winpe KHONG co boot.wim)
         shell: powershell
         timeout-minutes: 30
         run: |
           # Bai hoc run 58-64: ADK base installer tren runner khong on dinh (exit 1000,
-          # registry stub VS SDK che path) -> DUY NHAT can la PE add-on (media template +
-          # boot.wim + WinPE_OCs). ISO tao bang python pycdlib (El Torito BIOS+UEFI) -
-          # khong copype, khong oscdimg, khong registry.
-          choco install -y --no-progress vcredist2010
-          choco install -y --no-progress windows-adk-winpe
+          # registry stub VS SDK che path). Bai hoc run 85: choco windows-adk-winpe KHONG
+          # co boot.wim nao trong cay (media template thieu) -> tai adkwinpesetup.exe
+          # CHINH CHU fwlink MS (ADK 10.1.26100.9457 Sep 2026 - ho tro Win11 26H2/24H2).
+          $dst = 'C:\ADK\adkwinpesetup.exe'
+          New-Item -ItemType Directory -Force -Path C:\ADK | Out-Null
+          curl.exe -L --retry 3 -o $dst 'https://go.microsoft.com/fwlink/?linkid=2289981'
+          if ((Get-Item $dst).Length -lt 10MB) { throw 'adkwinpesetup.exe qua nho - download loi' }
+          Write-Host "adkwinpesetup.exe: $([math]::Round((Get-Item $dst).Length/1MB,1)) MB"
+          # /features OptionId.WindowsPreinstallationEnvironment + /q : chi WinPE add-on, im lang
+          $p = Start-Process $dst -ArgumentList '/features','OptionId.WindowsPreinstallationEnvironment','/q' -PassThru -Wait
+          Write-Host "adkwinpesetup exit: $($p.ExitCode)"
           $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
           if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
-          # Tim toan bo boot.wim trong add-on (run truoc: Media\sources co the thu)/ chua ro)
           $wims = Get-ChildItem $pe -Recurse -Filter boot.wim -ErrorAction SilentlyContinue
           $wims | ForEach-Object { Write-Host "boot.wim: $($_.FullName) ($([math]::Round($_.Length/1MB,1)) MB)" }
           if ($wims.Count -eq 0) {
             Get-ChildItem $pe -Recurse -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-            throw "PE add-on KHONG co boot.wim nao - choco windows-adk-winpe thieu media. Fix: tai adkwinpesetup.exe truc tiep fwlink"
+            throw "PE add-on chinh chu van KHONG co boot.wim - xem cay thu muc tren"
           }
           $src = $wims[0].Directory.Parent.FullName
           if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
@@ -383,46 +388,35 @@ jobs:
           [ -f nexus-go/ci/fps-summary.md ] && cat nexus-go/ci/fps-summary.md >> $GITHUB_STEP_SUMMARY || true
 
   win11-iso:
-    name: Build Win11 Pro 24H2 Gaming ISO (Debloated + Tuned)
+    name: Build Win11 Pro 26H2 Gaming ISO (Debloated + Tuned)
     runs-on: windows-latest
     if: github.event_name == 'workflow_dispatch'
-    timeout-minutes: 55
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fido Rufus -> lay link ISO Win11 24H2 chinh chu + tai ve (~5.5GB)
+      - name: Lay link ISO Win11 chinh chu (python MS connector + Fido backup) + tai ve (~5.5GB)
         shell: pwsh
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
           $ErrorActionPreference = 'Continue'
+          # Bai hoc 17-j/17-k: Fido tren runner exit 1 SILENT (ca pwsh7/PS5.1); python MS
+          # connector da chay OK that trong CI (run 44535306296) + tren sandbox -> DUNG
+          # CONNECTOR LAM CHINH, Fido chi la backup. MS chi con phan phoi 26H2 (26300).
           New-Item -ItemType Directory -Force -Path C:\Fido | Out-Null
-          Invoke-WebRequest -Uri 'https://github.com/pbatard/Fido/raw/master/Fido.ps1' -OutFile C:\Fido\Fido.ps1 -UseBasicParsing
-          Write-Host "Fido.ps1 size: $((Get-Item C:\Fido\Fido.ps1).Length) bytes"
-          # Bai hoc run truoc: PS5.1 silent fail khong output -> dung pwsh 7 + PS5.1 luot doi,
-          # PlatformArch x64 de bo WMI, capture 2>&1, IN RA RAW de debug. Bai hoc run 64:
-          # khong bao gio Trim() tren null - regex extract.
-          # Bug run truoc: $args la AUTOMATIC VARIABLE -> gan bi nuot -> & pwsh khong arg -> REPL silent!
-          Write-Host '===== FIDO direct call (pwsh7) ====='
-          & C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang Vietnamese -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut
-          Write-Host "FIDO exit: $LASTEXITCODE"
-          $raw = $fidoOut | Out-String
-          $url = [regex]::Match($raw, 'https://[^\s]*\.iso[^\s]*').Value
+          Write-Host '===== MS connector (chinh) ====='
+          python nexus-go\rescue\win11\ms_connector.py 2>&1 | Tee-Object -Variable msOut
+          $raw3 = $msOut | Out-String
+          $url = [regex]::Match($raw3, 'NEXUS-ISO-URL=(https://\S+)').Groups[1].Value
           if (-not $url) {
-            Write-Host '===== FIDO PS5.1 retry ====='
-            & powershell -NoProfile -ExecutionPolicy Bypass -File C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang Vietnamese -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut2
-            Write-Host "FIDO PS5.1 exit: $LASTEXITCODE"
-            $raw2 = $fidoOut2 | Out-String
-            $url = [regex]::Match($raw2, 'https://[^\s]*\.iso[^\s]*').Value
-          }
-          if (-not $url) {
-            Write-Host '===== FALLBACK python MS connector (Fido that bai) ====='
-            python nexus-go\rescue\win11\ms_connector.py 2>&1 | Tee-Object -Variable msOut
-            $raw3 = $msOut | Out-String
-            $url = [regex]::Match($raw3, 'NEXUS-ISO-URL=(https://\S+)').Groups[1].Value
+            Write-Host '===== Fido backup ====='
+            Invoke-WebRequest -Uri 'https://github.com/pbatard/Fido/raw/master/Fido.ps1' -OutFile C:\Fido\Fido.ps1 -UseBasicParsing
+            & C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang English -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut
+            $url = [regex]::Match(($fidoOut | Out-String), 'https://[^\s]*\.iso[^\s]*').Value
           }
           Write-Host "ISO URL: $url"
-          if (-not $url) { throw "Ca Fido lan python MS connector deu khong lay duoc URL - xem log tren" }
+          if (-not $url) { throw "Ca MS connector lan Fido deu khong lay duoc URL - xem log tren" }
           $url | Out-File C:\Fido\iso-url.txt -Encoding ascii
           curl.exe -L --retry 3 --retry-delay 5 -o C:\win11-original.iso $url
           $iso = Get-Item C:\win11-original.iso
@@ -440,7 +434,7 @@ jobs:
         timeout-minutes: 12
         run: |
           python nexus-go\rescue\win11\make_win11_iso.py
-          $iso = Get-Item C:\out\Win11Pro-NEXUS-24H2-Gaming.iso
+          $iso = Get-Item C:\out\Win11Pro-NEXUS-26H2-Gaming.iso
           Write-Host "ISO: $([math]::Round($iso.Length/1GB,2)) GB"
           if ($iso.Length -lt 2.5GB) { throw "ISO qua nho" }
           dism /Get-ImageInfo /ImageFile:C:\win11src\sources\install.wim
@@ -453,20 +447,28 @@ jobs:
         timeout-minutes: 10
         run: |
           $sz = 'C:\Program Files\7-Zip\7z.exe'
-          & $sz a -t7z -mx=0 -v1900m C:\out\Win11NEXUS-24H2.7z C:\out\Win11Pro-NEXUS-24H2-Gaming.iso | Select-Object -Last 5
-          $parts = Get-ChildItem C:\out\Win11NEXUS-24H2.7z.* | Sort-Object Name
+          & $sz a -t7z -mx=0 -v1900m C:\out\Win11NEXUS-26H2.7z C:\out\Win11Pro-NEXUS-26H2-Gaming.iso | Select-Object -Last 5
+          $parts = Get-ChildItem C:\out\Win11NEXUS-26H2.7z.* | Sort-Object Name
+          if ($parts.Count -lt 2) { throw '7z split khong tao duoc phan nao' }
           $parts | ForEach-Object { Write-Host "$($_.Name): $([math]::Round($_.Length/1GB,2)) GB" }
-          $merge = "@echo off`r`nREM Ghep lai: copy /b 001+002+003 -> ISO (hoac mo .001 bang 7-Zip/WinRAR de giai nen)`r`ncopy /b `"Win11NEXUS-24H2.7z.001`"+`"Win11NEXUS-24H2.7z.002`"+`"Win11NEXUS-24H2.7z.003`" `"Win11Pro-NEXUS-24H2-Gaming.iso`"`r`necho Done: Win11Pro-NEXUS-24H2-Gaming.iso`r`npause`r`n"
+          # merge.bat DONG theo so phan that (ISO 2.5-3.2GB co the ra 2-3 phan - hardcode 3 phan la bug cu)
+          $join = ($parts | ForEach-Object { '"{0}"' -f $_.Name }) -join '+'
+          $merge = "@echo off`r`nREM Ghep lai $($parts.Count) phan thanh ISO (hoac mo file .001 bang 7-Zip/WinRAR de giai nen truc tiep)`r`ncopy /b $join `"Win11Pro-NEXUS-26H2-Gaming.iso`"`r`necho Done: Win11Pro-NEXUS-26H2-Gaming.iso`r`npause`r`n"
           [IO.File]::WriteAllText('C:\out\merge.bat', $merge)
-          $readme = "NEXUS Win11 Pro 24H2 Gaming ISO - huong dan`r`n=============================================`r`n1. Tai du 3 phan: Win11NEXUS-24H2.7z.001/.002/.003 cung thu muc`r`n2. De giai nen: mo file .001 bang 7-Zip hoac WinRAR -> duoc file ISO`r`n   (hoac chay merge.bat de ghep thanh ISO roi ghi ra USB bang Rufus)`r`n3. Ghi USB: Rufus (chon GPT/UEFI), boot, cai dat`r`n`r`nDa san co:`r`n- Debloat: 25+ app UWP rac (Bing/Copilot/Teams/Skype/Solitaire/Maps/YourPhone...)`r`n- Game: HAGS bat, GameDVR tat (FPS tang), Game Mode bat, GPU Priority 8, timer resolution, Power Throttling tat, SysMain tat, Ultimate Performance (first boot)`r`n- Telemetry/ads tat, tat deal ao & suggest app, khoi 24H2 (khong tu nang cap LTS style)`r`n- Boot cu: bypass TPM/SecureBoot/RAM/CPU (may cu van cai duoc)`r`n- OOBE: user 'Gamer' (khong mat khau, tu dong dang nhap) - doi mat khau sau khi vao`r`n- FirstBoot tu chay: tune HKCU + power Ultimate + winget cai Discord/Steam/Chrome/Opera GX (can internet)`r`n- Da go OneDrive consumer - Store/Photos/Calculator/Notepad/Terminal/Xbox (Game Pass) giu nguyen`r`n`r`nSafety: Defender giu nguyen. Log first boot: C:\NEXUS\FirstBoot.log. Re-run apps: shortcut NEXUS Gaming Setup.`r`n"
+          $names = ($parts | ForEach-Object { $_.Name }) -join '/'
+          $readme = "NEXUS Win11 Pro 26H2 Gaming ISO (en-US) - huong dan`r`n=============================================`r`n1. Tai du $($parts.Count) phan: $names cung thu muc`r`n2. De giai nen: mo file .001 bang 7-Zip hoac WinRAR -> duoc file ISO`r`n   (hoac chay merge.bat de ghep thanh ISO roi ghi ra USB bang Rufus)`r`n3. Ghi USB: Rufus (chon GPT/UEFI), boot, cai dat`r`n4. ISO la ban en-US - sau khi cai vao Settings > Time & language > Language & region them tieng Viet (mi`n phi)`r`n`r`nDa san co:`r`n- Debloat: 25+ app UWP rac (Bing/Copilot/Teams/Skype/Solitaire/Maps/YourPhone...)`r`n- Game: HAGS bat, GameDVR tat (FPS tang), Game Mode bat, GPU Priority 8, timer resolution, Power Throttling tat, SysMain tat, Ultimate Performance (first boot)`r`n- Telemetry/ads tat, tat deal ao & suggest app, khoa 26H2 (khong tu nang cap)`r`n- Boot cu: bypass TPM/SecureBoot/RAM/CPU (may cu van cai duoc)`r`n- OOBE: user 'Gamer' (khong mat khau, tu dong dang nhap) - doi mat khau sau khi vao`r`n- FirstBoot tu chay: tune HKCU + power Ultimate + winget cai Discord/Steam/Chrome/Opera GX (can internet)`r`n`r`nSafety: Defender giu nguyen. Log first boot: C:\NEXUS\FirstBoot.log. Re-run apps: shortcut NEXUS Gaming Setup.`r`n"
           [IO.File]::WriteAllText('C:\out\README-NEXUS-Win11.txt', $readme)
-          Get-ChildItem C:\out\Win11NEXUS-24H2.7z.* | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8 }
-          Get-FileHash C:\out\Win11Pro-NEXUS-24H2-Gaming.iso -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8
+          $parts | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8 }
+          Get-FileHash C:\out\Win11Pro-NEXUS-26H2-Gaming.iso -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8
+          # ghi lai danh sach phan cho step upload (dong, khong hardcode)
+          ($parts | ForEach-Object { $_.FullName }) -join ' ' | Out-File C:\out\parts-list.txt -Encoding ascii
 
       - name: Upload ISO parts vao release go-vN
         shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload go-v${{ github.run_number }} C:\out\Win11NEXUS-24H2.7z.001 C:\out\Win11NEXUS-24H2.7z.002 C:\out\Win11NEXUS-24H2.7z.003 C:\out\merge.bat C:\out\README-NEXUS-Win11.txt C:\out\SHA256.txt --repo ${{ github.repository }} --clobber
+          $parts = (Get-Content C:\out\parts-list.txt -Raw).Trim() -split '\s+'
+          Write-Host "Uploading: $($parts -join ', ')"
+          gh release upload go-v${{ github.run_number }} @parts C:\out\merge.bat C:\out\README-NEXUS-Win11.txt C:\out\SHA256.txt --repo ${{ github.repository }} --clobber
           Write-Host "Uploaded Win11 ISO parts to release go-v${{ github.run_number }}"

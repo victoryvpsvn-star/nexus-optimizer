@@ -1,9 +1,9 @@
-# NEXUS Win11 Pro 24H2 Gaming ISO builder — pycdlib (UDF + Joliet + El Torito BIOS/UEFI)
+# NEXUS Win11 Pro 26H2 Gaming ISO builder — pycdlib (UDF + Joliet + El Torito BIOS/UEFI)
 # Input : C:\win11src (cay ISO goc, install.wim da thay bang ban Pro da tune)
-# Output: C:\out\Win11Pro-NEXUS-24H2-Gaming.iso
+# Output: C:\out\Win11Pro-NEXUS-26H2-Gaming.iso
 import os, sys, subprocess
 STAGE = r"C:\win11src"
-OUT = r"C:\out\Win11Pro-NEXUS-24H2-Gaming.iso"
+OUT = r"C:\out\Win11Pro-NEXUS-26H2-Gaming.iso"
 
 try:
     import pycdlib
