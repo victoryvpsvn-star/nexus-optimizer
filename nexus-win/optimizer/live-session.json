@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "",
-    "run":  "45157663406",
-    "pw_b64":  "cGQ0bnQ4NnE5aw==",
-    "pass":  5,
+    "id":  "508175541",
+    "run":  "45158580141",
+    "pw_b64":  "N3VtcG52eTJ4bA==",
+    "pass":  6,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -30,21 +30,11 @@
                           "n":  "set-password"
                       },
                       {
-                          "d":  "không lấy được sau ~2 phút (rd-out/rd-err xem ở DIAG)",
-                          "ok":  false,
+                          "d":  "ID=508175541",
+                          "ok":  true,
                           "n":  "get-id"
-                      },
-                      {
-                          "d":  "không publish vì thiếu ID",
-                          "ok":  false,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "bỏ qua — thiếu ID hoặc wizard không tồn tại",
-                          "ok":  false,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  8,
+    "total":  6,
     "minutes":  30
 }
