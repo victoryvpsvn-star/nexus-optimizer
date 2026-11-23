@@ -8,6 +8,20 @@ Write-Host "============================================================"
 Write-Host "  NEXUS RustDesk LIVE — session giữ đúng $Minutes phut"
 Write-Host "============================================================"
 
+# HOLD MODE — THOÁT NGAY: hold step gọi lại ĐÚNG file ps1 này với -Mode hold; nếu không thoát sớm
+# thì TOÀN BỘ setup chạy lại = sinh pw MỚI + set đè lên service → user cầm pw cũ trong artifact
+# bị "Wrong password" giữa session (diag #23 — đúng bệnh trong ảnh bro gửi)
+if ($Mode -eq 'hold') {
+    Write-Host '=== HOLD MODE — chỉ giữ session, KHÔNG đụng vào RustDesk/setup ==='
+    if (Test-Path (Join-Path $env:GITHUB_WORKSPACE 'hold-state.txt')) { $Minutes = [int](Get-Content (Join-Path $env:GITHUB_WORKSPACE 'hold-state.txt') -Raw) }
+    for ($i = $Minutes; $i -gt 0; $i--) {
+        Write-Host ("CON-LAI: {0} phut — bro ket noi bang RUSTDESK_ID + PASSWORD" -f $i)
+        Start-Sleep -Seconds 60
+    }
+    Write-Host '=== HET-PHUT — session ket thuc, runner VM tu thu hoi ==='
+    exit 0
+}
+
 # dọn SESSION-*.txt của session cũ (nếu còn) — file này nằm ở root repo nên nó hiện ở trang chủ
 Push-Location $env:GITHUB_WORKSPACE
 $null = git rm -q -f --ignore-unmatch 'SESSION-*.txt' 2>&1
@@ -188,10 +202,9 @@ if ($svc) {
 # Diag #21: cài per-user thì CLI chào "Installation and administrative privileges required!".
 # Fallback: nếu config user có pw mà config service rỗng (salt giống nhau) → copy hash sang.
 Write-Host "[5/8] Dat password (IPC qua service)..."
-$alnum = (48..57) + (97..122)
-# KHÔNG prefix "NEX-" — pattern NEX-* đã bị secret scanning flag → mask VĨNH VIỄN trong log repo này
-# password KHÔNG BAO GIỜ ghi vào commit (JSON chỉ lưu pw_b64) → không tạo alert mới → log hiện RAW đầy đủ
-$pw = -join ($alnum | Get-Random -Count 10 | ForEach-Object { [char]$_ })
+# PW CỐ ĐỊNH theo yêu cầu bro — 123456789 (9 số, gõ KHÔNG THỂ sai; RustDesk nhận pw ≥8 ký tự)
+# JSON vẫn lưu pw_b64; log hiện RAW — không khớp secret-pattern nào nên không bị mask
+$pw = '123456789'
 $pwB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pw))
 $o1 = RDC @('--password', $pw) 40
 $o2 = RDC @('--password', $pw) 40
@@ -222,6 +235,13 @@ if ($spw) {
 } else {
     Mark 'pw-user-config' $false 'pw KHÔNG vào config nào (soi "CLI pw out" ở log — nếu vẫn "privileges required" thì installer lại cài per-user)'
 }
+
+# insurance: restart service để bảo đảm pw trong CONFIG = pw trong BỘ NHỚ của service đang chạy
+Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Restart-Service -Force -ErrorAction SilentlyContinue
+Start-Sleep 6
+$spw2 = ''
+if (Test-Path $svcCfg) { $stxt2 = Get-Content $svcCfg -Raw -ErrorAction SilentlyContinue; if ($stxt2 -match "(?<![\w])password\s*=\s*'([^']*)'") { $spw2 = $Matches[1] } }
+Mark 'pw-after-restart' ([bool]$spw2) $(if ($spw2) { "pw VẪN nằm trong config service sau restart (hash $($spw2.Length) ký tự) — config = bộ nhớ" } else { 'pw MẤT khỏi config service sau restart — bất thường' })
 
 # 6) ID — ƯU TIÊN CONFIG CỦA SERVICE (LocalSystem): service đăng ký ID trong config của NÓ,
 # còn --get-id chạy bằng user thường có thể trả ID của app user → lệch ID là "offline"
