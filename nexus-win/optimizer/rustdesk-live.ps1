@@ -170,27 +170,52 @@ $o1 = RDC @('--password', $pw) 40
 $o2 = RDC @('--password', $pw) 40
 if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
 else { Mark 'set-password' $false "CLI timeout — o1=$($null -ne $o1) o2=$($null -ne $o2)" }
-# restart service để nạp password vừa đặt (service chạy LocalSystem, đọc config máy)
+# ĐẶT PW VỚI QUYỀN SYSTEM — service chạy LocalSystem, đọc config riêng (systemprofile);
+# --password chạy bằng user thường chỉ ghi config user → service từ chối pw DÙ NGƯỜI DÙNG NHẬP ĐÚNG
+$trPw = "`"$script:rd`" --password `"$pw`""
+$null = schtasks /Create /TN NEXUSRDSetPW /TR $trPw /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F 2>&1
+$runPw = (schtasks /Run /TN NEXUSRDSetPW 2>&1 | Out-String).Trim()
+Start-Sleep 8
+$null = schtasks /Delete /TN NEXUSRDSetPW /F 2>&1
+Write-Host ("     pw qua SYSTEM task: {0}" -f ($runPw -replace '\s+', ' '))
+# restart service để nạp password vừa đặt
 Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' } | Restart-Service -Force -ErrorAction SilentlyContinue
 Start-Sleep 4
 
-# 6) ID (--get-id, fallback config service)
-Write-Host "[6/8] Lay ID (toi da ~2 phut)..."
-$id = $null
-for ($i = 0; $i -lt 20 -and -not $id; $i++) {
+# 6) ID — ƯU TIÊN CONFIG CỦA SERVICE (LocalSystem): service đăng ký ID trong config của NÓ,
+# còn --get-id chạy bằng user thường có thể trả ID của app user → lệch ID là "offline"
+Write-Host "[6/8] Lay ID (config service truoc, toi da ~2 phut)..."
+$cfgPaths = @(
+    'C:\Windows\System32\config\systemprofile\AppData\Roaming\RustDesk\config\RustDesk.toml',
+    'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml',
+    "$env:APPDATA\RustDesk\config\RustDesk.toml",
+    "$env:LOCALAPPDATA\RustDesk\config\RustDesk.toml"
+)
+$id = $null; $idSrc = ''
+for ($i = 0; $i -lt 12 -and -not $id; $i++) {
     Start-Sleep 5
-    $out = RDC @('--get-id') 25
-    if ($out -match '(\d{7,})') { $id = $Matches[1]; break }   # ID RustDesk có thể 7-10 chữ số (một số runner cấp 8 số)
-    foreach ($c in 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml', "$env:APPDATA\RustDesk\config\RustDesk.toml") {
+    foreach ($c in $cfgPaths) {
         if (Test-Path $c) {
             $txt = Get-Content $c -Raw -ErrorAction SilentlyContinue
-            if ($txt -match "id\s*=\s*['`"]?(\d{7,})") { $id = $Matches[1]; break }
+            if ($txt -match "(?<![\w])id\s*=\s*['`"]?(\d{7,})") { $id = $Matches[1]; $idSrc = $c; break }
         }
     }
     if ($id) { break }
+    $out = RDC @('--get-id') 25
+    if ($out -match '(\d{7,})') { $id = $Matches[1]; $idSrc = 'CLI --get-id'; break }
 }
-if ($id) { Mark 'get-id' $true "ID=$id" }
-else { Mark 'get-id' $false 'không lấy được sau ~2 phút (rd-out/rd-err xem ở DIAG)' }
+if ($id) { Mark 'get-id' $true "ID=$id (nguon: $idSrc)" }
+else { Mark 'get-id' $false 'không lấy được sau ~1-2 phút' }
+
+# 6c) XÁC NHẬN password đã nằm trong config của SERVICE — nếu trống, service sẽ từ chối pw (lỗi cũ)
+$pwCfgFile = ''
+foreach ($c in $cfgPaths) {
+    if (Test-Path $c) {
+        $txt = Get-Content $c -Raw -ErrorAction SilentlyContinue
+        if ($txt -match "(?<![\w])password\s*=\s*['`"]?([^'`"\r\n]{4,})") { $pwCfgFile = $c; break }
+    }
+}
+Mark 'service-password-config' ([bool]$pwCfgFile) $(if ($pwCfgFile) { "password đã ghi vào: $pwCfgFile" } else { 'KHÔNG thấy password trong config nào — service sẽ từ chối pw' })
 
 # 6b) Chẩn đoán relay công cộng — runner chạm được server RustDesk không (không fatal)
 $relayOk = $false
