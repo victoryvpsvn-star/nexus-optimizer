@@ -1,7 +1,7 @@
 ﻿{
-    "id":  "506435026",
-    "run":  "45183873066",
-    "pw_b64":  "ODNtbmhnOXFzbw==",
+    "id":  "231638928",
+    "run":  "45184697607",
+    "pw_b64":  "ZTZkOG1pa3lweg==",
     "pass":  9,
     "checklist":  [
                       {
@@ -15,12 +15,12 @@
                           "n":  "download-installer"
                       },
                       {
-                          "d":  "exit=0 → C:\\Users\\runneradmin\\AppData\\Local\\RustDesk\\rustdesk.exe",
+                          "d":  "exit=0 → C:\\Program Files\\RustDesk\\rustdesk.exe",
                           "ok":  true,
                           "n":  "install-rustdesk"
                       },
                       {
-                          "d":  "RustDeskService=Running — LocalSystem unattended, nhận kết nối qua relay",
+                          "d":  "RustDesk=Running — LocalSystem unattended, nhận kết nối qua relay",
                           "ok":  true,
                           "n":  "service-running"
                       },
@@ -30,36 +30,26 @@
                           "n":  "set-password"
                       },
                       {
-                          "d":  "pw KHÔNG vào config nào (soi \"CLI pw out\" ở log — nếu vẫn \"privileges required\" thì installer lại cài per-user)",
-                          "ok":  false,
+                          "d":  "pw nằm trong config SERVICE (IPC chuẩn — hash 118 ký tự)",
+                          "ok":  true,
                           "n":  "pw-user-config"
                       },
                       {
-                          "d":  "ID=506435026 (nguon: CLI --get-id)",
+                          "d":  "ID=231638928 (nguon: CLI --get-id)",
                           "ok":  true,
                           "n":  "get-id"
                       },
                       {
-                          "d":  "KHÔNG thấy password trong config nào — service sẽ từ chối pw (dump [CFG] ở log để soi)",
-                          "ok":  false,
+                          "d":  "password đã ghi vào: C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk.toml",
+                          "ok":  true,
                           "n":  "service-password-config"
                       },
                       {
                           "d":  "TCP rs-ny.rustdesk.com:21116 = OPEN",
                           "ok":  true,
                           "n":  "relay-reachable"
-                      },
-                      {
-                          "d":  "live-session.json (7/9 PASS trước bước này)",
-                          "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  11,
+    "total":  9,
     "minutes":  30
 }
