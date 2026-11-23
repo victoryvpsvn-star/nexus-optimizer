@@ -2,7 +2,7 @@
     "id":  "233616874",
     "run":  "45172418905",
     "pw_b64":  "cnh5Y3FhanQyOA==",
-    "pass":  6,
+    "pass":  8,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -43,8 +43,18 @@
                           "d":  "TCP rs-ny.rustdesk.com:21116 = BLOCKED",
                           "ok":  false,
                           "n":  "relay-reachable"
+                      },
+                      {
+                          "d":  "live-session.json (6/8 PASS trước bước này)",
+                          "ok":  true,
+                          "n":  "publish-session"
+                      },
+                      {
+                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
+                          "ok":  true,
+                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  8,
+    "total":  10,
     "minutes":  30
 }
