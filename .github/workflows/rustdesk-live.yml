@@ -9,7 +9,7 @@ on:
         default: '10'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   rustdesk-live:
