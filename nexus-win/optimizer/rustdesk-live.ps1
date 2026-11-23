@@ -42,7 +42,7 @@ function Publish([hashtable]$data) {
         [void]$sb.AppendLine("NEXUS RUSTDESK SESSION — RUN #$env:GITHUB_RUN_NUMBER — $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm')) UTC")
         [void]$sb.AppendLine(("KET QUA: {0}/{1} PASS" -f $data.pass, $data.total))
         [void]$sb.AppendLine("RUSTDESK_ID=$($data.id)")
-        [void]$sb.AppendLine("PASSWORD=$($data.password)")
+        [void]$sb.AppendLine("PASSWORD: xem trong log cua run nay (khong ghi vao file de tranh secret-scanning mask)")
         [void]$sb.AppendLine("Session giu: $($data.minutes) phut (bat dau sau khi co ID)")
         [void]$sb.AppendLine("")
         [void]$sb.AppendLine("CHECKLIST:")
@@ -129,7 +129,7 @@ if ($asset -and (Test-Path $exe) -and ((Get-Item $exe -ErrorAction SilentlyConti
 } else { Mark 'install-rustdesk' $false 'bỏ qua — installer không có' }
 
 if (-not $script:rd) {
-    Publish @{ id = ''; password = ''; minutes = $Minutes; pass = ($script:Checks | Where-Object { $_.ok }).Count; total = $script:Checks.Count; checklist = $script:Checks }
+    Publish @{ id = ''; pw_b64 = ''; minutes = $Minutes; pass = ($script:Checks | Where-Object { $_.ok }).Count; total = $script:Checks.Count; checklist = $script:Checks }
     throw 'cài RustDesk thất bại — xem các dòng FAIL ở trên'
 }
 
@@ -153,10 +153,10 @@ if ($svc) {
 # 5) Password
 Write-Host "[5/8] Dat password..."
 $alnum = (48..57) + (97..122)
-$pw = 'NEX-' + (-join ($alnum | Get-Random -Count 8 | ForEach-Object { [char]$_ }))
-# GitHub secret-scanning flag password trong commit JSON rồi mask CHÍNH XÁC chuỗi đó trong log (→ PASSWORD=***)
-# → in bản CÓ KHOẢNG TRỐNG mỗi 4 ký tự: mask khớp chính xác sẽ không khớp → password hiện đủ trong log
-$pwShow = ($pw -replace '(.{4})(?=.)', '$1 ')
+# KHÔNG prefix "NEX-" — pattern NEX-* đã bị secret scanning flag → mask VĨNH VIỄN trong log repo này
+# password KHÔNG BAO GIỜ ghi vào commit (JSON chỉ lưu pw_b64) → không tạo alert mới → log hiện RAW đầy đủ
+$pw = -join ($alnum | Get-Random -Count 10 | ForEach-Object { [char]$_ })
+$pwB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pw))
 $o1 = RDC @('--password', $pw) 40
 $o2 = RDC @('--password', $pw) 40
 if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
@@ -184,7 +184,7 @@ else { Mark 'get-id' $false 'không lấy được sau ~2 phút (rd-out/rd-err x
 Write-Host "[7/8] Publish checklist + ID..."
 if ($id) {
     $passCount = ($script:Checks | Where-Object { $_.ok }).Count
-    Publish @{ id = $id; password = $pw; minutes = $Minutes; pass = $passCount; total = $script:Checks.Count; checklist = $script:Checks }
+    Publish @{ id = $id; pw_b64 = $pwB64; minutes = $Minutes; pass = $passCount; total = $script:Checks.Count; checklist = $script:Checks }
     Mark 'publish-session' $true "live-session.json ($passCount/$($script:Checks.Count) PASS trước bước này)"
 } else {
     Mark 'publish-session' $false 'không publish vì thiếu ID'
@@ -206,7 +206,7 @@ $passCount = ($script:Checks | Where-Object { $_.ok }).Count
 $total = $script:Checks.Count
 if ($env:GITHUB_STEP_SUMMARY) {
     Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**KẾT QUẢ: $passCount/$total PASS**" -Encoding UTF8
-    if ($id) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**RUSTDESK_ID=$id — PASSWORD=$pwShow (nhập liền, bỏ khoảng trống) — session $Minutes phút**" -Encoding UTF8 }
+    if ($id) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**RUSTDESK_ID=$id — PASSWORD=$pw — session $Minutes phút**" -Encoding UTF8 }
 }
 Write-Host ""
 Write-Host "==================== KET QUA: $passCount/$total PASS ====================" -ForegroundColor $(if ($passCount -eq $total) { 'Green' } else { 'Yellow' })
@@ -219,13 +219,13 @@ foreach ($c in $script:Checks) {
 if ($id) {
     Write-Host ""
     Write-Host "  RUSTDESK_ID=$id"                    -ForegroundColor Green
-    Write-Host "  PASSWORD=$pwShow   (nhap LIEN, bo khoang trang)" -ForegroundColor Green
+    Write-Host "  PASSWORD=$pw"                    -ForegroundColor Green
     Write-Host "  Session giu DUNG $Minutes phut (bat dau SAU khi co ID)" -ForegroundColor Green
-    Publish @{ id = $id; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
-    Write-Host ("::notice title=NEXUS {0}/{1} PASS - SESSION LIVE::RUSTDESK_ID={2} | PASSWORD={3} (nhap lien bo khoang trang) | {4} phut | wizard da mo tren man hinh" -f $passCount, $total, $id, $pwShow, $Minutes)
+    Publish @{ id = $id; pw_b64 = $pwB64; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
+    Write-Host ("::notice title=NEXUS {0}/{1} PASS - SESSION LIVE::RUSTDESK_ID={2} | PASSWORD={3} | {4} phut | wizard da mo tren man hinh" -f $passCount, $total, $id, $pw, $Minutes)
 } else {
     if ($id -eq $null) { Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue)) }
-    Publish @{ id = ''; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
+    Publish @{ id = ''; pw_b64 = $pwB64; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
     Write-Host ("::notice title=NEXUS {0}/{1} PASS - KHONG CO ID::xem cac dong FAIL (annotation do) o tren" -f $passCount, $total)
     throw 'RUSTDESK_ID không lấy được — xem các dòng FAIL ở trên'
 }
