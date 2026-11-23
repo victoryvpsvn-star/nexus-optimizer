@@ -1,8 +1,8 @@
-﻿NEXUS RUSTDESK SESSION — RUN #13 — 2026-11-23 10:48 UTC
+﻿NEXUS RUSTDESK SESSION — RUN #14 — 2026-11-23 11:31 UTC
 KET QUA: 6/6 PASS
-RUSTDESK_ID=226642454
+RUSTDESK_ID=93473133
 PASSWORD: xem trong log cua run nay (khong ghi vao file de tranh secret-scanning mask)
-Session giu: 30 phut (bat dau sau khi co ID)
+Session giu: 10 phut (bat dau sau khi co ID)
 
 CHECKLIST:
   [PASS] release-api — tag 1.5.3
@@ -10,5 +10,5 @@ CHECKLIST:
   [PASS] install-rustdesk — exit=0 → C:\Users\runneradmin\AppData\Local\RustDesk\rustdesk.exe
   [PASS] service/app-running — per-user mode — app rustdesk.exe đang chạy, nhận kết nối bình thường
   [PASS] set-password — CLI trả lời 2/2 (không timeout)
-  [PASS] get-id — ID=226642454
+  [PASS] get-id — ID=93473133
 
