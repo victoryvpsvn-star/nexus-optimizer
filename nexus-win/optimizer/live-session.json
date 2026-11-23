@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "231638928",
-    "run":  "45184697607",
-    "pw_b64":  "NndudWcydG1pNQ==",
-    "pass":  11,
+    "id":  "316050794",
+    "run":  "45189001084",
+    "pw_b64":  "MTIzNDU2Nzg5",
+    "pass":  10,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3 ",
@@ -35,7 +35,12 @@
                           "n":  "pw-user-config"
                       },
                       {
-                          "d":  "ID=231638928 (nguon: CLI --get-id)",
+                          "d":  "pw VẪN nằm trong config service sau restart (hash 118 ký tự) — config = bộ nhớ",
+                          "ok":  true,
+                          "n":  "pw-after-restart"
+                      },
+                      {
+                          "d":  "ID=316050794 (nguon: CLI --get-id)",
                           "ok":  true,
                           "n":  "get-id"
                       },
@@ -48,18 +53,8 @@
                           "d":  "TCP rs-ny.rustdesk.com:21116 = OPEN",
                           "ok":  true,
                           "n":  "relay-reachable"
-                      },
-                      {
-                          "d":  "live-session.json (9/9 PASS trước bước này)",
-                          "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  11,
+    "total":  10,
     "minutes":  30
 }
