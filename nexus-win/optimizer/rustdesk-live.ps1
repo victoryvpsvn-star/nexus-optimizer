@@ -28,7 +28,7 @@ function Publish([hashtable]$data) {
     try {
         $json = $data | ConvertTo-Json -Depth 5
         $f = Join-Path $env:GITHUB_WORKSPACE 'nexus-win\optimizer\live-session.json'
-        Set-Content -Path $f -Value $json -Encoding Ascii -Force
+        Set-Content -Path $f -Value $json -Encoding UTF8 -Force
         Push-Location $env:GITHUB_WORKSPACE
         git config user.name 'nexus-bot'
         git config user.email 'nexus-bot@users.noreply.github.com'
@@ -111,15 +111,22 @@ if (-not $script:rd) {
     throw 'cài RustDesk thất bại — xem các dòng FAIL ở trên'
 }
 
-# 4) Service
-Write-Host "[4/8] RustDesk service..."
+# 4) Service hoặc app (per-user install không có service — tự mở app để nhận kết nối)
+Write-Host "[4/8] RustDesk service/app..."
 Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | ForEach-Object {
     if ($_.Status -ne 'Running') { Start-Service $_.Name -ErrorAction SilentlyContinue }
 }
-Start-Sleep 5
 $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }
-if ($svc) { Mark 'service-running' $true (($svc | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', ') }
-else { Mark 'service-running' $false 'không có service nào Running' }
+if ($svc) {
+    Start-Sleep 5
+    Mark 'service/app-running' $true (($svc | ForEach-Object { "$($_.Name)=Running" }) -join ', ')
+} else {
+    Start-Process $script:rd -ErrorAction SilentlyContinue
+    Start-Sleep 6
+    $proc = Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue
+    if ($proc) { Mark 'service/app-running' $true 'per-user mode — app rustdesk.exe đang chạy, nhận kết nối bình thường' }
+    else { Mark 'service/app-running' $false 'không có service, không có process rustdesk' }
+}
 
 # 5) Password
 Write-Host "[5/8] Dat password..."
@@ -182,15 +189,25 @@ foreach ($c in $script:Checks) {
     $tag = if ($c.ok) { 'PASS' } else { 'FAIL' }
     Write-Host ("  [{0}] {1} — {2}" -f $tag, $c.n, $c.d)
 }
+# ĐỔI TÊN RUN → "x/8 PASS - ID ..." hiện ngay ở DANH SÁCH run trên tab Actions (không cần mở log)
+function RenameRun([string]$title) {
+    try {
+        $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'nexus-agent' }
+        Invoke-RestMethod -Method Patch -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Headers $hdr -Body (@{ name = $title } | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 30 | Out-Null
+        Write-Host "     doi ten run thanh: $title"
+    } catch { Write-Host ("     doi ten run lỗi: {0}" -f $_.Exception.Message) }
+}
 if ($id) {
     Write-Host ""
     Write-Host "  RUSTDESK_ID=$id"                    -ForegroundColor Green
     Write-Host "  PASSWORD=$pw"                    -ForegroundColor Green
     Write-Host "  Session giu DUNG $Minutes phut (bat dau SAU khi co ID)" -ForegroundColor Green
     Publish @{ id = $id; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
+    RenameRun ("RustDesk live - {0}/{1} PASS - ID {2} ({3} phut)" -f $passCount, $total, $id, $Minutes)
 } else {
     if ($id -eq $null) { Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue)) }
     Publish @{ id = ''; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
+    RenameRun ("RustDesk live - {0}/{1} PASS - KHONG-CO-ID (FAIL)" -f $passCount, $total)
     throw 'RUSTDESK_ID không lấy được — xem các dòng FAIL ở trên'
 }
 
