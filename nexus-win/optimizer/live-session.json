@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "226295839",
-    "run":  "45157267749",
-    "pw_b64":  "eHJkM3QwY29reQ==",
-    "pass":  8,
+    "id":  "",
+    "run":  "45157663406",
+    "pw_b64":  "cGQ0bnQ4NnE5aw==",
+    "pass":  5,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -30,21 +30,21 @@
                           "n":  "set-password"
                       },
                       {
-                          "d":  "ID=226295839",
-                          "ok":  true,
+                          "d":  "không lấy được sau ~2 phút (rd-out/rd-err xem ở DIAG)",
+                          "ok":  false,
                           "n":  "get-id"
                       },
                       {
-                          "d":  "live-session.json (6/6 PASS trước bước này)",
-                          "ok":  true,
+                          "d":  "không publish vì thiếu ID",
+                          "ok":  false,
                           "n":  "publish-session"
                       },
                       {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
+                          "d":  "bỏ qua — thiếu ID hoặc wizard không tồn tại",
+                          "ok":  false,
                           "n":  "launch-wizard"
                       }
                   ],
     "total":  8,
-    "minutes":  10
+    "minutes":  30
 }
