@@ -8,11 +8,17 @@ Write-Host "============================================================"
 Write-Host "  NEXUS RustDesk LIVE — session giữ đúng $Minutes phut"
 Write-Host "============================================================"
 
+# dọn SESSION-*.txt của session cũ (nếu còn) — file này nằm ở root repo nên nó hiện ở trang chủ
+Push-Location $env:GITHUB_WORKSPACE
+$null = git rm -q -f --ignore-unmatch 'SESSION-*.txt' 2>&1
+Pop-Location
+
 $script:Checks = @()
 function Mark([string]$n, [bool]$ok, [string]$d) {
     $script:Checks += @{ n = $n; ok = $ok; d = $d }
     $tag = if ($ok) { 'PASS' } else { 'FAIL' }
     Write-Host "[$tag] $n — $d"
+    if (-not $ok) { Write-Host ("::error title=FAIL {0}::{1}" -f $n, $d) }  # annotation — hiện ngay đỉnh trang run
     if ($env:GITHUB_STEP_SUMMARY) {
         $icon = if ($ok) { ':white_check_mark:' } else { ':x:' }
         Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| $icon | $n | $d |" -Encoding UTF8
@@ -24,19 +30,35 @@ if ($env:GITHUB_STEP_SUMMARY) {
 }
 
 function Publish([hashtable]$data) {
-    # publish bằng git push (checkout đã persist credentials với GITHUB_TOKEN) — tránh 401 của contents API
+    # publish bằng git push — 1 commit: JSON cho poller + file SESSION-*.txt cho NGƯỜI ĐỌC (hiện ngay ở trang chủ repo)
     try {
+        $data.run = $env:GITHUB_RUN_ID
         $json = $data | ConvertTo-Json -Depth 5
         $f = Join-Path $env:GITHUB_WORKSPACE 'nexus-win\optimizer\live-session.json'
         Set-Content -Path $f -Value $json -Encoding UTF8 -Force
+        $idTag = if ($data.id) { $data.id } else { 'KHONG-CO' }
+        $sessName = "SESSION-{0}-PASS-of-{1}-ID-{2}.txt" -f $data.pass, $data.total, $idTag
+        $sb = New-Object System.Text.StringBuilder
+        [void]$sb.AppendLine("NEXUS RUSTDESK SESSION — RUN #$env:GITHUB_RUN_NUMBER — $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm')) UTC")
+        [void]$sb.AppendLine(("KET QUA: {0}/{1} PASS" -f $data.pass, $data.total))
+        [void]$sb.AppendLine("RUSTDESK_ID=$($data.id)")
+        [void]$sb.AppendLine("PASSWORD=$($data.password)")
+        [void]$sb.AppendLine("Session giu: $($data.minutes) phut (bat dau sau khi co ID)")
+        [void]$sb.AppendLine("")
+        [void]$sb.AppendLine("CHECKLIST:")
+        foreach ($c in $data.checklist) {
+            $tag = if ($c.ok) { 'PASS' } else { 'FAIL' }
+            [void]$sb.AppendLine("  [$tag] $($c.n) — $($c.d)")
+        }
+        Set-Content -Path (Join-Path $env:GITHUB_WORKSPACE $sessName) -Value $sb.ToString() -Encoding UTF8 -Force
         Push-Location $env:GITHUB_WORKSPACE
         git config user.name 'nexus-bot'
         git config user.email 'nexus-bot@users.noreply.github.com'
-        git add nexus-win/optimizer/live-session.json
-        git commit -m 'live-session: NEXUS RustDesk session (auto)' --no-verify | Out-Null
+        git add -A
+        git commit -m ("live-session: {0}/{1} PASS - ID {2}" -f $data.pass, $data.total, $idTag) --no-verify | Out-Null
         git push origin HEAD:main 2>&1 | Out-Null
         Pop-Location
-        Write-Host '     published live-session.json (git push)'
+        Write-Host "     published: live-session.json + $sessName (git push)"
     } catch {
         Write-Host ("     publish lỗi: {0}" -f $_.Exception.Message)
         Pop-Location -ErrorAction SilentlyContinue
@@ -189,25 +211,19 @@ foreach ($c in $script:Checks) {
     $tag = if ($c.ok) { 'PASS' } else { 'FAIL' }
     Write-Host ("  [{0}] {1} — {2}" -f $tag, $c.n, $c.d)
 }
-# ĐỔI TÊN RUN → "x/8 PASS - ID ..." hiện ngay ở DANH SÁCH run trên tab Actions (không cần mở log)
-function RenameRun([string]$title) {
-    try {
-        $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'nexus-agent' }
-        Invoke-RestMethod -Method Patch -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Headers $hdr -Body (@{ name = $title } | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 30 | Out-Null
-        Write-Host "     doi ten run thanh: $title"
-    } catch { Write-Host ("     doi ten run lỗi: {0}" -f $_.Exception.Message) }
-}
+# Annotation banner — GitHub không cho đổi tên run (PATCH /actions/runs = 404, cần quyền Admin)
+# → PASS hiển thị bằng annotation notice: hộp màu nổi ngay ĐỈNH trang run (cả khi đang chạy lẫn khi xong)
 if ($id) {
     Write-Host ""
     Write-Host "  RUSTDESK_ID=$id"                    -ForegroundColor Green
     Write-Host "  PASSWORD=$pw"                    -ForegroundColor Green
     Write-Host "  Session giu DUNG $Minutes phut (bat dau SAU khi co ID)" -ForegroundColor Green
     Publish @{ id = $id; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
-    RenameRun ("RustDesk live - {0}/{1} PASS - ID {2} ({3} phut)" -f $passCount, $total, $id, $Minutes)
+    Write-Host ("::notice title=NEXUS {0}/{1} PASS - SESSION LIVE::RUSTDESK_ID={2} | PASSWORD={3} | {4} phut | wizard da mo tren man hinh" -f $passCount, $total, $id, $pw, $Minutes)
 } else {
     if ($id -eq $null) { Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue)) }
     Publish @{ id = ''; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
-    RenameRun ("RustDesk live - {0}/{1} PASS - KHONG-CO-ID (FAIL)" -f $passCount, $total)
+    Write-Host ("::notice title=NEXUS {0}/{1} PASS - KHONG CO ID::xem cac dong FAIL (annotation do) o tren" -f $passCount, $total)
     throw 'RUSTDESK_ID không lấy được — xem các dòng FAIL ở trên'
 }
 
