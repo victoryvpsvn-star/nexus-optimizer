@@ -10,17 +10,23 @@ Write-Host "  NEXUS RustDesk LIVE — session giữ đúng $Minutes phut"
 Write-Host "============================================================"
 
 function Publish([hashtable]$data) {
-    $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'nexus-agent' }
-    $api = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/contents/nexus-win/optimizer/live-session.json"
-    $sha = $null
-    try { $g = Invoke-RestMethod -Uri ($api + '?ref=main') -Headers $hdr -Method Get -TimeoutSec 30; $sha = $g.sha } catch { }
-    $json = $data | ConvertTo-Json
-    $body = @{ message = 'live-session: NEXUS RustDesk session (auto)'; content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json)); branch = 'main' }
-    if ($sha) { $body.sha = $sha }
+    # publish bằng git push (checkout đã persist credentials với GITHUB_TOKEN) — tránh 401 của contents API
     try {
-        Invoke-RestMethod -Uri $api -Headers $hdr -Method Put -Body ($body | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 30 | Out-Null
-        Write-Host '     published live-session.json'
-    } catch { Write-Host ("     publish lỗi: {0}" -f $_.Exception.Message) }
+        $json = $data | ConvertTo-Json
+        $f = Join-Path $env:GITHUB_WORKSPACE 'nexus-win\optimizer\live-session.json'
+        Set-Content -Path $f -Value $json -Encoding Ascii -Force
+        Push-Location $env:GITHUB_WORKSPACE
+        git config user.name 'nexus-bot'
+        git config user.email 'nexus-bot@users.noreply.github.com'
+        git add nexus-win/optimizer/live-session.json
+        git commit -m 'live-session: NEXUS RustDesk session (auto)' --no-verify | Out-Null
+        git push origin HEAD:main 2>&1 | Out-Null
+        Pop-Location
+        Write-Host '     published live-session.json (git push)'
+    } catch {
+        Write-Host ("     publish lỗi: {0}" -f $_.Exception.Message)
+        Pop-Location -ErrorAction SilentlyContinue
+    }
 }
 
 function RDC([string[]]$cliArgs, [int]$timeoutSec = 25) {
@@ -48,19 +54,33 @@ if (-not $rel) { Publish @{ id = ''; password = ''; minutes = $Minutes; error = 
 $asset = $rel.assets | Where-Object { $_.name -match '^rustdesk-.*x86_64\.exe$' } | Select-Object -First 1
 if (-not $asset) { Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'asset-not-found' }; throw "không tìm thấy asset installer trong $($rel.tag_name)" }
 $url = $asset.browser_download_url
-Write-Host "     Tai $url"
+Write-Host "     asset: $($asset.name) | Tai $url"
 $exe = Join-Path $env:TEMP 'rustdesk-setup.exe'
 Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing -TimeoutSec 300
 Write-Host ("     da tai {0:N1} MB" -f ((Get-Item $exe).Length / 1MB))
 
-# 2) Cài im lặng (NSIS /S) — có timeout 180s
+# 2) Cài im lặng (NSIS /S) — có timeout 180s + Unblock (MotW) + exit code + tìm nhiều đường dẫn
 Write-Host "[2/5] Cai im lang (/S)..."
+Unblock-File $exe -ErrorAction SilentlyContinue
 $p = Start-Process $exe -ArgumentList '/S' -PassThru
 if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch { }; Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'installer-timeout' }; throw 'installer timeout 180s' }
+Write-Host ("     installer exit code: {0}" -f $p.ExitCode)
+Write-Host ("     shell elevated (High integrity): {0}" -f [bool](whoami /groups | Select-String 'S-1-16-12288'))
 Start-Sleep 3
-$script:rd = Join-Path $env:ProgramFiles 'RustDesk\rustdesk.exe'
-if (-not (Test-Path $script:rd)) { $script:rd = Join-Path ${env:ProgramFiles(x86)} 'RustDesk\rustdesk.exe' }
-if (-not (Test-Path $script:rd)) { Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'rustdesk-exe-missing' }; throw 'rustdesk.exe không tồn tại sau khi cài' }
+$script:rd = $null
+foreach ($cand in "$env:ProgramFiles\RustDesk\rustdesk.exe", "${env:ProgramFiles(x86)}\RustDesk\rustdesk.exe", "$env:LOCALAPPDATA\Programs\RustDesk\rustdesk.exe", "$env:LOCALAPPDATA\RustDesk\rustdesk.exe") {
+    if (Test-Path $cand) { $script:rd = $cand; break }
+}
+if (-not $script:rd) {
+    $found = Get-ChildItem "$env:ProgramFiles", "$env:LOCALAPPDATA\Programs", "$env:ProgramData" -Filter rustdesk.exe -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { $script:rd = $found.FullName }
+}
+if (-not $script:rd) {
+    Write-Host "     rustdesk.exe KHÔNG thấy ở các vị trí chuẩn — quét:" -ForegroundColor Red
+    Get-ChildItem "$env:ProgramFiles", "$env:LOCALAPPDATA\Programs" -Directory -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("       - {0}" -f $_.FullName) }
+    Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'rustdesk-exe-missing' }
+    throw 'rustdesk.exe không tồn tại sau khi cài (xem exit code + danh sách thư mục ở trên)'
+}
 Write-Host "     cai xong: $script:rd"
 
 # 3) Service chạy
