@@ -20,11 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: RustDesk + wizard live (giữ đúng N phút)
+      - name: "1/2 Cai RustDesk + lay ID + mo wizard (setup)"
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File nexus-win/optimizer/rustdesk-live.ps1 -Minutes ${{ github.event.inputs.minutes || '10' }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File nexus-win/optimizer/rustdesk-live.ps1 -Mode setup -Minutes ${{ github.event.inputs.minutes || '10' }}
 
-      - name: Luu session-info (ID + PASSWORD) vao artifact — log bi mask, artifact KHONG
+      - name: Luu session-info (ID + PASSWORD nguyen ven) vao artifact — log bi GitHub AI-mask, artifact KHONG
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -32,3 +32,8 @@ jobs:
           path: session-info.txt
           retention-days: 1
           if-no-files-found: ignore
+
+      - name: "2/2 Giu session dung N phut (hold)"
+        if: success()
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File nexus-win/optimizer/rustdesk-live.ps1 -Mode hold -Minutes ${{ github.event.inputs.minutes || '10' }}
