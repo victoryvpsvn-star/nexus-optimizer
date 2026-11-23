@@ -140,21 +140,23 @@ if (-not $script:rd) {
     throw 'cài RustDesk thất bại — xem các dòng FAIL ở trên'
 }
 
-# 4) Service hoặc app (per-user install không có service — tự mở app để nhận kết nối)
-Write-Host "[4/8] RustDesk service/app..."
-Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | ForEach-Object {
-    if ($_.Status -ne 'Running') { Start-Service $_.Name -ErrorAction SilentlyContinue }
-}
-$svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }
-if ($svc) {
-    Start-Sleep 5
-    Mark 'service/app-running' $true (($svc | ForEach-Object { "$($_.Name)=Running" }) -join ', ')
+# 4) SERVICE unattended — BẮT BUỘC: app per-user trong session 0 của runner không giữ đăng ký rendezvous
+# → người dùng thấy "Failed to connect: the target device is offline or does not exist"
+Write-Host "[4/8] RustDesk service (unattended)..."
+Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+$null = & $script:rd --install-service 2>&1
+Start-Sleep 4
+$svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue
+if (-not $svc) { $null = & $script:rd --service 2>&1; Start-Sleep 5; $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue }
+if ($svc -and $svc.Status -ne 'Running') { Start-Service $svc.Name -ErrorAction SilentlyContinue; Start-Sleep 4; $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue }
+if ($svc -and $svc.Status -eq 'Running') {
+    New-NetFirewallRule -DisplayName 'RustDesk' -Program $script:rd -Direction Inbound -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
+    Mark 'service-running' $true "$($svc.Name)=Running — unattended, nhận kết nối qua relay"
 } else {
     Start-Process $script:rd -ErrorAction SilentlyContinue
     Start-Sleep 6
     $proc = Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue
-    if ($proc) { Mark 'service/app-running' $true 'per-user mode — app rustdesk.exe đang chạy, nhận kết nối bình thường' }
-    else { Mark 'service/app-running' $false 'không có service, không có process rustdesk' }
+    Mark 'service-running' ([bool]$proc) "service KHÔNG cài được — fallback app per-user (process=$([bool]$proc)) — kết nối CÓ THỂ fail"
 }
 
 # 5) Password
@@ -168,6 +170,9 @@ $o1 = RDC @('--password', $pw) 40
 $o2 = RDC @('--password', $pw) 40
 if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
 else { Mark 'set-password' $false "CLI timeout — o1=$($null -ne $o1) o2=$($null -ne $o2)" }
+# restart service để nạp password vừa đặt (service chạy LocalSystem, đọc config máy)
+Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' } | Restart-Service -Force -ErrorAction SilentlyContinue
+Start-Sleep 4
 
 # 6) ID (--get-id, fallback config service)
 Write-Host "[6/8] Lay ID (toi da ~2 phut)..."
@@ -186,6 +191,11 @@ for ($i = 0; $i -lt 20 -and -not $id; $i++) {
 }
 if ($id) { Mark 'get-id' $true "ID=$id" }
 else { Mark 'get-id' $false 'không lấy được sau ~2 phút (rd-out/rd-err xem ở DIAG)' }
+
+# 6b) Chẩn đoán relay công cộng — runner chạm được server RustDesk không (không fatal)
+$relayOk = $false
+try { $relayOk = Test-NetConnection -ComputerName 'rs-ny.rustdesk.com' -Port 21116 -InformationLevel Quiet -WarningAction SilentlyContinue } catch { }
+Mark 'relay-reachable' ([bool]$relayOk) "TCP rs-ny.rustdesk.com:21116 = $(if ($relayOk) { 'OPEN' } else { 'BLOCKED' })"
 
 # 7) Publish checklist + ID
 Write-Host "[7/8] Publish checklist + ID..."
