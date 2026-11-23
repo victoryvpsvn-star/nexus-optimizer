@@ -1,6 +1,5 @@
 ﻿# rustdesk-live.ps1 — NEXUS: tự cài RustDesk trên runner GitHub, mở wizard, giữ ĐÚNG N phút
-# Mọi call CLI đều có timeout + kill (CLI rustdesk có thể block vô hạn khi service chưa sẵn sàng)
-# ID lấy qua --get-id, fallback đọc config file của service (LocalService profile)
+# Mọi call CLI đều có timeout + kill. CHẤM PASS/FAIL từng bước: log job + GITHUB_STEP_SUMMARY + live-session.json
 param([int]$Minutes = 10)
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
@@ -9,10 +8,25 @@ Write-Host "============================================================"
 Write-Host "  NEXUS RustDesk LIVE — session giữ đúng $Minutes phut"
 Write-Host "============================================================"
 
+$script:Checks = @()
+function Mark([string]$n, [bool]$ok, [string]$d) {
+    $script:Checks += @{ n = $n; ok = $ok; d = $d }
+    $tag = if ($ok) { 'PASS' } else { 'FAIL' }
+    Write-Host "[$tag] $n — $d"
+    if ($env:GITHUB_STEP_SUMMARY) {
+        $icon = if ($ok) { ':white_check_mark:' } else { ':x:' }
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| $icon | $n | $d |" -Encoding UTF8
+    }
+}
+if ($env:GITHUB_STEP_SUMMARY) {
+    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## NEXUS RustDesk live session" -Encoding UTF8
+    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| KQ | Buoc | Chi tiet |`n|---|---|---|" -Encoding UTF8
+}
+
 function Publish([hashtable]$data) {
     # publish bằng git push (checkout đã persist credentials với GITHUB_TOKEN) — tránh 401 của contents API
     try {
-        $json = $data | ConvertTo-Json
+        $json = $data | ConvertTo-Json -Depth 5
         $f = Join-Path $env:GITHUB_WORKSPACE 'nexus-win\optimizer\live-session.json'
         Set-Content -Path $f -Value $json -Encoding Ascii -Force
         Push-Location $env:GITHUB_WORKSPACE
@@ -43,69 +57,87 @@ function RDC([string[]]$cliArgs, [int]$timeoutSec = 25) {
     return (Get-Content $outF -Raw -ErrorAction SilentlyContinue)
 }
 
-# 1) Tải installer RustDesk mới nhất (asset chính thức x86_64 .exe)
-Write-Host "[1/5] Lay release moi nhat..."
+# 1) Release API
+Write-Host "[1/8] Lay release moi nhat..."
 $rel = $null
 foreach ($try in 1..2) {
     try { $rel = Invoke-RestMethod 'https://api.github.com/repos/rustdesk/rustdesk/releases/latest' -Headers @{ 'User-Agent' = 'nexus-agent' } -TimeoutSec 60; break }
     catch { Write-Host "     release API fail (lan $try): $($_.Exception.Message)"; Start-Sleep 5 }
 }
-if (-not $rel) { Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'release-api-fail' }; throw 'không đọc được release API' }
-$asset = $rel.assets | Where-Object { $_.name -match '^rustdesk-.*x86_64\.exe$' } | Select-Object -First 1
-if (-not $asset) { Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'asset-not-found' }; throw "không tìm thấy asset installer trong $($rel.tag_name)" }
-$url = $asset.browser_download_url
-Write-Host "     asset: $($asset.name) | Tai $url"
+if ($rel) { Mark 'release-api' $true "tag $($rel.tag_name)" }
+else { Mark 'release-api' $false 'API lỗi sau 2 lần thử' }
+
+# 2) Tải installer
 $exe = Join-Path $env:TEMP 'rustdesk-setup.exe'
-Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing -TimeoutSec 300
-Write-Host ("     da tai {0:N1} MB" -f ((Get-Item $exe).Length / 1MB))
+$asset = $null
+if ($rel) { $asset = $rel.assets | Where-Object { $_.name -match '^rustdesk-.*x86_64\.exe$' } | Select-Object -First 1 }
+if ($asset) {
+    Write-Host "[2/8] Tai $($asset.name)..."
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $exe -UseBasicParsing -TimeoutSec 300
+    $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+    if ($mb -gt 5) { Mark 'download-installer' $true "$($asset.name) — $mb MB" }
+    else { Mark 'download-installer' $false "file quá nhỏ ($mb MB) — download hỏng" }
+} else {
+    Mark 'download-installer' $false 'không tìm thấy asset x86_64.exe'
+}
 
-# 2) Cài im lặng (NSIS /S) — có timeout 180s + Unblock (MotW) + exit code + tìm nhiều đường dẫn
-Write-Host "[2/5] Cai im lang (/S)..."
-Unblock-File $exe -ErrorAction SilentlyContinue
-$p = Start-Process $exe -ArgumentList '/S' -PassThru
-if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch { }; Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'installer-timeout' }; throw 'installer timeout 180s' }
-Write-Host ("     installer exit code: {0}" -f $p.ExitCode)
-Write-Host ("     shell elevated (High integrity): {0}" -f [bool](whoami /groups | Select-String 'S-1-16-12288'))
-Start-Sleep 3
-$script:rd = $null
-foreach ($cand in "$env:ProgramFiles\RustDesk\rustdesk.exe", "${env:ProgramFiles(x86)}\RustDesk\rustdesk.exe", "$env:LOCALAPPDATA\Programs\RustDesk\rustdesk.exe", "$env:LOCALAPPDATA\RustDesk\rustdesk.exe") {
-    if (Test-Path $cand) { $script:rd = $cand; break }
-}
-if (-not $script:rd) {
-    $found = Get-ChildItem "$env:ProgramFiles", "$env:LOCALAPPDATA\Programs", "$env:ProgramData" -Filter rustdesk.exe -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($found) { $script:rd = $found.FullName }
-}
-if (-not $script:rd) {
-    Write-Host "     rustdesk.exe KHÔNG thấy ở các vị trí chuẩn — quét:" -ForegroundColor Red
-    Get-ChildItem "$env:ProgramFiles", "$env:LOCALAPPDATA\Programs" -Directory -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("       - {0}" -f $_.FullName) }
-    Publish @{ id = ''; password = ''; minutes = $Minutes; error = 'rustdesk-exe-missing' }
-    throw 'rustdesk.exe không tồn tại sau khi cài (xem exit code + danh sách thư mục ở trên)'
-}
-Write-Host "     cai xong: $script:rd"
+# 3) Cài im lặng (/S, Unblock, exit code, tìm nhiều đường dẫn)
+if ($asset -and (Test-Path $exe) -and ((Get-Item $exe -ErrorAction SilentlyContinue).Length -gt 5MB)) {
+    Write-Host "[3/8] Cai im lang (/S)..."
+    Unblock-File $exe -ErrorAction SilentlyContinue
+    $p = Start-Process $exe -ArgumentList '/S' -PassThru
+    if ($p.WaitForExit(180000)) {
+        Write-Host ("     installer exit code: {0}" -f $p.ExitCode)
+        Write-Host ("     shell elevated (High integrity): {0}" -f [bool](whoami /groups | Select-String 'S-1-16-12288'))
+        Start-Sleep 3
+        $script:rd = $null
+        foreach ($cand in "$env:ProgramFiles\RustDesk\rustdesk.exe", "${env:ProgramFiles(x86)}\RustDesk\rustdesk.exe", "$env:LOCALAPPDATA\Programs\RustDesk\rustdesk.exe", "$env:LOCALAPPDATA\RustDesk\rustdesk.exe") {
+            if (Test-Path $cand) { $script:rd = $cand; break }
+        }
+        if (-not $script:rd) {
+            $found = Get-ChildItem "$env:ProgramFiles", "$env:LOCALAPPDATA\Programs", "$env:ProgramData" -Filter rustdesk.exe -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $script:rd = $found.FullName }
+        }
+        if ($script:rd) { Mark 'install-rustdesk' $true "exit=$($p.ExitCode) → $script:rd" }
+        else { Mark 'install-rustdesk' $false "exit=$($p.ExitCode) — rustdesk.exe không thấy ở vị trí chuẩn" }
+    } else {
+        try { $p.Kill() } catch { }
+        Mark 'install-rustdesk' $false 'installer timeout 180s'
+    }
+} else { Mark 'install-rustdesk' $false 'bỏ qua — installer không có' }
 
-# 3) Service chạy
-Write-Host "[3/5] Dam bao RustDesk service chay..."
+if (-not $script:rd) {
+    Publish @{ id = ''; password = ''; minutes = $Minutes; pass = ($script:Checks | Where-Object { $_.ok }).Count; total = $script:Checks.Count; checklist = $script:Checks }
+    throw 'cài RustDesk thất bại — xem các dòng FAIL ở trên'
+}
+
+# 4) Service
+Write-Host "[4/8] RustDesk service..."
 Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | ForEach-Object {
     if ($_.Status -ne 'Running') { Start-Service $_.Name -ErrorAction SilentlyContinue }
-    Write-Host ("     service {0}: {1}" -f $_.Name, $_.Status)
 }
 Start-Sleep 5
+$svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }
+if ($svc) { Mark 'service-running' $true (($svc | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', ') }
+else { Mark 'service-running' $false 'không có service nào Running' }
 
-# 4) Password + ID (CLI có timeout, fallback config service)
-Write-Host "[4/5] Dat password + lay ID (toi da ~3 phut)..."
+# 5) Password
+Write-Host "[5/8] Dat password..."
 $alnum = (48..57) + (97..122)
 $pw = 'NEX-' + (-join ($alnum | Get-Random -Count 8 | ForEach-Object { [char]$_ }))
-$null = RDC @('--password', $pw) 40
-$null = RDC @('--password', $pw) 40
+$o1 = RDC @('--password', $pw) 40
+$o2 = RDC @('--password', $pw) 40
+if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
+else { Mark 'set-password' $false "CLI timeout — o1=$($null -ne $o1) o2=$($null -ne $o2)" }
+
+# 6) ID (--get-id, fallback config service)
+Write-Host "[6/8] Lay ID (toi da ~2 phut)..."
 $id = $null
 for ($i = 0; $i -lt 20 -and -not $id; $i++) {
     Start-Sleep 5
     $out = RDC @('--get-id') 25
     if ($out -match '(\d{9,})') { $id = $Matches[1]; break }
-    # fallback: ID nằm trong config của service (LocalService profile)
-    $cfg = 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml'
-    $cfg2 = "$env:APPDATA\RustDesk\config\RustDesk.toml"
-    foreach ($c in $cfg, $cfg2) {
+    foreach ($c in 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml', "$env:APPDATA\RustDesk\config\RustDesk.toml") {
         if (Test-Path $c) {
             $txt = Get-Content $c -Raw -ErrorAction SilentlyContinue
             if ($txt -match "id\s*=\s*['`"]?(\d{9,})") { $id = $Matches[1]; break }
@@ -113,34 +145,56 @@ for ($i = 0; $i -lt 20 -and -not $id; $i++) {
     }
     if ($id) { break }
 }
+if ($id) { Mark 'get-id' $true "ID=$id" }
+else { Mark 'get-id' $false 'không lấy được sau ~2 phút (rd-out/rd-err xem ở DIAG)' }
+
+# 7) Publish checklist + ID
+Write-Host "[7/8] Publish checklist + ID..."
 if ($id) {
-    Publish @{ id = $id; password = $pw; minutes = $Minutes; error = '' }
-    Write-Host ""
-    Write-Host "==================== KET NOI RUSTDESK ====================" -ForegroundColor Green
-    Write-Host "  RUSTDESK_ID=$id"                                         -ForegroundColor Green
-    Write-Host "  PASSWORD=$pw"                                         -ForegroundColor Green
-    Write-Host "  (RustDesk app -> nhap ID -> nhap password -> Connect)" -ForegroundColor Green
-    Write-Host "  Wizard NEXUS Optimizer da mo san trong man hinh"      -ForegroundColor Green
-    Write-Host "  Session giu DUNG $Minutes phut tinh tu luc nay"       -ForegroundColor Green
-    Write-Host "==========================================================" -ForegroundColor Green
+    $passCount = ($script:Checks | Where-Object { $_.ok }).Count
+    Publish @{ id = $id; password = $pw; minutes = $Minutes; pass = $passCount; total = $script:Checks.Count; checklist = $script:Checks }
+    Mark 'publish-session' $true "live-session.json ($passCount/$($script:Checks.Count) PASS trước bước này)"
 } else {
-    Write-Host "RUSTDESK_ID=KHONG-LAY-DUOC — DIAG ben duoi" -ForegroundColor Red
-    Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue))
-    Write-Host ("     rd-err lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-err.txt" -Raw -ErrorAction SilentlyContinue))
-    Publish @{ id = ''; password = $pw; minutes = $Minutes; error = 'id-not-found' }
-    throw 'RUSTDESK_ID không lấy được sau ~3 phút — xem DIAG trong log'
+    Mark 'publish-session' $false 'không publish vì thiếu ID'
 }
 
-# 5) Mở wizard NEXUS trong console session (schtasks /IT)
-Write-Host "[5/5] Mo NEXUS Optimizer wizard trong man hinh console..."
+# 8) Mở wizard trong console session (schtasks /IT)
+Write-Host "[8/8] Mo NEXUS Optimizer wizard..."
 $wiz = Join-Path $env:GITHUB_WORKSPACE 'nexus-win\optimizer\nexus-optimizer-wizard.ps1'
-if (-not (Test-Path $wiz)) { throw "khong thay wizard: $wiz" }
-$tr = "powershell -NoProfile -ExecutionPolicy Bypass -File $wiz"
-schtasks /Create /TN NEXUSWizardLive /TR $tr /SC ONCE /ST 23:59 /IT /RL HIGHEST /F | Out-Null
-schtasks /Run /TN NEXUSWizardLive | Out-Null
-Write-Host "     wizard da duoc launch (task NEXUSWizardLive)"
+if ($id -and (Test-Path $wiz)) {
+    $tr = "powershell -NoProfile -ExecutionPolicy Bypass -File $wiz"
+    schtasks /Create /TN NEXUSWizardLive /TR $tr /SC ONCE /ST 23:59 /IT /RL HIGHEST /F | Out-Null
+    $null = schtasks /Run /TN NEXUSWizardLive 2>&1
+    if ($LASTEXITCODE -eq 0) { Mark 'launch-wizard' $true 'schtasks NEXUSWizardLive đã chạy (console session)' }
+    else { Mark 'launch-wizard' $false "schtasks exit=$LASTEXITCODE" }
+} else { Mark 'launch-wizard' $false 'bỏ qua — thiếu ID hoặc wizard không tồn tại' }
 
-# 6) Giữ ĐÚNG N phút — đếm ngược từng phút (bắt đầu SAU khi có ID → bro hưởng trọn window)
+# Tổng kết: log job + summary + publish lần 2 (checklist đầy đủ)
+$passCount = ($script:Checks | Where-Object { $_.ok }).Count
+$total = $script:Checks.Count
+if ($env:GITHUB_STEP_SUMMARY) {
+    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**KẾT QUẢ: $passCount/$total PASS**" -Encoding UTF8
+    if ($id) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**RUSTDESK_ID=$id — PASSWORD=$pw — session $Minutes phút**" -Encoding UTF8 }
+}
+Write-Host ""
+Write-Host "==================== KET QUA: $passCount/$total PASS ====================" -ForegroundColor $(if ($passCount -eq $total) { 'Green' } else { 'Yellow' })
+foreach ($c in $script:Checks) {
+    $tag = if ($c.ok) { 'PASS' } else { 'FAIL' }
+    Write-Host ("  [{0}] {1} — {2}" -f $tag, $c.n, $c.d)
+}
+if ($id) {
+    Write-Host ""
+    Write-Host "  RUSTDESK_ID=$id"                    -ForegroundColor Green
+    Write-Host "  PASSWORD=$pw"                    -ForegroundColor Green
+    Write-Host "  Session giu DUNG $Minutes phut (bat dau SAU khi co ID)" -ForegroundColor Green
+    Publish @{ id = $id; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
+} else {
+    if ($id -eq $null) { Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue)) }
+    Publish @{ id = ''; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
+    throw 'RUSTDESK_ID không lấy được — xem các dòng FAIL ở trên'
+}
+
+# Giữ ĐÚNG N phút — đếm ngược từng phút (bắt đầu SAU khi có ID → bro hưởng trọn window)
 for ($i = $Minutes; $i -gt 0; $i--) {
     Write-Host ("CON-LAI: {0} phut — bro ket noi bang RUSTDESK_ID + PASSWORD" -f $i)
     Start-Sleep -Seconds 60
