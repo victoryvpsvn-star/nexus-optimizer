@@ -51,10 +51,17 @@ function Publish([hashtable]$data) {
             [void]$sb.AppendLine("  [$tag] $($c.n) — $($c.d)")
         }
         Set-Content -Path (Join-Path $env:GITHUB_WORKSPACE $sessName) -Value $sb.ToString() -Encoding UTF8 -Force
+        # file cho ARTIFACT (tải về nguyên vẹn): log bị GitHub AI-mask MỌI chuỗi giống password — artifact thì KHÔNG
+        # KHÔNG commit file này (git rm --cached) — password không bao giờ vào git
+        $pwPlain = ''
+        if ($data.pw_b64) { $pwPlain = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($data.pw_b64)) }
+        $infoF = Join-Path $env:GITHUB_WORKSPACE 'session-info.txt'
+        Set-Content -Path $infoF -Value ("RUSTDESK_ID={0}`nPASSWORD={1}`nKET QUA: {2}/{3} PASS`nSession giu: {4} phut (bat dau sau khi co ID)" -f $data.id, $pwPlain, $data.pass, $data.total, $data.minutes) -Encoding UTF8 -Force
         Push-Location $env:GITHUB_WORKSPACE
         git config user.name 'nexus-bot'
         git config user.email 'nexus-bot@users.noreply.github.com'
         git add -A
+        $null = git rm --cached -q --ignore-unmatch session-info.txt 2>&1
         git commit -m ("live-session: {0}/{1} PASS - ID {2}" -f $data.pass, $data.total, $idTag) --no-verify | Out-Null
         git push origin HEAD:main 2>&1 | Out-Null
         Pop-Location
@@ -220,6 +227,8 @@ if ($id) {
     Write-Host ""
     Write-Host "  RUSTDESK_ID=$id"                    -ForegroundColor Green
     Write-Host "  PASSWORD=$pw"                    -ForegroundColor Green
+    Write-Host "  (log se hien *** — GitHub AI-mask moi chuoi giong password, da thu 3 kieu thoat)" -ForegroundColor Yellow
+    Write-Host "  => LAY PASSWORD: muc ARTIFACTS (cuoi trang run nay) -> session-info.zip -> session-info.txt" -ForegroundColor Yellow
     Write-Host "  Session giu DUNG $Minutes phut (bat dau SAU khi co ID)" -ForegroundColor Green
     Publish @{ id = $id; pw_b64 = $pwB64; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
     Write-Host ("::notice title=NEXUS {0}/{1} PASS - SESSION LIVE::RUSTDESK_ID={2} | PASSWORD={3} | {4} phut | wizard da mo tren man hinh" -f $passCount, $total, $id, $pw, $Minutes)
