@@ -1,7 +1,7 @@
 ﻿{
     "id":  "304238681",
     "run":  "45154936791",
-    "pass":  6,
+    "pass":  8,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -32,9 +32,19 @@
                           "d":  "ID=304238681",
                           "ok":  true,
                           "n":  "get-id"
+                      },
+                      {
+                          "d":  "live-session.json (6/6 PASS trước bước này)",
+                          "ok":  true,
+                          "n":  "publish-session"
+                      },
+                      {
+                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
+                          "ok":  true,
+                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  6,
+    "total":  8,
     "password":  "NEX-fyduqp27",
     "minutes":  10
 }
