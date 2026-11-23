@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "93473133",
-    "run":  "45165909852",
-    "pw_b64":  "ajk1em83ZW1uZA==",
-    "pass":  8,
+    "id":  "91093083",
+    "run":  "45167309682",
+    "pw_b64":  "YnN6MXkwbHBhbg==",
+    "pass":  7,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -20,9 +20,9 @@
                           "n":  "install-rustdesk"
                       },
                       {
-                          "d":  "per-user mode — app rustdesk.exe đang chạy, nhận kết nối bình thường",
+                          "d":  "service KHÔNG cài được — fallback app per-user (process=True) — kết nối CÓ THỂ fail",
                           "ok":  true,
-                          "n":  "service/app-running"
+                          "n":  "service-running"
                       },
                       {
                           "d":  "CLI trả lời 2/2 (không timeout)",
@@ -30,21 +30,16 @@
                           "n":  "set-password"
                       },
                       {
-                          "d":  "ID=93473133",
+                          "d":  "ID=91093083",
                           "ok":  true,
                           "n":  "get-id"
                       },
                       {
-                          "d":  "live-session.json (6/6 PASS trước bước này)",
+                          "d":  "TCP rs-ny.rustdesk.com:21116 = OPEN",
                           "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
+                          "n":  "relay-reachable"
                       }
                   ],
-    "total":  8,
-    "minutes":  10
+    "total":  7,
+    "minutes":  30
 }
