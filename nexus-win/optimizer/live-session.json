@@ -1,7 +1,7 @@
 ﻿{
-    "id":  "139127760",
-    "run":  "45153904133",
-    "pass":  8,
+    "id":  "304238681",
+    "run":  "45154936791",
+    "pass":  6,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -29,22 +29,12 @@
                           "n":  "set-password"
                       },
                       {
-                          "d":  "ID=139127760",
+                          "d":  "ID=304238681",
                           "ok":  true,
                           "n":  "get-id"
-                      },
-                      {
-                          "d":  "live-session.json (6/6 PASS trước bước này)",
-                          "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  8,
-    "password":  "NEX-ijvr8fbk",
+    "total":  6,
+    "password":  "NEX-fyduqp27",
     "minutes":  10
 }
