@@ -1,6 +1,6 @@
 ﻿{
     "id":  "233746195",
-    "pass":  6,
+    "pass":  8,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3",
@@ -31,9 +31,19 @@
                           "d":  "ID=233746195",
                           "ok":  true,
                           "n":  "get-id"
+                      },
+                      {
+                          "d":  "live-session.json (6/6 PASS trước bước này)",
+                          "ok":  true,
+                          "n":  "publish-session"
+                      },
+                      {
+                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
+                          "ok":  true,
+                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  6,
+    "total":  8,
     "password":  "NEX-819evi7x",
     "minutes":  10
 }
