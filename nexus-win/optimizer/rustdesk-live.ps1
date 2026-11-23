@@ -86,28 +86,39 @@ function RDC([string[]]$cliArgs, [int]$timeoutSec = 25) {
     return (Get-Content $outF -Raw -ErrorAction SilentlyContinue)
 }
 
-# 1) Release API
-Write-Host "[1/8] Lay release moi nhat..."
-$rel = $null
-foreach ($try in 1..2) {
-    try { $rel = Invoke-RestMethod 'https://api.github.com/repos/rustdesk/rustdesk/releases/latest' -Headers @{ 'User-Agent' = 'nexus-agent' } -TimeoutSec 60; break }
+# 1) Tag mới nhất — API có GITHUB_TOKEN (1000/h) + fallback redirect /releases/latest (không cần API)
+Write-Host "[1/8] Lay tag release moi nhat..."
+$rel = $null; $tag = $null
+$hdr = @{ 'User-Agent' = 'nexus-agent' }
+if ($env:GITHUB_TOKEN) { $hdr['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
+foreach ($try in 1..3) {
+    try { $rel = Invoke-RestMethod 'https://api.github.com/repos/rustdesk/rustdesk/releases/latest' -Headers $hdr -TimeoutSec 60; break }
     catch { Write-Host "     release API fail (lan $try): $($_.Exception.Message)"; Start-Sleep 5 }
 }
-if ($rel) { Mark 'release-api' $true "tag $($rel.tag_name)" }
-else { Mark 'release-api' $false 'API lỗi sau 2 lần thử' }
+if ($rel) { $tag = $rel.tag_name }
+else {
+    $loc = $null
+    try { $r = Invoke-WebRequest -Uri 'https://github.com/rustdesk/rustdesk/releases/latest' -MaximumRedirection 0 -UseBasicParsing -ErrorAction Stop; if ($r.Headers['Location']) { $loc = $r.Headers['Location'] } } catch {
+        if ($_.Exception.Response) { $loc = $_.Exception.Response.Headers['Location'] }
+    }
+    if ($loc) { $tag = ($loc -split '/tag/')[-1]; Write-Host "     fallback redirect: $loc" }
+}
+if ($tag) { Mark 'release-api' $true "tag $tag $(if (-not $rel) { '(redirect fallback)' })" }
+else { Mark 'release-api' $false 'API + fallback đều lỗi' }
 
-# 2) Tải installer
+# 2) Tải installer — URL dựng từ tag (không cần API list assets)
 $exe = Join-Path $env:TEMP 'rustdesk-setup.exe'
-$asset = $null
-if ($rel) { $asset = $rel.assets | Where-Object { $_.name -match '^rustdesk-.*x86_64\.exe$' } | Select-Object -First 1 }
-if ($asset) {
-    Write-Host "[2/8] Tai $($asset.name)..."
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $exe -UseBasicParsing -TimeoutSec 300
+$dl = $null
+if ($rel) { $a = $rel.assets | Where-Object { $_.name -match '^rustdesk-.*x86_64\.exe$' } | Select-Object -First 1; if ($a) { $dl = $a.browser_download_url } }
+if (-not $dl -and $tag) { $dl = "https://github.com/rustdesk/rustdesk/releases/download/$tag/rustdesk-$($tag -replace '^v','')-x86_64.exe" }
+if ($dl) {
+    Write-Host "[2/8] Tai $dl..."
+    Invoke-WebRequest -Uri $dl -OutFile $exe -UseBasicParsing -TimeoutSec 300
     $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-    if ($mb -gt 5) { Mark 'download-installer' $true "$($asset.name) — $mb MB" }
+    if ($mb -gt 5) { Mark 'download-installer' $true "$([IO.Path]::GetFileName($dl)) — $mb MB" }
     else { Mark 'download-installer' $false "file quá nhỏ ($mb MB) — download hỏng" }
 } else {
-    Mark 'download-installer' $false 'không tìm thấy asset x86_64.exe'
+    Mark 'download-installer' $false 'không có URL tải (không tag, không asset)'
 }
 
 # 3) Cài im lặng (/S, Unblock, exit code, tìm nhiều đường dẫn)
