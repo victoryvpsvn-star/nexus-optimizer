@@ -1,4 +1,4 @@
-name: RustDesk live — NEXUS Optimizer wizard (giữ đúng 10 phút)
+name: RustDesk live — NEXUS Optimizer wizard (giữ đúng N phút)
 
 on:
   workflow_dispatch:
@@ -16,10 +16,19 @@ jobs:
   rustdesk-live:
     name: Cai RustDesk + mo wizard — bro remote vao test
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - name: RustDesk + wizard live (giữ đúng N phút)
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File nexus-win/optimizer/rustdesk-live.ps1 -Minutes ${{ github.event.inputs.minutes || '10' }}
+
+      - name: Luu session-info (ID + PASSWORD) vao artifact — log bi mask, artifact KHONG
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: session-info
+          path: session-info.txt
+          retention-days: 1
+          if-no-files-found: ignore
