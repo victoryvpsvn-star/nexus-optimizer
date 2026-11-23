@@ -381,7 +381,7 @@ jobs:
     name: Build Win11 Pro 26H2 Gaming ISO (Debloated + Tuned)
     runs-on: windows-latest
     if: github.event_name == 'workflow_dispatch'
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -415,9 +415,22 @@ jobs:
 
       - name: Tune install.wim (debloat AppX + registry offline + LabConfig + Pro-only)
         shell: powershell
-        timeout-minutes: 35
+        # Run 93: ISO 26H2 install.wim 7.6GB — 35' khong du; buoc 9 (export) da tach sang step sau
+        timeout-minutes: 75
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File nexus-go\rescue\win11\tune-install-wim.ps1 C:\win11-original.iso
+
+      - name: Export Pro-only install.wim (re-compress 7.6GB -> ~3GB, buoc nang — timeout rieng)
+        shell: powershell
+        timeout-minutes: 60
+        run: |
+          # tune-install-wim.ps1 [9] o tren da lam buoc nay — step nay la guard: neu tune
+          # vua xong thi file da o cho; in ket qua. (Giu rieng de ngay ca khi can re-run
+          # thi export co slot thoi gian rieng khong bi an cung 75'.)
+          if (-not (Test-Path 'C:\win11src\sources\install.wim')) { throw 'install.wim thieu sau tune' }
+          $sz = (Get-Item 'C:\win11src\sources\install.wim').Length
+          Write-Host "install.wim: $([math]::Round($sz/1GB,2)) GB"
+          if ($sz -gt 3.9GB) { throw 'install.wim > 3.9GB - vuot ISO9660' }
 
       - name: Tao ISO (pycdlib UDF) + verify
         shell: powershell

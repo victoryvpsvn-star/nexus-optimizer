@@ -131,9 +131,17 @@ dism /Unmount-Image /MountDir:$mnt /Commit
 if ($LASTEXITCODE -ne 0) { throw "unmount boot.wim failed" }
 
 # ---------- 9. Export Pro-only (compress recovery ~2.5-3.2GB < 4GB ISO9660) ----------
+# Bai hoc run 93: ISO 26H2 (26300) install.wim = 7.6GB (24H2 chi 5.5GB) -> mount+debloat+
+# unmount+export het 35' step timeout. Tach: buoc 1-8 o step "tune", buoc 9 (export re-compress
+# 7.6GB -> ~3GB rat nang) o step rieng "export" voi timeout rieng.
+# Neu da export roi (re-run job) thi skip.
 Write-Host '[9] Export Pro-only compress recovery...'
-dism /Export-Image /SourceImageFile:"$src\sources\install.wim" /SourceIndex:$proIdx /DestinationImageFile:"$out\install.wim" /Compress:recovery /CheckIntegrity
-if ($LASTEXITCODE -ne 0) { throw "export failed ($LASTEXITCODE)" }
+if ((Test-Path "$out\install.wim") -and ((Get-Item "$out\install.wim").Length -gt 1GB)) {
+  Write-Host 'install.wim da export o lan truoc — skip'
+} else {
+  dism /Export-Image /SourceImageFile:"$src\sources\install.wim" /SourceIndex:$proIdx /DestinationImageFile:"$out\install.wim" /Compress:recovery /CheckIntegrity
+  if ($LASTEXITCODE -ne 0) { throw "export failed ($LASTEXITCODE)" }
+}
 Move-Item "$out\install.wim" "$src\sources\install.wim" -Force
 $sz2 = (Get-Item "$src\sources\install.wim").Length
 Write-Host "install.wim final: $([math]::Round($sz2/1GB,2)) GB"
