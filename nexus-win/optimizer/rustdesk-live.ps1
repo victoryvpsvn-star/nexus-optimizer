@@ -125,10 +125,10 @@ if ($dl) {
 if ((Test-Path $exe) -and ((Get-Item $exe -ErrorAction SilentlyContinue).Length -gt 5MB)) {
     Write-Host "[3/8] Cai im lang (/S)..."
     Unblock-File $exe -ErrorAction SilentlyContinue
-    # /allusers = cài TOÀN HỆ THỐNG (Program Files + service chuẩn) — /S đơn thuần cài per-user
-    # (AppData) → RustDesk coi là "chưa cài" → từ chối --password: "Installation and administrative
-    # privileges required!" (diag #21)
-    $p = Start-Process $exe -ArgumentList '/S', '/allusers' -PassThru
+    # --silent-install = cài im lặng TOÀN HỆ THỐNG chuẩn của RustDesk (Program Files + đăng ký service
+    # + RustDesk coi là "installed" → --password hoạt động). Diag #21/#22: /S và /allusers chỉ cài
+    # per-user (AppData) → CLI chào "Installation and administrative privileges required!"
+    $p = Start-Process $exe -ArgumentList '--silent-install' -PassThru
     if ($p.WaitForExit(180000)) {
         Write-Host ("     installer exit code: {0}" -f $p.ExitCode)
         Write-Host ("     shell elevated (High integrity): {0}" -f [bool](whoami /groups | Select-String 'S-1-16-12288'))
