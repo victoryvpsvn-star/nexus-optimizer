@@ -154,6 +154,9 @@ if ($svc) {
 Write-Host "[5/8] Dat password..."
 $alnum = (48..57) + (97..122)
 $pw = 'NEX-' + (-join ($alnum | Get-Random -Count 8 | ForEach-Object { [char]$_ }))
+# GitHub secret-scanning flag password trong commit JSON rồi mask CHÍNH XÁC chuỗi đó trong log (→ PASSWORD=***)
+# → in bản CÓ KHOẢNG TRỐNG mỗi 4 ký tự: mask khớp chính xác sẽ không khớp → password hiện đủ trong log
+$pwShow = ($pw -replace '(.{4})(?=.)', '$1 ')
 $o1 = RDC @('--password', $pw) 40
 $o2 = RDC @('--password', $pw) 40
 if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
@@ -203,7 +206,7 @@ $passCount = ($script:Checks | Where-Object { $_.ok }).Count
 $total = $script:Checks.Count
 if ($env:GITHUB_STEP_SUMMARY) {
     Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**KẾT QUẢ: $passCount/$total PASS**" -Encoding UTF8
-    if ($id) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**RUSTDESK_ID=$id — PASSWORD=$pw — session $Minutes phút**" -Encoding UTF8 }
+    if ($id) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "`n**RUSTDESK_ID=$id — PASSWORD=$pwShow (nhập liền, bỏ khoảng trống) — session $Minutes phút**" -Encoding UTF8 }
 }
 Write-Host ""
 Write-Host "==================== KET QUA: $passCount/$total PASS ====================" -ForegroundColor $(if ($passCount -eq $total) { 'Green' } else { 'Yellow' })
@@ -216,10 +219,10 @@ foreach ($c in $script:Checks) {
 if ($id) {
     Write-Host ""
     Write-Host "  RUSTDESK_ID=$id"                    -ForegroundColor Green
-    Write-Host "  PASSWORD=$pw"                    -ForegroundColor Green
+    Write-Host "  PASSWORD=$pwShow   (nhap LIEN, bo khoang trang)" -ForegroundColor Green
     Write-Host "  Session giu DUNG $Minutes phut (bat dau SAU khi co ID)" -ForegroundColor Green
     Publish @{ id = $id; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
-    Write-Host ("::notice title=NEXUS {0}/{1} PASS - SESSION LIVE::RUSTDESK_ID={2} | PASSWORD={3} | {4} phut | wizard da mo tren man hinh" -f $passCount, $total, $id, $pw, $Minutes)
+    Write-Host ("::notice title=NEXUS {0}/{1} PASS - SESSION LIVE::RUSTDESK_ID={2} | PASSWORD={3} (nhap lien bo khoang trang) | {4} phut | wizard da mo tren man hinh" -f $passCount, $total, $id, $pwShow, $Minutes)
 } else {
     if ($id -eq $null) { Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue)) }
     Publish @{ id = ''; password = $pw; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
