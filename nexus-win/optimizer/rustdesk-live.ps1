@@ -62,6 +62,21 @@ if ($id) {
     & $rd --get-id
 }
 
+# 4b) Publish ID + password lên repo (live-session.json) — log CI đang chạy không đọc được qua API
+if ($id) {
+    $sess = @{ id = $id; password = $pw; minutes = $Minutes; started = (Get-Date -Format o) } | ConvertTo-Json
+    $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'nexus-agent' }
+    $api = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/contents/nexus-win/optimizer/live-session.json"
+    $sha = $null
+    try { $g = Invoke-RestMethod -Uri ($api + '?ref=main') -Headers $hdr -Method Get; $sha = $g.sha } catch { }
+    $body = @{ message = 'live-session: NEXUS RustDesk session đang mở (auto)'; content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($sess)); branch = 'main' }
+    if ($sha) { $body.sha = $sha }
+    try {
+        Invoke-RestMethod -Uri $api -Headers $hdr -Method Put -Body ($body | ConvertTo-Json) -ContentType 'application/json' | Out-Null
+        Write-Host '     published live-session.json (ID + password)'
+    } catch { Write-Host ("     publish lỗi: {0}" -f $_.Exception.Message) }
+}
+
 # 5) Mở wizard NEXUS trong console session (schtasks /IT để vào interactive session)
 Write-Host "[5/5] Mo NEXUS Optimizer wizard trong man hinh console..."
 $wiz = Join-Path $env:GITHUB_WORKSPACE 'nexus-win\optimizer\nexus-optimizer-wizard.ps1'
