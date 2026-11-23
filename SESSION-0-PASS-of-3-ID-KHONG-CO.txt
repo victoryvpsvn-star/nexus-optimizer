@@ -1,0 +1,11 @@
+﻿NEXUS RUSTDESK SESSION — RUN #17 — 2026-11-23 12:20 UTC
+KET QUA: 0/3 PASS
+RUSTDESK_ID=
+PASSWORD: xem trong log cua run nay (khong ghi vao file de tranh secret-scanning mask)
+Session giu: 30 phut (bat dau sau khi co ID)
+
+CHECKLIST:
+  [FAIL] release-api — API lỗi sau 2 lần thử
+  [FAIL] download-installer — không tìm thấy asset x86_64.exe
+  [FAIL] install-rustdesk — bỏ qua — installer không có
+
