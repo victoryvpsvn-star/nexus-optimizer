@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "303472073",
-    "run":  "45175408582",
-    "pw_b64":  "azUwZXhqYnp1Mw==",
-    "pass":  9,
+    "id":  "223691014",
+    "run":  "45182774461",
+    "pw_b64":  "ZGN4OG1qZTBvNg==",
+    "pass":  7,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3 ",
@@ -25,12 +25,17 @@
                           "n":  "service-running"
                       },
                       {
-                          "d":  "CLI trả lời 2/2 (không timeout)",
+                          "d":  "CLI trả lời 2/2 (không timeout, service đã dừng → CLI ghi file)",
                           "ok":  true,
                           "n":  "set-password"
                       },
                       {
-                          "d":  "ID=303472073 (nguon: CLI --get-id)",
+                          "d":  "config user VẪN password=\"\" sau khi CLI chạy — CLI không ghi file (soi \"CLI pw out\" ở log)",
+                          "ok":  false,
+                          "n":  "pw-user-config"
+                      },
+                      {
+                          "d":  "ID=223691014 (nguon: CLI --get-id)",
                           "ok":  true,
                           "n":  "get-id"
                       },
@@ -43,18 +48,8 @@
                           "d":  "TCP rs-ny.rustdesk.com:21116 = OPEN",
                           "ok":  true,
                           "n":  "relay-reachable"
-                      },
-                      {
-                          "d":  "live-session.json (7/8 PASS trước bước này)",
-                          "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  10,
+    "total":  9,
     "minutes":  30
 }
