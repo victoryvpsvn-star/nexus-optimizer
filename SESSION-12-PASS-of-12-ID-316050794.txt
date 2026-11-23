@@ -1,0 +1,20 @@
+﻿NEXUS RUSTDESK SESSION — RUN #24 — 2026-11-23 13:57 UTC
+KET QUA: 12/12 PASS
+RUSTDESK_ID=316050794
+PASSWORD: xem trong log cua run nay (khong ghi vao file de tranh secret-scanning mask)
+Session giu: 30 phut (bat dau sau khi co ID)
+
+CHECKLIST:
+  [PASS] release-api — tag 1.5.3 
+  [PASS] download-installer — rustdesk-1.5.3-x86_64.exe — 25 MB
+  [PASS] install-rustdesk — exit=0 → C:\Program Files\RustDesk\rustdesk.exe
+  [PASS] service-running — RustDesk=Running — LocalSystem unattended, nhận kết nối qua relay
+  [PASS] set-password — CLI trả lời 2/2 (không timeout)
+  [PASS] pw-user-config — pw nằm trong config SERVICE (IPC chuẩn — hash 118 ký tự)
+  [PASS] pw-after-restart — pw VẪN nằm trong config service sau restart (hash 118 ký tự) — config = bộ nhớ
+  [PASS] get-id — ID=316050794 (nguon: CLI --get-id)
+  [PASS] service-password-config — password đã ghi vào: C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml
+  [PASS] relay-reachable — TCP rs-ny.rustdesk.com:21116 = OPEN
+  [PASS] publish-session — live-session.json (10/10 PASS trước bước này)
+  [PASS] launch-wizard — schtasks NEXUSWizardLive đã chạy (console session)
+
