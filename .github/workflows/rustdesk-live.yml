@@ -1,0 +1,24 @@
+name: RustDesk live — NEXUS Optimizer wizard (giữ đúng 10 phút)
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Số phút giữ session (mặc định 10)
+        required: false
+        default: '10'
+
+permissions:
+  contents: read
+
+jobs:
+  rustdesk-live:
+    name: Cai RustDesk + mo wizard — bro remote vao test
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: RustDesk + wizard live (giữ đúng N phút)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File nexus-win/optimizer/rustdesk-live.ps1 -Minutes ${{ github.event.inputs.minutes || '10' }}
