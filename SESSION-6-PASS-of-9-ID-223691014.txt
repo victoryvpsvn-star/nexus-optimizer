@@ -1,5 +1,5 @@
-﻿NEXUS RUSTDESK SESSION — RUN #21 — 2026-11-23 13:20 UTC
-KET QUA: 7/9 PASS
+﻿NEXUS RUSTDESK SESSION — RUN #21 — 2026-11-23 13:21 UTC
+KET QUA: 6/9 PASS
 RUSTDESK_ID=223691014
 PASSWORD: xem trong log cua run nay (khong ghi vao file de tranh secret-scanning mask)
 Session giu: 30 phut (bat dau sau khi co ID)
@@ -13,5 +13,5 @@ CHECKLIST:
   [FAIL] pw-user-config — config user VẪN password="" sau khi CLI chạy — CLI không ghi file (soi "CLI pw out" ở log)
   [PASS] get-id — ID=223691014 (nguon: CLI --get-id)
   [FAIL] service-password-config — KHÔNG thấy password trong config nào — service sẽ từ chối pw (dump [CFG] ở log để soi)
-  [PASS] relay-reachable — TCP rs-ny.rustdesk.com:21116 = OPEN
+  [FAIL] relay-reachable — TCP rs-ny.rustdesk.com:21116 = BLOCKED
 
