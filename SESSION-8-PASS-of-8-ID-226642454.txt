@@ -1,0 +1,16 @@
+﻿NEXUS RUSTDESK SESSION — RUN #13 — 2026-11-23 10:48 UTC
+KET QUA: 8/8 PASS
+RUSTDESK_ID=226642454
+PASSWORD: xem trong log cua run nay (khong ghi vao file de tranh secret-scanning mask)
+Session giu: 30 phut (bat dau sau khi co ID)
+
+CHECKLIST:
+  [PASS] release-api — tag 1.5.3
+  [PASS] download-installer — rustdesk-1.5.3-x86_64.exe — 25 MB
+  [PASS] install-rustdesk — exit=0 → C:\Users\runneradmin\AppData\Local\RustDesk\rustdesk.exe
+  [PASS] service/app-running — per-user mode — app rustdesk.exe đang chạy, nhận kết nối bình thường
+  [PASS] set-password — CLI trả lời 2/2 (không timeout)
+  [PASS] get-id — ID=226642454
+  [PASS] publish-session — live-session.json (6/6 PASS trước bước này)
+  [PASS] launch-wizard — schtasks NEXUSWizardLive đã chạy (console session)
+
