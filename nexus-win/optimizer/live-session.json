@@ -1,6 +1,39 @@
 {
-    "error":  "",
-    "minutes":  10,
-    "id":  "499918618",
-    "password":  "NEX-48vqanx0"
+    "id":  "508605139",
+    "pass":  5,
+    "checklist":  [
+                      {
+                          "d":  "tag 1.5.3",
+                          "ok":  true,
+                          "n":  "release-api"
+                      },
+                      {
+                          "d":  "rustdesk-1.5.3-x86_64.exe ? 25 MB",
+                          "ok":  true,
+                          "n":  "download-installer"
+                      },
+                      {
+                          "d":  "exit=0 ? C:\\Users\\runneradmin\\AppData\\Local\\RustDesk\\rustdesk.exe",
+                          "ok":  true,
+                          "n":  "install-rustdesk"
+                      },
+                      {
+                          "d":  "kh?ng c? service n?o Running",
+                          "ok":  false,
+                          "n":  "service-running"
+                      },
+                      {
+                          "d":  "CLI tr? l?i 2/2 (kh?ng timeout)",
+                          "ok":  true,
+                          "n":  "set-password"
+                      },
+                      {
+                          "d":  "ID=508605139",
+                          "ok":  true,
+                          "n":  "get-id"
+                      }
+                  ],
+    "total":  6,
+    "password":  "NEX-4w5j9eso",
+    "minutes":  10
 }
