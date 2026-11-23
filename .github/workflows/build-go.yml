@@ -210,41 +210,39 @@ jobs:
         shell: powershell
         timeout-minutes: 30
         run: |
-          # Bai hoc run 58-64: ADK base installer tren runner khong on dinh (exit 1000,
-          # registry stub VS SDK che path). Bai hoc run 85: choco windows-adk-winpe KHONG
-          # co boot.wim nao trong cay. Run 87: adkwinpesetup.exe fwlink = 1.95MB WEB INSTALLER
-          # (Burn bundle) — check >=10MB SAI, va /features khong phai cua Burn.
-          # Burn standard: /quiet /norestart (installer tai payload roi tu cai).
+          # Bai hoc run 58-64: ADK base installer tren runner khong on dinh (exit 1000).
+          # Run 85: choco windows-adk-winpe KHONG co boot.wim. Run 87: check 10MB sai (web installer 1.95MB).
+          # Run 89: /quiet exit=0 NHUNG khong cai gi (can ADK BASE truoc — doc MS: add-on "AFTER installing the ADK").
+          # -> KHONG cai gi ca: Burn /layout <dir> = tai TOAN BO payload offline; boot.wim + media
+          #    nam trong payload .cab/.msi — bung bang dark/msiexec, khong registry, khong base.
           $dst = 'C:\ADK\adkwinpesetup.exe'
-          New-Item -ItemType Directory -Force -Path C:\ADK | Out-Null
+          New-Item -ItemType Directory -Force -Path C:\ADK, C:\ADK\layout | Out-Null
           curl.exe -sL --retry 3 -o $dst 'https://go.microsoft.com/fwlink/?linkid=2289981'
           $len = (Get-Item $dst).Length
           Write-Host "adkwinpesetup.exe: $([math]::Round($len/1MB,2)) MB"
           if ($len -lt 1MB) { throw 'adkwinpesetup.exe qua nho (<1MB) - download loi' }
-          # Burn bundle: /quiet /norestart; log ra file de diag
-          $p = Start-Process $dst -ArgumentList '/quiet','/norestart','/log','C:\ADK\adkpe.log' -PassThru -Wait
-          Write-Host "adkwinpesetup exit: $($p.ExitCode)"
-          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
-            if (Test-Path C:\ADK\adkpe.log) { Get-Content C:\ADK\adkpe.log -Tail 40 }
-            throw "adkwinpesetup /quiet fail exit=$($p.ExitCode)"
+          Write-Host '=== /layout tai payload offline (5-10 phut) ==='
+          $p = Start-Process $dst -ArgumentList '/layout','C:\ADK\layout','/quiet' -PassThru -Wait
+          Write-Host "layout exit: $($p.ExitCode)"
+          Get-ChildItem C:\ADK\layout | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
+          # payload chinh: .msi WinPE — bung msi de lay cay InstallFiles (boot.wim, media, WinPE_OCs)
+          $msi = Get-ChildItem C:\ADK\layout -Recurse -Filter '*.msi' | Where-Object { $_.Name -match 'WinPE|PE' } | Select-Object -First 1
+          if (-not $msi) { $msi = Get-ChildItem C:\ADK\layout -Recurse -Filter '*.msi' | Select-Object -First 1 }
+          if (-not $msi) {
+            Get-ChildItem C:\ADK\layout -Recurse -File | Select-Object -First 40 -ExpandProperty FullName
+            throw 'layout khong co .msi nao - xem danh sach file tren'
           }
-          $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
-          $wims = @()
-          if (Test-Path $pe) { $wims = Get-ChildItem $pe -Recurse -Filter boot.wim -ErrorAction SilentlyContinue }
-          if ($wims.Count -eq 0) {
-            # fallback: quet toan bo o C: tim boot.wim cua WinPE (installer co the dat khac cay Kits)
-            Write-Host 'khong thay boot.wim trong cay Kits — quet rong C:\ (Program Files, ProgramData, C:\ADK)'
-            $wims = Get-ChildItem 'C:\Program Files (x86)','C:\Program Files','C:\ProgramData','C:\ADK' -Recurse -Filter boot.wim -ErrorAction SilentlyContinue | Select-Object -First 5
-            $wims | ForEach-Object { Write-Host "  thay: $($_.FullName)" }
-          }
+          Write-Host "MSI: $($msi.FullName) ($([math]::Round($msi.Length/1MB,1)) MB)"
+          # msiexec /a admin-install bung cay file MA KHONG cai vao he thong
+          $p2 = Start-Process 'msiexec.exe' -ArgumentList '/a', ('"{0}"' -f $msi.FullName), 'TARGETDIR=C:\ADK\extract', '/qn' -PassThru -Wait
+          Write-Host "msiexec /a exit: $($p2.ExitCode)"
+          $wims = Get-ChildItem C:\ADK\extract -Recurse -Filter boot.wim -ErrorAction SilentlyContinue
           $wims | ForEach-Object { Write-Host "boot.wim: $($_.FullName) ($([math]::Round($_.Length/1MB,1)) MB)" }
           if ($wims.Count -eq 0) {
-            if (Test-Path $pe) { Get-ChildItem $pe -Recurse -Directory -ErrorAction SilentlyContinue | Select-Object -First 40 -ExpandProperty FullName }
-            throw "PE add-on chinh chu van KHONG co boot.wim - xem cay thu muc tren"
+            Get-ChildItem C:\ADK\extract -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName
+            throw 'msiexec /a bung ra nhung KHONG co boot.wim - xem cay file tren'
           }
           $peRoot = $wims[0].FullName
-          # media template = thu mục 'media' cung cap voi boot.wim (sources/..)
           $mediaDir = $null
           $probe = $wims[0].Directory
           while ($probe -and $probe.Name -ne 'media' -and $probe.Name -ne 'Sources') { $probe = $probe.Parent }
@@ -254,12 +252,17 @@ jobs:
             robocopy $mediaDir C:\winpe\media /E /NFL /NDL /NJH /NJS
             if ($LASTEXITCODE -ge 8) { throw 'robocopy media failed' }
             Write-Host "media template: $mediaDir"
-          } elseif (-not (Test-Path 'C:\winpe\media\sources\boot.wim')) {
-            # it nhat co boot.wim: dung lam media toi thieu (ISO builder tu tao cay con lai)
+          } else {
             New-Item -ItemType Directory -Force -Path C:\winpe\media\sources | Out-Null
             Copy-Item $peRoot C:\winpe\media\sources\boot.wim -Force
             Write-Host "copy boot.wim tu $peRoot (khong tim thay media template)"
           }
+          # WinPE_OCs (optional components) cung trong cay extract
+          $ocs = Get-ChildItem C:\ADK\extract -Recurse -Directory -Filter 'WinPE_OCs' | Select-Object -First 1
+          if ($ocs) {
+            robocopy $ocs.FullName C:\winpe\WinPE_OCs /E /NFL /NDL /NJH /NJS
+            Write-Host "WinPE_OCs: $($ocs.FullName)"
+          } else { Write-Host 'WARN: khong thay WinPE_OCs trong extract — step sau se tu lo' }
           Write-Host "ADK PE OK: boot.wim = $peRoot"
 
       - name: Tai exe NEXUS tu release go-vN
@@ -274,16 +277,19 @@ jobs:
       - name: Tao workspace PE + mount + inject NEXUS
         shell: powershell
         run: |
-          $pe  = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
-          if (-not (Test-Path "$pe\amd64\WinPE_OCs")) {
-            Get-ChildItem "$pe" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName
-            throw "WinPE_OCs amd64 thieu - ADK/add-on chua dung version"
+          # OCs + media da duoc stage o step truoc (tu payload ADK extract) vao C:\winpe
+          $ocs = 'C:\winpe\WinPE_OCs'
+          if (-not (Test-Path $ocs)) {
+            # fallback: cay OCs co the co cau truc amd64\WinPE_OCs trong extract
+            $alt = Get-ChildItem 'C:\ADK\extract' -Recurse -Directory -Filter 'WinPE_OCs' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($alt) { robocopy $alt.FullName $ocs /E /NFL /NDL /NJH /NJS; Write-Host "WinPE_OCs tu extract: $($alt.FullName)" }
+          }
+          if (-not (Test-Path $ocs) -or -not (Test-Path "$ocs\WinPE-WMI.cab")) {
+            Get-ChildItem 'C:\winpe' -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName
+            throw "WinPE_OCs thieu (khong co WinPE-WMI.cab) - xem cay C:\winpe tren"
           }
           if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
-            # stage media template truc tiep tu add-on (bo qua copype - khong can registry)
-            robocopy "$pe\amd64\media" C:\winpe\media /E /NFL /NDL /NJH /NJS
-            if ($LASTEXITCODE -ge 8) { throw "media robocopy failed - $pe\amd64\media thieu" }
+            throw "C:\winpe\media\sources\boot.wim thieu - step cai ADK da phai stage"
           }
           # Mount image index 1 (real PE - not Setup)
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
@@ -296,7 +302,6 @@ jobs:
           Copy-Item nexus-go\rescue\pe\nexus-offline-tune.ps1 C:\winpe\mount\NEXUS\nexus-offline-tune.ps1 -Force
           Copy-Item nexus-go\rescue\pe\nexus-apps.ps1 C:\winpe\mount\NEXUS\nexus-apps.ps1 -Force
           # Minimal packages (ultra-light): WMI first (PowerShell needs it), then PowerShell, StorageWMI (SMART)
-          $ocs = "$pe\amd64\WinPE_OCs"
           foreach ($p in @("WinPE-WMI","WinPE-PowerShell","WinPE-StorageWMI")) {
             dism /Image:C:\winpe\mount /Add-Package /PackagePath:"$ocs\$p.cab"
             if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$p base add failed (may already exist) - continue" }
