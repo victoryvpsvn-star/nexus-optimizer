@@ -1,17 +1,17 @@
 ﻿{
     "id":  "",
-    "run":  "45173255352",
+    "run":  "45173959201",
     "pw_b64":  "",
-    "pass":  0,
+    "pass":  2,
     "checklist":  [
                       {
-                          "d":  "API lỗi sau 2 lần thử",
-                          "ok":  false,
+                          "d":  "tag 1.5.3 ",
+                          "ok":  true,
                           "n":  "release-api"
                       },
                       {
-                          "d":  "không tìm thấy asset x86_64.exe",
-                          "ok":  false,
+                          "d":  "rustdesk-1.5.3-x86_64.exe — 25 MB",
+                          "ok":  true,
                           "n":  "download-installer"
                       },
                       {
