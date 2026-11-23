@@ -1,6 +1,6 @@
 ﻿# rustdesk-live.ps1 — NEXUS: tự cài RustDesk trên runner GitHub, mở wizard, giữ ĐÚNG N phút
 # Mọi call CLI đều có timeout + kill. CHẤM PASS/FAIL từng bước: log job + GITHUB_STEP_SUMMARY + live-session.json
-param([int]$Minutes = 10)
+param([int]$Minutes = 10, [string]$Mode = 'all')
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -239,7 +239,16 @@ if ($id) {
     throw 'RUSTDESK_ID không lấy được — xem các dòng FAIL ở trên'
 }
 
-# Giữ ĐÚNG N phút — đếm ngược từng phút (bắt đầu SAU khi có ID → bro hưởng trọn window)
+# GHI STATE + THOÁT nếu chỉ chạy setup — hold session chạy ở STEP RIÊNG sau đó,
+# để upload-artifact kịp upload session-info.txt (có PASSWORD nguyên vẹn) KHI session còn sống
+Set-Content -Path (Join-Path $env:GITHUB_WORKSPACE 'hold-state.txt') -Value $Minutes -Encoding ASCII -Force
+if ($Mode -eq 'setup') {
+    Write-Host '=== SETUP XONG — artifact session-info (ID + PASSWORD) upload ngay bây giờ, hold session ở step sau ==='
+    exit 0
+}
+
+# Hold: ĐỦ N phút — đếm ngược từng phút
+if (Test-Path (Join-Path $env:GITHUB_WORKSPACE 'hold-state.txt')) { $Minutes = [int](Get-Content (Join-Path $env:GITHUB_WORKSPACE 'hold-state.txt') -Raw) }
 for ($i = $Minutes; $i -gt 0; $i--) {
     Write-Host ("CON-LAI: {0} phut — bro ket noi bang RUSTDESK_ID + PASSWORD" -f $i)
     Start-Sleep -Seconds 60
