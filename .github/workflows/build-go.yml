@@ -193,77 +193,40 @@ jobs:
           path: /tmp/iso/nexus-rescue.iso
 
 
-  # v4.5.0: WINDOWS NEXUS ISO — WinPE chính chủ Microsoft (như AOMEI PE Builder) cho gaming thủ:
-  # boot ngoài Windows → dashboard cấu hình đầy đủ + NEXUS web qua LAN. Siêu nhẹ: chỉ WMI +
-  # PowerShell + StorageWMI (SMART); không desktop env; mọi ghi chỉ trong RAM disk X:.
+  # v4.6.0: WINDOWS NEXUS ISO — nen boot.wim = WinSE (Windows Setup PE) chinh chu MS lay tu
+  # ISO Win11 (job win11-iso export artifact): co san PowerShell + WMI + .NET, khong can ADK
+  # (ADK ngõ cụt tren runner: choco khong co boot.wim, adkwinpesetup /layout chi bung MSI 0.6MB).
+  # Boot ngoai Windows → dashboard cau hinh day du + NEXUS web qua LAN; ghi chi trong RAM disk X:.
   build-windows-pe:
     name: Build Windows NEXUS ISO (WinPE gaming ultra-light)
     runs-on: windows-latest
-    if: github.event_name == 'workflow_dispatch' && !cancelled() && needs.release.result == 'success'
+    if: github.event_name == 'workflow_dispatch' && !cancelled() && needs.release.result == 'success' && needs.win11-iso.result == 'success'
     timeout-minutes: 45
-    needs: [release]   # đoi release cat xong đe nap exe + upload ISO vao cung tag go-vN
+    needs: [release, win11-iso]   # win11-iso export boot.wim goc lam artifact
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cai WinPE add-on (setup chinh chu MS - choco windows-adk-winpe KHONG co boot.wim)
+      - name: Lay boot.wim goc (WinSE) tu artifact cua job win11-iso
         shell: powershell
-        timeout-minutes: 30
         run: |
-          # Bai hoc run 58-64: ADK base installer tren runner khong on dinh (exit 1000).
-          # Run 85: choco windows-adk-winpe KHONG co boot.wim. Run 87: check 10MB sai (web installer 1.95MB).
-          # Run 89: /quiet exit=0 NHUNG khong cai gi (can ADK BASE truoc — doc MS: add-on "AFTER installing the ADK").
-          # -> KHONG cai gi ca: Burn /layout <dir> = tai TOAN BO payload offline; boot.wim + media
-          #    nam trong payload .cab/.msi — bung bang dark/msiexec, khong registry, khong base.
-          $dst = 'C:\ADK\adkwinpesetup.exe'
-          New-Item -ItemType Directory -Force -Path C:\ADK, C:\ADK\layout | Out-Null
-          curl.exe -sL --retry 3 -o $dst 'https://go.microsoft.com/fwlink/?linkid=2289981'
-          $len = (Get-Item $dst).Length
-          Write-Host "adkwinpesetup.exe: $([math]::Round($len/1MB,2)) MB"
-          if ($len -lt 1MB) { throw 'adkwinpesetup.exe qua nho (<1MB) - download loi' }
-          Write-Host '=== /layout tai payload offline (5-10 phut) ==='
-          $p = Start-Process $dst -ArgumentList '/layout','C:\ADK\layout','/quiet' -PassThru -Wait
-          Write-Host "layout exit: $($p.ExitCode)"
-          Get-ChildItem C:\ADK\layout | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
-          # payload chinh: .msi WinPE — bung msi de lay cay InstallFiles (boot.wim, media, WinPE_OCs)
-          $msi = Get-ChildItem C:\ADK\layout -Recurse -Filter '*.msi' | Where-Object { $_.Name -match 'WinPE|PE' } | Select-Object -First 1
-          if (-not $msi) { $msi = Get-ChildItem C:\ADK\layout -Recurse -Filter '*.msi' | Select-Object -First 1 }
-          if (-not $msi) {
-            Get-ChildItem C:\ADK\layout -Recurse -File | Select-Object -First 40 -ExpandProperty FullName
-            throw 'layout khong co .msi nao - xem danh sach file tren'
+          New-Item -ItemType Directory -Force -Path C:\winpe\media\sources | Out-Null
+          gh api repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[] | select(.name=="win11-boot-wim") | .id' | ForEach-Object -Begin { $got = $false } -Process {
+            if (-not $got) {
+              $got = $true
+              Write-Host "artifact id: $_"
+              gh api repos/${{ github.repository }}/actions/artifacts/$_/zip > C:\winpe\bootwim.zip
+            }
           }
-          Write-Host "MSI: $($msi.FullName) ($([math]::Round($msi.Length/1MB,1)) MB)"
-          # msiexec /a admin-install bung cay file MA KHONG cai vao he thong
-          $p2 = Start-Process 'msiexec.exe' -ArgumentList '/a', ('"{0}"' -f $msi.FullName), 'TARGETDIR=C:\ADK\extract', '/qn' -PassThru -Wait
-          Write-Host "msiexec /a exit: $($p2.ExitCode)"
-          $wims = Get-ChildItem C:\ADK\extract -Recurse -Filter boot.wim -ErrorAction SilentlyContinue
-          $wims | ForEach-Object { Write-Host "boot.wim: $($_.FullName) ($([math]::Round($_.Length/1MB,1)) MB)" }
-          if ($wims.Count -eq 0) {
-            Get-ChildItem C:\ADK\extract -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName
-            throw 'msiexec /a bung ra nhung KHONG co boot.wim - xem cay file tren'
-          }
-          $peRoot = $wims[0].FullName
-          $mediaDir = $null
-          $probe = $wims[0].Directory
-          while ($probe -and $probe.Name -ne 'media' -and $probe.Name -ne 'Sources') { $probe = $probe.Parent }
-          if ($probe -and $probe.Name -eq 'media') { $mediaDir = $probe.FullName }
-          elseif ($probe -and $probe.Name -eq 'Sources') { $mediaDir = $probe.Parent.FullName }
-          if ($mediaDir -and (Test-Path "$mediaDir\sources\boot.wim")) {
-            robocopy $mediaDir C:\winpe\media /E /NFL /NDL /NJH /NJS
-            if ($LASTEXITCODE -ge 8) { throw 'robocopy media failed' }
-            Write-Host "media template: $mediaDir"
-          } else {
-            New-Item -ItemType Directory -Force -Path C:\winpe\media\sources | Out-Null
-            Copy-Item $peRoot C:\winpe\media\sources\boot.wim -Force
-            Write-Host "copy boot.wim tu $peRoot (khong tim thay media template)"
-          }
-          # WinPE_OCs (optional components) cung trong cay extract
-          $ocs = Get-ChildItem C:\ADK\extract -Recurse -Directory -Filter 'WinPE_OCs' | Select-Object -First 1
-          if ($ocs) {
-            robocopy $ocs.FullName C:\winpe\WinPE_OCs /E /NFL /NDL /NJH /NJS
-            Write-Host "WinPE_OCs: $($ocs.FullName)"
-          } else { Write-Host 'WARN: khong thay WinPE_OCs trong extract — step sau se tu lo' }
-          Write-Host "ADK PE OK: boot.wim = $peRoot"
+          if (-not (Test-Path C:\winpe\bootwim.zip)) { throw 'khong tai duoc artifact win11-boot-wim' }
+          Expand-Archive C:\winpe\bootwim.zip C:\winpe\bootwim -Force
+          $w = Get-ChildItem C:\winpe\bootwim -Recurse -Filter boot.wim | Select-Object -First 1
+          if (-not $w) { throw 'artifact khong chua boot.wim' }
+          Copy-Item $w.FullName C:\winpe\media\sources\boot.wim -Force
+          Write-Host "boot.wim: $([math]::Round($w.Length/1MB,1)) MB"
+          dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tai exe NEXUS tu release go-vN
         shell: powershell
@@ -274,26 +237,28 @@ jobs:
           gh release download go-v${{ github.run_number }} --repo ${{ github.repository }} --pattern "*.exe" --dir C:\out
           Get-ChildItem C:\out
 
-      - name: Tao workspace PE + mount + inject NEXUS
+      - name: Mount boot.wim + inject NEXUS (WinSE da co san PowerShell/WMI — khong can OCs)
         shell: powershell
         run: |
-          # OCs + media da duoc stage o step truoc (tu payload ADK extract) vao C:\winpe
-          $ocs = 'C:\winpe\WinPE_OCs'
-          if (-not (Test-Path $ocs)) {
-            # fallback: cay OCs co the co cau truc amd64\WinPE_OCs trong extract
-            $alt = Get-ChildItem 'C:\ADK\extract' -Recurse -Directory -Filter 'WinPE_OCs' -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($alt) { robocopy $alt.FullName $ocs /E /NFL /NDL /NJH /NJS; Write-Host "WinPE_OCs tu extract: $($alt.FullName)" }
-          }
-          if (-not (Test-Path $ocs) -or -not (Test-Path "$ocs\WinPE-WMI.cab")) {
-            Get-ChildItem 'C:\winpe' -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName
-            throw "WinPE_OCs thieu (khong co WinPE-WMI.cab) - xem cay C:\winpe tren"
-          }
           if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
-            throw "C:\winpe\media\sources\boot.wim thieu - step cai ADK da phai stage"
+            throw "C:\winpe\media\sources\boot.wim thieu - step lay artifact da phai stage"
           }
-          # Mount image index 1 (real PE - not Setup)
-          dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
-          if ($LASTEXITCODE -ne 0) { throw "mount boot.wim failed" }
+          # WinSE boot.wim goc co 2 index: 1 = bootmgr (WinPE toi thieu), 2 = Setup (WinSE day du
+          # PowerShell + WMI + .NET). Chon index CO PowerShell: kiem bang file marker
+          $idx = 2
+          dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:2 /MountDir:C:\winpe\mount
+          if ($LASTEXITCODE -ne 0) { throw "mount index 2 failed - thu lai index 1" }
+          if (-not (Test-Path 'C:\winpe\mount\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')) {
+            Write-Host 'index 2 khong co PowerShell — doi sang index 1'
+            dism /Unmount-Image /MountDir:C:\winpe\mount /Discard
+            $idx = 1
+            dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
+            if ($LASTEXITCODE -ne 0) { throw "mount boot.wim failed" }
+            if (-not (Test-Path 'C:\winpe\mount\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')) {
+              throw 'KHONG index nao co PowerShell — boot.wim khong phai WinSE'
+            }
+          }
+          Write-Host "mount index $idx OK — PowerShell co san"
           # NEXUS vao image
           New-Item -ItemType Directory -Force -Path C:\winpe\mount\NEXUS | Out-Null
           Copy-Item C:\out\*.exe C:\winpe\mount\NEXUS\nexus.exe -Force
@@ -301,16 +266,15 @@ jobs:
           Copy-Item nexus-go\rescue\pe\nexus-dashboard.ps1 C:\winpe\mount\NEXUS\nexus-dashboard.ps1 -Force
           Copy-Item nexus-go\rescue\pe\nexus-offline-tune.ps1 C:\winpe\mount\NEXUS\nexus-offline-tune.ps1 -Force
           Copy-Item nexus-go\rescue\pe\nexus-apps.ps1 C:\winpe\mount\NEXUS\nexus-apps.ps1 -Force
-          # Minimal packages (ultra-light): WMI first (PowerShell needs it), then PowerShell, StorageWMI (SMART)
-          foreach ($p in @("WinPE-WMI","WinPE-PowerShell","WinPE-StorageWMI")) {
-            dism /Image:C:\winpe\mount /Add-Package /PackagePath:"$ocs\$p.cab"
-            if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$p base add failed (may already exist) - continue" }
-            dism /Image:C:\winpe\mount /Add-Package /PackagePath:"$ocs\en-us\$p.cab"
-            if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$p en-us add failed - continue" }
-          }
+          # WinSE ~500MB da day du — KHONG Add-Package (ADK OCs khong con)
           # Commit - boot.wim in media updated in place
           dism /Unmount-Image /MountDir:C:\winpe\mount /Commit
           if ($LASTEXITCODE -ne 0) { throw "unmount commit failed" }
+          # export lai CHI index da inject (giam kich thuoc ISO: boot~500MB thay vi 2 image)
+          dism /Export-Image /SourceImageFile:C:\winpe\media\sources\boot.wim /SourceIndex:$idx /DestinationImageFile:C:\winpe\boot-new.wim /Compress:recovery
+          if ($LASTEXITCODE -ne 0) { throw "export boot.wim failed" }
+          Move-Item C:\winpe\boot-new.wim C:\winpe\media\sources\boot.wim -Force
+          Write-Host "boot.wim (Pro-only da inject): $([math]::Round((Get-Item C:\winpe\media\sources\boot.wim).Length/1MB,1)) MB"
 
       - name: Tao ISO (pycdlib) + verify
         shell: powershell
@@ -320,7 +284,7 @@ jobs:
           $iso = Get-Item C:\out\windows-nexus.iso
           Write-Host "ISO: $($iso.Length) bytes ($([math]::Round($iso.Length/1MB,1)) MB)"
           if ($iso.Length -lt 150MB) { throw "ISO qua nho - boot.wim khong duoc inject?" }
-          if ($iso.Length -gt 900MB) { throw "ISO qua lon - review packages" }
+          if ($iso.Length -gt 1200MB) { Write-Host "::warning::ISO lon (WinSE day du) - xem xet slim bot index khac" }
           # Verify image 1 chua NEXUS + startnet + dashboard + 2 script gaming
           dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount2
@@ -498,3 +462,23 @@ jobs:
           Write-Host "Uploading: $($parts -join ', ')"
           gh release upload go-v${{ github.run_number }} @parts C:\out\merge.bat C:\out\README-NEXUS-Win11.txt C:\out\SHA256.txt --repo ${{ github.repository }} --clobber
           Write-Host "Uploaded Win11 ISO parts to release go-v${{ github.run_number }}"
+
+      - name: Export boot.wim goc lam artifact cho job WinPE (ADK ngõ cụt trên runner)
+        if: always()
+        shell: powershell
+        run: |
+          # boot.wim trong ISO Win11 chinh chu = WinSE (Windows Setup PE) cua MS:
+          # co san PowerShell + WMI + .NET — khong can ADK/add-on/WinPE_OCs nua.
+          # job build-windows-pe dung artifact nay lam nen boot.wim cua windows-nexus.iso
+          New-Item -ItemType Directory -Force -Path C:\winpe-artifact | Out-Null
+          Copy-Item C:\win11src\sources\boot.wim C:\winpe-artifact\boot.wim -Force
+          Write-Host "boot.wim: $([math]::Round((Get-Item C:\winpe-artifact\boot.wim).Length/1MB,1)) MB"
+
+      - name: Upload boot.wim artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win11-boot-wim
+          path: C:\winpe-artifact\boot.wim
+          retention-days: 1
+          if-no-files-found: ignore
