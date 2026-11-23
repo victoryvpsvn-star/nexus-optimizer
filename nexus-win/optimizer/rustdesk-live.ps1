@@ -180,28 +180,45 @@ if ($svc) {
     }
 }
 
-# 5) Password
-Write-Host "[5/8] Dat password..."
+# 5) Password — đúng thứ tự (diag #20: password='' ở CẢ 2 config vì khi service chạy,
+# CLI --password chỉ IPC ủy quyền cho service và FAIL ÂM THẦM, không ghi file nào).
+# Đúng cách: stop service + kill process → CLI tự ghi config user → copy pw-hash sang config
+# service (salt 2 file GIỐNG NHAU → hash hợp lệ) → start service lại.
+Write-Host "[5/8] Dat password (stop service truoc)..."
 $alnum = (48..57) + (97..122)
 # KHÔNG prefix "NEX-" — pattern NEX-* đã bị secret scanning flag → mask VĨNH VIỄN trong log repo này
 # password KHÔNG BAO GIỜ ghi vào commit (JSON chỉ lưu pw_b64) → không tạo alert mới → log hiện RAW đầy đủ
 $pw = -join ($alnum | Get-Random -Count 10 | ForEach-Object { [char]$_ })
 $pwB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pw))
+Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
+Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep 3
 $o1 = RDC @('--password', $pw) 40
 $o2 = RDC @('--password', $pw) 40
-if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
+Write-Host ("     CLI pw out 1: {0} | out 2: {1}" -f (($o1 | Out-String).Trim() -replace '\s+', ' '), (($o2 | Out-String).Trim() -replace '\s+', ' '))
+if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout, service đã dừng → CLI ghi file)' }
 else { Mark 'set-password' $false "CLI timeout — o1=$($null -ne $o1) o2=$($null -ne $o2)" }
-# ĐẶT PW VỚI QUYỀN SYSTEM — service chạy LocalSystem, đọc config riêng (systemprofile);
-# --password chạy bằng user thường chỉ ghi config user → service từ chối pw DÙ NGƯỜI DÙNG NHẬP ĐÚNG
-$trPw = "`"$script:rd`" --password `"$pw`""
-$null = schtasks /Create /TN NEXUSRDSetPW /TR $trPw /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F 2>&1
-$runPw = (schtasks /Run /TN NEXUSRDSetPW 2>&1 | Out-String).Trim()
-Start-Sleep 8
-$null = schtasks /Delete /TN NEXUSRDSetPW /F 2>&1
-Write-Host ("     pw qua SYSTEM task: {0}" -f ($runPw -replace '\s+', ' '))
-# restart service để nạp password vừa đặt
-Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' } | Restart-Service -Force -ErrorAction SilentlyContinue
-Start-Sleep 4
+
+# copy pw-hash sang config của service (ServiceProfiles\LocalService — salt giống config user → hash hợp lệ)
+$usrCfg = "$env:APPDATA\RustDesk\config\RustDesk.toml"
+$svcCfg = 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml'
+$upw = ''
+if (Test-Path $usrCfg) {
+    $utxt = Get-Content $usrCfg -Raw -ErrorAction SilentlyContinue
+    if ($utxt -match "(?<![\w])password\s*=\s*'([^']*)'") { $upw = $Matches[1] }
+}
+Mark 'pw-user-config' ([bool]$upw) $(if ($upw) { 'password hash đã vào config user (CLI ghi file khi không có process chạy)' } else { 'config user VẪN password="" sau khi CLI chạy — CLI không ghi file (soi "CLI pw out" ở log)' })
+if ($upw -and (Test-Path $svcCfg)) {
+    $stxt = Get-Content $svcCfg -Raw -ErrorAction SilentlyContinue
+    if ($stxt -match "(?<![\w])password\s*=\s*'[^']*'") {
+        $new = $stxt -replace "(?m)^password\s*=\s*'[^']*'", "password = '$upw'"
+        [IO.File]::WriteAllText($svcCfg, $new, [Text.UTF8Encoding]::new($false))
+        Write-Host '     đã copy pw-hash sang config service (LocalService), UTF8 no BOM'
+    }
+}
+# start service lại để nạp config đã có pw
+Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
+Start-Sleep 5
 
 # 6) ID — ƯU TIÊN CONFIG CỦA SERVICE (LocalSystem): service đăng ký ID trong config của NÓ,
 # còn --get-id chạy bằng user thường có thể trả ID của app user → lệch ID là "offline"
