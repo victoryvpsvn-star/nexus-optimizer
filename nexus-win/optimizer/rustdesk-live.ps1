@@ -140,23 +140,33 @@ if (-not $script:rd) {
     throw 'cài RustDesk thất bại — xem các dòng FAIL ở trên'
 }
 
-# 4) SERVICE unattended — BẮT BUỘC: app per-user trong session 0 của runner không giữ đăng ký rendezvous
-# → người dùng thấy "Failed to connect: the target device is offline or does not exist"
-Write-Host "[4/8] RustDesk service (unattended)..."
+# 4) SERVICE = rustdesk.exe --service chạy LocalSystem — tạo bằng New-Service (không phụ thuộc installer/flag RustDesk)
+Write-Host "[4/8] RustDesk service (New-Service)..."
 Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-$null = & $script:rd --install-service 2>&1
-Start-Sleep 4
+Start-Sleep 2
 $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue
-if (-not $svc) { $null = & $script:rd --service 2>&1; Start-Sleep 5; $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue }
-if ($svc -and $svc.Status -ne 'Running') { Start-Service $svc.Name -ErrorAction SilentlyContinue; Start-Sleep 4; $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue }
-if ($svc -and $svc.Status -eq 'Running') {
+if (-not $svc) {
+    New-Service -Name 'RustDeskService' -DisplayName 'RustDesk Service' -BinaryPathName "`"$script:rd`" --service" -StartupType Automatic -ErrorAction SilentlyContinue | Out-Null
+    Start-Sleep 1
+    $svc = Get-Service -Name 'RustDeskService' -ErrorAction SilentlyContinue
+}
+if ($svc -and $svc.Status -ne 'Running') { Start-Service $svc.Name -ErrorAction SilentlyContinue; Start-Sleep 6; $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' } }
+if ($svc) {
     New-NetFirewallRule -DisplayName 'RustDesk' -Program $script:rd -Direction Inbound -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
-    Mark 'service-running' $true "$($svc.Name)=Running — unattended, nhận kết nối qua relay"
+    Mark 'service-running' $true "$($svc.Name)=Running — LocalSystem unattended, nhận kết nối qua relay"
 } else {
-    Start-Process $script:rd -ErrorAction SilentlyContinue
-    Start-Sleep 6
-    $proc = Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue
-    Mark 'service-running' ([bool]$proc) "service KHÔNG cài được — fallback app per-user (process=$([bool]$proc)) — kết nối CÓ THỂ fail"
+    Write-Host ("     sc query rustdesk*: {0}" -f ((sc.exe query state= all 2>&1 | Select-String -Pattern 'rustdesk' -Context 0,2 | Out-String).Trim() -replace '\s+', ' '))
+    $null = & $script:rd --install-service 2>&1
+    Start-Sleep 5
+    $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }
+    if (-not $svc) {
+        Start-Process $script:rd -ErrorAction SilentlyContinue
+        Start-Sleep 6
+        $proc = Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue
+        Mark 'service-running' $false "KHÔNG tạo được service — fallback app per-user (process=$([bool]$proc)) — KẾT NỐI CÓ THỂ THẤT BẠI"
+    } else {
+        Mark 'service-running' $true "$($svc.Name)=Running (flag --install-service)"
+    }
 }
 
 # 5) Password
@@ -185,20 +195,21 @@ Start-Sleep 4
 # 6) ID — ƯU TIÊN CONFIG CỦA SERVICE (LocalSystem): service đăng ký ID trong config của NÓ,
 # còn --get-id chạy bằng user thường có thể trả ID của app user → lệch ID là "offline"
 Write-Host "[6/8] Lay ID (config service truoc, toi da ~2 phut)..."
-$cfgPaths = @(
-    'C:\Windows\System32\config\systemprofile\AppData\Roaming\RustDesk\config\RustDesk.toml',
-    'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml',
-    "$env:APPDATA\RustDesk\config\RustDesk.toml",
-    "$env:LOCALAPPDATA\RustDesk\config\RustDesk.toml"
+$cfgDirs = @(
+    'C:\Windows\System32\config\systemprofile\AppData\Roaming\RustDesk\config',
+    'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config',
+    "$env:APPDATA\RustDesk\config",
+    "$env:LOCALAPPDATA\RustDesk\config"
 )
 $id = $null; $idSrc = ''
 for ($i = 0; $i -lt 12 -and -not $id; $i++) {
     Start-Sleep 5
-    foreach ($c in $cfgPaths) {
-        if (Test-Path $c) {
-            $txt = Get-Content $c -Raw -ErrorAction SilentlyContinue
-            if ($txt -match "(?<![\w])id\s*=\s*['`"]?(\d{7,})") { $id = $Matches[1]; $idSrc = $c; break }
+    foreach ($dir in $cfgDirs) {
+        foreach ($f in (Get-ChildItem $dir -Filter 'RustDesk*.toml' -ErrorAction SilentlyContinue)) {
+            $txt = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
+            if ($txt -match "(?<![\w])id\s*=\s*['`"]?(\d{7,})") { $id = $Matches[1]; $idSrc = $f.FullName; break }
         }
+        if ($id) { break }
     }
     if ($id) { break }
     $out = RDC @('--get-id') 25
@@ -207,15 +218,18 @@ for ($i = 0; $i -lt 12 -and -not $id; $i++) {
 if ($id) { Mark 'get-id' $true "ID=$id (nguon: $idSrc)" }
 else { Mark 'get-id' $false 'không lấy được sau ~1-2 phút' }
 
-# 6c) XÁC NHẬN password đã nằm trong config của SERVICE — nếu trống, service sẽ từ chối pw (lỗi cũ)
+# 6c) XÁC NHẬN password đã nằm trong config của SERVICE + dump config vào log (ground truth)
 $pwCfgFile = ''
-foreach ($c in $cfgPaths) {
-    if (Test-Path $c) {
-        $txt = Get-Content $c -Raw -ErrorAction SilentlyContinue
-        if ($txt -match "(?<![\w])password\s*=\s*['`"]?([^'`"\r\n]{4,})") { $pwCfgFile = $c; break }
+foreach ($dir in $cfgDirs) {
+    foreach ($f in (Get-ChildItem $dir -Filter 'RustDesk*.toml' -ErrorAction SilentlyContinue)) {
+        $txt = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
+        $flat = ($txt -replace '\r?\n', ' | ')
+        if ($flat.Length -gt 320) { $flat = $flat.Substring(0, 320) + '...' }
+        Write-Host ("     [CFG] {0} => {1}" -f $f.FullName, $flat)
+        if (-not $pwCfgFile -and $txt -match "(?<![\w])password\s*=\s*['`"]?([^'`"\r\n]{4,})") { $pwCfgFile = $f.FullName }
     }
 }
-Mark 'service-password-config' ([bool]$pwCfgFile) $(if ($pwCfgFile) { "password đã ghi vào: $pwCfgFile" } else { 'KHÔNG thấy password trong config nào — service sẽ từ chối pw' })
+Mark 'service-password-config' ([bool]$pwCfgFile) $(if ($pwCfgFile) { "password đã ghi vào: $pwCfgFile" } else { 'KHÔNG thấy password trong config nào — service sẽ từ chối pw (dump [CFG] ở log để soi)' })
 
 # 6b) Chẩn đoán relay công cộng — runner chạm được server RustDesk không (không fatal)
 $relayOk = $false
