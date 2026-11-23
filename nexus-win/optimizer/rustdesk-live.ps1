@@ -168,11 +168,11 @@ $id = $null
 for ($i = 0; $i -lt 20 -and -not $id; $i++) {
     Start-Sleep 5
     $out = RDC @('--get-id') 25
-    if ($out -match '(\d{9,})') { $id = $Matches[1]; break }
+    if ($out -match '(\d{7,})') { $id = $Matches[1]; break }   # ID RustDesk có thể 7-10 chữ số (một số runner cấp 8 số)
     foreach ($c in 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml', "$env:APPDATA\RustDesk\config\RustDesk.toml") {
         if (Test-Path $c) {
             $txt = Get-Content $c -Raw -ErrorAction SilentlyContinue
-            if ($txt -match "id\s*=\s*['`"]?(\d{9,})") { $id = $Matches[1]; break }
+            if ($txt -match "id\s*=\s*['`"]?(\d{7,})") { $id = $Matches[1]; break }
         }
     }
     if ($id) { break }
