@@ -125,7 +125,10 @@ if ($dl) {
 if ((Test-Path $exe) -and ((Get-Item $exe -ErrorAction SilentlyContinue).Length -gt 5MB)) {
     Write-Host "[3/8] Cai im lang (/S)..."
     Unblock-File $exe -ErrorAction SilentlyContinue
-    $p = Start-Process $exe -ArgumentList '/S' -PassThru
+    # /allusers = cài TOÀN HỆ THỐNG (Program Files + service chuẩn) — /S đơn thuần cài per-user
+    # (AppData) → RustDesk coi là "chưa cài" → từ chối --password: "Installation and administrative
+    # privileges required!" (diag #21)
+    $p = Start-Process $exe -ArgumentList '/S', '/allusers' -PassThru
     if ($p.WaitForExit(180000)) {
         Write-Host ("     installer exit code: {0}" -f $p.ExitCode)
         Write-Host ("     shell elevated (High integrity): {0}" -f [bool](whoami /groups | Select-String 'S-1-16-12288'))
@@ -180,45 +183,45 @@ if ($svc) {
     }
 }
 
-# 5) Password — đúng thứ tự (diag #20: password='' ở CẢ 2 config vì khi service chạy,
-# CLI --password chỉ IPC ủy quyền cho service và FAIL ÂM THẦM, không ghi file nào).
-# Đúng cách: stop service + kill process → CLI tự ghi config user → copy pw-hash sang config
-# service (salt 2 file GIỐNG NHAU → hash hợp lệ) → start service lại.
-Write-Host "[5/8] Dat password (stop service truoc)..."
+# 5) Password — luồng CHUẨN unattended: service đang chạy + RustDesk "installed" (/allusers)
+# → CLI --password IPC tới service → service tự ghi pw vào config của nó (LocalService profile).
+# Diag #21: cài per-user thì CLI chào "Installation and administrative privileges required!".
+# Fallback: nếu config user có pw mà config service rỗng (salt giống nhau) → copy hash sang.
+Write-Host "[5/8] Dat password (IPC qua service)..."
 $alnum = (48..57) + (97..122)
 # KHÔNG prefix "NEX-" — pattern NEX-* đã bị secret scanning flag → mask VĨNH VIỄN trong log repo này
 # password KHÔNG BAO GIỜ ghi vào commit (JSON chỉ lưu pw_b64) → không tạo alert mới → log hiện RAW đầy đủ
 $pw = -join ($alnum | Get-Random -Count 10 | ForEach-Object { [char]$_ })
 $pwB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pw))
-Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
-Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep 3
 $o1 = RDC @('--password', $pw) 40
 $o2 = RDC @('--password', $pw) 40
 Write-Host ("     CLI pw out 1: {0} | out 2: {1}" -f (($o1 | Out-String).Trim() -replace '\s+', ' '), (($o2 | Out-String).Trim() -replace '\s+', ' '))
-if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout, service đã dừng → CLI ghi file)' }
+if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
 else { Mark 'set-password' $false "CLI timeout — o1=$($null -ne $o1) o2=$($null -ne $o2)" }
 
-# copy pw-hash sang config của service (ServiceProfiles\LocalService — salt giống config user → hash hợp lệ)
+# verify pw nằm trong config nào (service: LocalService profile; user: runneradmin)
 $usrCfg = "$env:APPDATA\RustDesk\config\RustDesk.toml"
 $svcCfg = 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml'
-$upw = ''
-if (Test-Path $usrCfg) {
-    $utxt = Get-Content $usrCfg -Raw -ErrorAction SilentlyContinue
-    if ($utxt -match "(?<![\w])password\s*=\s*'([^']*)'") { $upw = $Matches[1] }
-}
-Mark 'pw-user-config' ([bool]$upw) $(if ($upw) { 'password hash đã vào config user (CLI ghi file khi không có process chạy)' } else { 'config user VẪN password="" sau khi CLI chạy — CLI không ghi file (soi "CLI pw out" ở log)' })
-if ($upw -and (Test-Path $svcCfg)) {
-    $stxt = Get-Content $svcCfg -Raw -ErrorAction SilentlyContinue
-    if ($stxt -match "(?<![\w])password\s*=\s*'[^']*'") {
+$utxt = ''; $stxt = ''
+if (Test-Path $usrCfg) { $utxt = Get-Content $usrCfg -Raw -ErrorAction SilentlyContinue }
+if (Test-Path $svcCfg) { $stxt = Get-Content $svcCfg -Raw -ErrorAction SilentlyContinue }
+$upw = ''; $spw = ''
+if ($utxt -match "(?<![\w])password\s*=\s*'([^']*)'") { $upw = $Matches[1] }
+if ($stxt -match "(?<![\w])password\s*=\s*'([^']*)'") { $spw = $Matches[1] }
+if ($spw) {
+    Mark 'pw-user-config' $true "pw nằm trong config SERVICE (IPC chuẩn — hash $($spw.Length) ký tự)"
+} elseif ($upw) {
+    Mark 'pw-user-config' $true "pw vào config user (hash $($upw.Length) ký tự) — copy sang config service (salt giống nhau)"
+    if (Test-Path $svcCfg) {
         $new = $stxt -replace "(?m)^password\s*=\s*'[^']*'", "password = '$upw'"
         [IO.File]::WriteAllText($svcCfg, $new, [Text.UTF8Encoding]::new($false))
         Write-Host '     đã copy pw-hash sang config service (LocalService), UTF8 no BOM'
+        Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Restart-Service -Force -ErrorAction SilentlyContinue
+        Start-Sleep 5
     }
+} else {
+    Mark 'pw-user-config' $false 'pw KHÔNG vào config nào (soi "CLI pw out" ở log — nếu vẫn "privileges required" thì installer lại cài per-user)'
 }
-# start service lại để nạp config đã có pw
-Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
-Start-Sleep 5
 
 # 6) ID — ƯU TIÊN CONFIG CỦA SERVICE (LocalSystem): service đăng ký ID trong config của NÓ,
 # còn --get-id chạy bằng user thường có thể trả ID của app user → lệch ID là "offline"
@@ -263,6 +266,12 @@ Mark 'service-password-config' ([bool]$pwCfgFile) $(if ($pwCfgFile) { "password 
 $relayOk = $false
 try { $relayOk = Test-NetConnection -ComputerName 'rs-ny.rustdesk.com' -Port 21116 -InformationLevel Quiet -WarningAction SilentlyContinue } catch { }
 Mark 'relay-reachable' ([bool]$relayOk) "TCP rs-ny.rustdesk.com:21116 = $(if ($relayOk) { 'OPEN' } else { 'BLOCKED' })"
+# relay BLOCKED ⇒ client mặc định (rs-ny) không bao giờ thấy máy này ⇒ session vô dụng →
+# fail job ngay, không publish session chết; dispatch lại để nhận VM khác (diag #21: 1/2 VM bị chặn)
+if (-not $relayOk) {
+    Write-Host '     VM này egress-chặn rs-ny:21116 — KHÔNG publish session chết, cần VM khác'
+    exit 1
+}
 
 # 7) Publish checklist + ID
 Write-Host "[7/8] Publish checklist + ID..."
