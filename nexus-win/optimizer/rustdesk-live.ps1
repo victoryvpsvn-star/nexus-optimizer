@@ -122,7 +122,7 @@ if ($dl) {
 }
 
 # 3) Cài im lặng (/S, Unblock, exit code, tìm nhiều đường dẫn)
-if ($asset -and (Test-Path $exe) -and ((Get-Item $exe -ErrorAction SilentlyContinue).Length -gt 5MB)) {
+if ((Test-Path $exe) -and ((Get-Item $exe -ErrorAction SilentlyContinue).Length -gt 5MB)) {
     Write-Host "[3/8] Cai im lang (/S)..."
     Unblock-File $exe -ErrorAction SilentlyContinue
     $p = Start-Process $exe -ArgumentList '/S' -PassThru
