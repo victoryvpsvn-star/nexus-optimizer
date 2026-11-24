@@ -130,12 +130,12 @@ reg unload HKLM\NXS_BOOT | Out-Null
 dism /Unmount-Image /MountDir:$mnt /Commit
 if ($LASTEXITCODE -ne 0) { throw "unmount boot.wim failed" }
 
-# ---------- 9. Export Pro-only (compress recovery ~2.5-3.2GB < 4GB ISO9660) ----------
-# Bai hoc run 93: ISO 26H2 (26300) install.wim = 7.6GB (24H2 chi 5.5GB) -> mount+debloat+
-# unmount+export het 35' step timeout. Tach: buoc 1-8 o step "tune", buoc 9 (export re-compress
-# 7.6GB -> ~3GB rat nang) o step rieng "export" voi timeout rieng.
-# Neu da export roi (re-run job) thi skip.
-Write-Host '[9] Export Pro-only compress recovery...'
+# ---------- 9. Export Pro-only (recovery) + SPLIT .swm ----------
+# Bai hoc run 93/94: ISO 26H2 (26300) install.wim 7.6GB -> export Pro-only recovery = 5.21GB
+# (>3.9GB - vuot gioi han file 4GB-1 cua ISO9660). Chuan Windows cho >4GB: SPLIT .swm
+# (install.swm + install2.swm...) — Setup doc tu nhien (FAT32 USB), Rufus/Ventoy ok.
+# Re-run: neu da export roi thi skip.
+Write-Host '[9] Export Pro-only compress recovery + split swm...'
 if ((Test-Path "$out\install.wim") -and ((Get-Item "$out\install.wim").Length -gt 1GB)) {
   Write-Host 'install.wim da export o lan truoc — skip'
 } else {
@@ -144,6 +144,17 @@ if ((Test-Path "$out\install.wim") -and ((Get-Item "$out\install.wim").Length -g
 }
 Move-Item "$out\install.wim" "$src\sources\install.wim" -Force
 $sz2 = (Get-Item "$src\sources\install.wim").Length
-Write-Host "install.wim final: $([math]::Round($sz2/1GB,2)) GB"
-if ($sz2 -gt 3.9GB) { throw "install.wim > 3.9GB - vuot gioi han ISO9660" }
+Write-Host "install.wim final (Pro-only, recovery): $([math]::Round($sz2/1GB,2)) GB"
+$info = Get-WindowsImage -ImagePath "$src\sources\install.wim"
+if ($info.Count -ne 1) { throw "install.wim phai chi con 1 image (Pro)" }
+Write-Host "Image duy nhat: $($info[0].ImageName)"
+# SPLIT .swm — moi phan <=3800MB (<4GB-1 ISO9660)
+Remove-Item "$src\sources\install*.swm" -Force -ErrorAction SilentlyContinue
+dism /Split-Image /ImageFile:"$src\sources\install.wim" /SWMFile:"$src\sources\install.swm" /FileSize:3800
+if ($LASTEXITCODE -ne 0) { throw "split swm failed ($LASTEXITCODE)" }
+Remove-Item "$src\sources\install.wim" -Force
+$swms = Get-ChildItem "$src\sources\install*.swm" | Sort-Object Name
+if ($swms.Count -lt 2) { throw "split ra it hon 2 phan swm?" }
+$swms | ForEach-Object { Write-Host "  $($_.Name): $([math]::Round($_.Length/1GB,2)) GB" }
+if (($swms | Measure-Object Length -Maximum).Maximum -gt 3.9GB) { throw "co phan swm > 3.9GB - giam FileSize split" }
 Write-Host 'TUNE-INSTALL-WIM-OK'

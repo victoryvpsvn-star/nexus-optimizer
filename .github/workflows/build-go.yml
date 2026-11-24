@@ -207,26 +207,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Lay boot.wim goc (WinSE) tu artifact cua job win11-iso
+      - name: Lay boot.wim goc (WinSE) tu artifact cua job win11-iso (cung run)
+        uses: actions/download-artifact@v4
+        with:
+          name: win11-boot-wim
+          path: C:\winpe\artifact
+
+      - name: Stage boot.wim vao media/sources + soi image info
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path C:\winpe\media\sources | Out-Null
-          gh api repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[] | select(.name=="win11-boot-wim") | .id' | ForEach-Object -Begin { $got = $false } -Process {
-            if (-not $got) {
-              $got = $true
-              Write-Host "artifact id: $_"
-              gh api repos/${{ github.repository }}/actions/artifacts/$_/zip > C:\winpe\bootwim.zip
-            }
-          }
-          if (-not (Test-Path C:\winpe\bootwim.zip)) { throw 'khong tai duoc artifact win11-boot-wim' }
-          Expand-Archive C:\winpe\bootwim.zip C:\winpe\bootwim -Force
-          $w = Get-ChildItem C:\winpe\bootwim -Recurse -Filter boot.wim | Select-Object -First 1
-          if (-not $w) { throw 'artifact khong chua boot.wim' }
+          $w = Get-ChildItem C:\winpe\artifact -Recurse -Filter boot.wim | Select-Object -First 1
+          if (-not $w) { throw 'artifact win11-boot-wim khong chua boot.wim' }
           Copy-Item $w.FullName C:\winpe\media\sources\boot.wim -Force
           Write-Host "boot.wim: $([math]::Round($w.Length/1MB,1)) MB"
           dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tai exe NEXUS tu release go-vN
         shell: powershell
@@ -381,7 +376,7 @@ jobs:
     name: Build Win11 Pro 26H2 Gaming ISO (Debloated + Tuned)
     runs-on: windows-latest
     if: github.event_name == 'workflow_dispatch'
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -413,37 +408,37 @@ jobs:
           Write-Host "ISO goc: $([math]::Round($iso.Length/1GB,2)) GB"
           if ($iso.Length -lt 4GB) { throw "ISO goc qua nho - download loi?" }
 
-      - name: Tune install.wim (debloat AppX + registry offline + LabConfig + Pro-only)
+      - name: Tune install.wim (debloat AppX + registry offline + LabConfig + export recovery + split .swm)
         shell: powershell
-        # Run 93: ISO 26H2 install.wim 7.6GB — 35' khong du; buoc 9 (export) da tach sang step sau
-        timeout-minutes: 75
+        # Run 94: tune tron bo (mount+debloat+reg+unmount+bootwim+export 5.21GB) het ~55' trong 75'
+        timeout-minutes: 80
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File nexus-go\rescue\win11\tune-install-wim.ps1 C:\win11-original.iso
 
-      - name: Export Pro-only install.wim (re-compress 7.6GB -> ~3GB, buoc nang — timeout rieng)
+      - name: Verify install.swm sau tune (26H2 recovery 5.2GB > 4GB ISO9660 → chuan .swm)
         shell: powershell
-        timeout-minutes: 60
+        timeout-minutes: 5
         run: |
-          # tune-install-wim.ps1 [9] o tren da lam buoc nay — step nay la guard: neu tune
-          # vua xong thi file da o cho; in ket qua. (Giu rieng de ngay ca khi can re-run
-          # thi export co slot thoi gian rieng khong bi an cung 75'.)
-          if (-not (Test-Path 'C:\win11src\sources\install.wim')) { throw 'install.wim thieu sau tune' }
-          $sz = (Get-Item 'C:\win11src\sources\install.wim').Length
-          Write-Host "install.wim: $([math]::Round($sz/1GB,2)) GB"
-          if ($sz -gt 3.9GB) { throw 'install.wim > 3.9GB - vuot ISO9660' }
+          # tune da split .swm (install.swm + install2.swm...) — Setup doc tu nhien
+          $swms = Get-ChildItem 'C:\win11src\sources\install*.swm' | Sort-Object Name
+          if ($swms.Count -lt 2) { throw "thieu swm parts sau tune (thay: $($swms.Count))" }
+          $swms | ForEach-Object { Write-Host "$($_.Name): $([math]::Round($_.Length/1GB,2)) GB" }
+          if (($swms | Measure-Object Length -Maximum).Maximum -gt 3.9GB) { throw 'co phan swm > 3.9GB' }
+          $info = Get-WindowsImage -ImagePath $swms[0].FullName
+          if ($info.Count -ne 1) { throw 'install.swm phai chi con 1 image (Pro)' }
+          Write-Host "Image duy nhat: $($info.ImageName)"
 
       - name: Tao ISO (pycdlib UDF) + verify
         shell: powershell
-        timeout-minutes: 12
+        # Run 94: cay ISO ~6GB (8.4GB goc - install.wim 7.6GB + swm 5.2GB) — 12' khong du
+        timeout-minutes: 35
         run: |
           python nexus-go\rescue\win11\make_win11_iso.py
           $iso = Get-Item C:\out\Win11Pro-NEXUS-26H2-Gaming.iso
           Write-Host "ISO: $([math]::Round($iso.Length/1GB,2)) GB"
-          if ($iso.Length -lt 2.5GB) { throw "ISO qua nho" }
-          dism /Get-ImageInfo /ImageFile:C:\win11src\sources\install.wim
-          $info = Get-WindowsImage -ImagePath C:\win11src\sources\install.wim
-          if ($info.Count -ne 1) { throw "install.wim phai chi con 1 image (Pro)" }
-          Write-Host "Image duy nhat: $($info.ImageName)"
+          if ($iso.Length -lt 3GB) { throw "ISO qua nho" }
+          if (-not (Test-Path 'C:\win11src\sources\install.swm')) { throw 'install.swm thieu trong cay stage' }
+          if (Test-Path 'C:\win11src\sources\install.wim') { throw 'install.wim con sot trong cay - phai chi co swm' }
 
       - name: 7z split <2GB + merge.bat + SHA256 (gioi han asset GitHub 2GB/file)
         shell: powershell
