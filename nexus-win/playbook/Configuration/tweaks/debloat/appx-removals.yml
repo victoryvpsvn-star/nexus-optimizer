@@ -1,0 +1,128 @@
+---
+title: Remove Bloatware Apps (Atlas OS + FSOS-X merged)
+description: >-
+  Removes deprecated and unwanted AppX packages: Atlas OS parity set on every
+  preset, then the FSOS-X R11H2 remove-bloat/ai/m365/oem patterns for the Gaming
+  preset via NEXUSAppx.ps1 (126 merged regex patterns, same guardrails as the
+  NEXUS Gaming ISO: GamingApp, XboxGamingOverlay, XboxIdentityProvider, Xbox.TCUI,
+  Paint classic, ScreenSketch, Store, winget and SecHealthUI stay). Every removed
+  family is deprovisioned (feature updates cannot reinstall it) and the install
+  report lists the Store ID of everything that can be reinstalled.
+onUpgrade: false
+actions:
+  # ================================================= NEVER-REMOVE guardrails ==
+  # Same guardrails as NEXUS Gaming ISO and Atlas/FSOS (do NOT remove):
+  #   Microsoft.WindowsStore*, Microsoft.StorePurchaseApp*, Microsoft.DesktopAppInstaller* (winget),
+  #   Microsoft.XboxIdentityProvider*, Microsoft.Xbox.TCUI* (MSA/game sign-in),
+  #   Microsoft.GamingApp*, Microsoft.XboxGamingOverlay* (Game Pass + Game Bar),
+  #   Microsoft.Paint* (classic; MSPaint* is Paint 3D - that one IS removed),
+  #   Microsoft.ScreenSketch* (Snipping Tool), Microsoft.SecHealthUI* (Defender UI),
+  #   MicrosoftWindows.Client.CBS*, StartMenuExperienceHost*, ShellExperienceHost*,
+  #   Microsoft.Windows.Search*, Microsoft.Windows.FileExplorer*, InputApp*.
+  # The script phase re-checks these after removals (KEEP-CHECK fail = abort).
+
+  - !writeStatus: {status: 'Removing bloatware apps'}
+  # kill consumer Teams processes first (both the dead 21H2 app and the 23H2+ one)
+  - !taskKill: {name: 'msteams*', ignoreErrors: true}
+  - !taskKill: {name: 'ms-teams*', ignoreErrors: true}
+  - !taskKill: {name: 'OneDrive*', ignoreErrors: true}
+  - !taskKill: {name: 'Microsoft.Windows.Ai.Copilot*', ignoreErrors: true}
+  - !taskKill: {name: 'Widgets*', ignoreErrors: true}
+
+  # =================== ATLAS-PARITY CORE (every preset) ========================
+  # Deprecated/retired/dead apps first (same rows as Atlas appx.yml safe tier).
+  - !appx: {name: 'MicrosoftTeams*', type: family}
+  - !appx: {name: 'Microsoft.549981C3F5F10*', type: family}
+  - !appx: {name: 'Microsoft.549981C3F77F5*', type: family}
+  - !appx: {name: 'Microsoft.SkypeApp*', type: family}
+  - !appx: {name: 'Microsoft.Office.OneNote*', type: family}
+  - !appx: {name: 'Microsoft.MSPaint*', type: family}
+  - !appx: {name: 'Microsoft.Microsoft3DViewer*', type: family}
+  - !appx: {name: 'Microsoft.3DBuilder*', type: family}
+  - !appx: {name: 'Microsoft.MixedReality.Portal*', type: family}
+  - !appx: {name: 'microsoft.windowscommunicationsapps*', type: family}
+  - !appx: {name: 'Microsoft.Getstarted*', type: family}
+  - !appx: {name: 'Microsoft.XboxApp*', type: family}
+  # deprecated Xbox Console Companion - NOT Microsoft.GamingApp
+  - !appx: {name: 'Microsoft.XboxSpeechToTextOverlay*', type: family}
+  - !appx: {name: 'Microsoft.Print3D*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftOfficeHub*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftSolitaireCollection*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftStickyNotes*', type: family}
+  - !appx: {name: 'Microsoft.StickyNotesPreview*', type: family}
+  - !appx: {name: 'Microsoft.Wallet*', type: family}
+  - !appx: {name: 'Microsoft.ConnectivityStore*', type: family}
+  - !appx: {name: 'Microsoft.WindowsMaps*', type: family}
+  - !appx: {name: 'Microsoft.WindowsFeedbackHub*', type: family}
+  - !appx: {name: 'Microsoft.WindowsSoundRecorder*', type: family}
+  - !appx: {name: 'Microsoft.WindowsCamera*', type: family}
+  - !appx: {name: 'Microsoft.WindowsAlarms*', type: family}
+  - !appx: {name: 'Microsoft.WindowsBackup*', type: family}
+  - !appx: {name: 'Microsoft.ZuneMusic*', type: family}
+  - !appx: {name: 'Microsoft.ZuneVideo*', type: family}
+  - !appx: {name: 'Microsoft.PowerAutomateDesktop*', type: family}
+  - !appx: {name: 'Microsoft.Whiteboard*', type: family}
+  - !appx: {name: 'Microsoft.Todos*', type: family}
+  - !appx: {name: 'Microsoft.YourPhone*', type: family}
+  - !appx: {name: 'Microsoft.Windows.DevHome*', type: family}
+  - !appx: {name: 'Microsoft.OutlookForWindows*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftJournal*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftPowerBIForWindows*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftOfficeHub*', type: family}
+  # =================== FSOS-X PARITY (AI + stubs + M365) =======================
+  - !appx: {name: 'Microsoft.Copilot*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftOfficeHub*', type: family}
+  - !appx: {name: 'Microsoft.Office.Sway*', type: family}
+  - !appx: {name: 'Microsoft.M365Companions*', type: family}
+  - !appx: {name: 'Microsoft.MicrosoftStickyNotes*', type: family}
+  - !appx: {name: 'MicrosoftCorporationII.MicrosoftFamily*', type: family}
+  - !appx: {name: 'MicrosoftCorporationII.QuickAssist*', type: family}
+  - !appx: {name: 'Microsoft.WindowsFeedbackHub*', type: family}
+  - !appx: {name: 'Microsoft.Windows.DevHome*', type: family}
+  - !appx: {name: 'Microsoft.OutlookForWindows*', type: family}
+
+  # ==================== FULL MERGED LIST (Gaming preset) =======================
+  # The remaining FSOS-X patterns (Bing/Copilot provider stack, People/Start
+  # experiences, PCManager, NetworkSpeedTest, M365 stubs Word/Excel/PowerPoint,
+  # LinkedIn, sponsored 3rd-party, OEM bloat) + the provisioned sweep and the
+  # deprovision diff live in NEXUSAppx.ps1 (regex list = tune-install-wim.ps1,
+  # test-verified on 26H2 retail: 126 patterns, 25 survivors).
+  - !powerShell:
+    command: '.\NEXUSAppx.ps1 -Tier Gaming'
+    exeDir: true
+    runas: currentUserElevated
+    wait: true
+    option: 'nexus-gaming'
+  - !powerShell:
+    command: '.\NEXUSAppx.ps1 -Tier Core'
+    exeDir: true
+    runas: currentUserElevated
+    wait: true
+    option: 'nexus-core'
+
+  # ============== DEPROVISION DIFF (Atlas trick, both presets) =================
+  # HKLM\...\AppxAllUserStore\Deprovisioned\<family> for every family that
+  # existed before and is gone now (the '<=' side only, so a package ADDED
+  # mid-run can never be deprovisioned by accident). MS-documented way to stop
+  # feature updates from reinstalling removed apps.
+  - !powerShell:
+    command: |
+      $win = [Environment]::GetFolderPath('Windows')
+      $a = "$win\NEXUS\Backups\AppxPackagesOld.txt"
+      if (Test-Path $a) {
+        $removed = (Compare-Object (Get-Content $a) ((Get-AppxPackage -AllUsers).PackageFamilyName -ErrorAction SilentlyContinue)) |
+          Where-Object { $_.SideIndicator -eq '<=' } | Select-Object -ExpandProperty InputObject
+        foreach ($f in $removed) {
+          New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned" -Name $f -Force | Out-Null
+        }
+        if ($removed) { $removed | Set-Content "$win\NEXUS\Backups\appx-removed.txt" }
+        Write-Output "Deprovisioned markers written: $($removed.Count)"
+      }
+    runas: currentUserElevated
+    wait: true
+
+  # ============== CLEAR SHELL CACHES (Atlas + AME docs, after mass removal) ====
+  - !appx: {operation: clearCache, name: '*MicrosoftWindows.Client.CBS*'}
+  - !appx: {operation: clearCache, name: '*Microsoft.Windows.Search*'}
+  - !appx: {operation: clearCache, name: '*Microsoft.Windows.SecHealthUI*'}
+  - !appx: {operation: clearCache, name: '*Microsoft.Windows.StartMenuExperienceHost*'}

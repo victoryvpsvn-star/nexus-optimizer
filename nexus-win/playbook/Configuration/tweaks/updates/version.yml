@@ -1,0 +1,20 @@
+---
+title: Release pin (TargetReleaseVersion, Atlas-style)
+description: >-
+  Pins Windows Updates to the CURRENT release via the TargetReleaseVersion
+  policy (Atlas behavior — matches what the NEXUS ISO does offline with 26H2).
+  Default is OFF; the value is written to whatever build the machine is on right
+  now, so pinning never jumps versions.
+onUpgrade: false
+actions:
+  - !writeStatus: {status: 'Pinning current release'}
+  - !powerShell:
+    command: |
+      $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+      $rel = $cv.ReleaseId; if (-not $rel) { $rel = $cv.DisplayVersion }
+      reg add 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' /v TargetReleaseVersion /t REG_DWORD /d 1 /f | Out-Null
+      reg add 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' /v TargetReleaseVersionInfo /t REG_SZ /d $rel /f | Out-Null
+      Write-Output "Pinned to release $rel (revert: TargetReleaseVersion=0)"
+    runas: currentUserElevated
+    wait: true
+    option: 'wl-26h2'

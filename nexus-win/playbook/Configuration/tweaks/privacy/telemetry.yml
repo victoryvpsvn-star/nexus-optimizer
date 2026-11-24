@@ -1,0 +1,13 @@
+---
+title: Privacy and telemetry lockdown
+description: >-
+  Telemetry 0 (policies), feedback notifications off, Advertising ID off,
+  Delivery Optimization download mode 0, cloud content off — the NEXUS Gaming ISO
+  registry set applied online (HKLM policies + HKCU).
+onUpgrade: false
+actions:
+  - !writeStatus: {status: 'Applying privacy lockdown'}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection', value: 'AllowTelemetry', data: 0, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection', value: 'DoNotShowFeedbackNotifications', data: 1, type: REG_DWORD}
+  - !registryValue: {path: 'HKCU\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo', value: 'Enabled', data: 0, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization', value: 'DODownloadMode', data: 0, type: REG_DWORD}

@@ -1,0 +1,28 @@
+---
+title: Gaming registry tuning
+description: >-
+  The exact gaming registry set of the NEXUS Gaming ISO: Auto Game Mode on,
+  Game Bar startup panel off, GameDVR off, HAGS on (HwSchMode), System
+  Responsiveness 10, NetworkThrottlingIndex 0xFFFFFFFF, GPU Priority 8 / Priority
+  6 / Scheduling+SFIO High for the Games task, GlobalTimerResolutionRequests 1,
+  PowerThrottling off. Same values, same keys as tune-install-wim.ps1.
+onUpgrade: false
+actions:
+  - !writeStatus: {status: 'Applying gaming registry tuning'}
+  # Game mode + Game Bar panel
+  - !registryValue: {path: 'HKCU\Software\Microsoft\GameBar', value: 'AutoGameModeEnabled', data: 1, type: REG_DWORD}
+  - !registryValue: {path: 'HKCU\Software\Microsoft\GameBar', value: 'ShowStartupPanel', data: 0, type: REG_DWORD}
+  - !registryValue: {path: 'HKCU\Software\Policies\Microsoft\Windows\GameDVR', value: 'AllowGameDVR', data: 0, type: REG_DWORD}
+  # Hardware-accelerated GPU scheduling (HAGS)
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers', value: 'HwSchMode', data: 2, type: REG_DWORD}
+  # Multimedia profile
+  - !registryValue: {path: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile', value: 'SystemResponsiveness', data: 10, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile', value: 'NetworkThrottlingIndex', data: 4294967295, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games', value: 'GPU Priority', data: 8, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games', value: 'Priority', data: 6, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games', value: 'Scheduling Category', data: 'High', type: REG_SZ}
+  - !registryValue: {path: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games', value: 'SFIO Priority', data: 'High', type: REG_SZ}
+  # Timer resolution requests allowed (pair with performance.yml power module)
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\kernel', value: 'GlobalTimerResolutionRequests', data: 1, type: REG_DWORD}
+  # Power Throttling off (CPU keeps max clocks when apps request it)
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling', value: 'PowerThrottlingOff', data: 1, type: REG_DWORD}

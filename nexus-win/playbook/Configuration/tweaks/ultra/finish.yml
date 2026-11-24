@@ -1,0 +1,13 @@
+---
+title: Finish — install report and markers
+description: >-
+  Generates C:\Windows\NEXUS\install-report.html from the backups (appx removed,
+  services, tasks) and writes the NEXUS marker file the report links to.
+onUpgrade: false
+actions:
+  - !writeStatus: {status: 'Generating install report'}
+  - !powerShell:
+    command: '.\NEXUSFinish.ps1'
+    exeDir: true
+    runas: currentUserElevated
+    wait: true

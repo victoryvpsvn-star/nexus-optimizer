@@ -1,0 +1,66 @@
+---
+title: Strip OneDrive (FSOS-X style)
+description: >-
+  FSOS-X strip-onedrive: run the official uninstaller, kill the OOBE auto-install
+  (Run keys in HKLM and the Default user hive) and hide the Explorer sidebar
+  CLSID. Every action is gated with option 'od-remove' (radio page).
+onUpgrade: false
+actions:
+  - !writeStatus: {status: 'Stripping OneDrive'}
+  # 1) Kill the running process + tray
+  - !taskKill: {name: 'OneDrive*', ignoreErrors: true, option: 'od-remove'}
+  # 2) Official uninstaller (user-scope install path; best-effort both scopes)
+  - !powerShell:
+    command: |
+      $u = "$env:LOCALAPPDATA\Microsoft\OneDrive\OneDriveSetup.exe"
+      $s = "$env:SystemRoot\System32\OneDriveSetup.exe"
+      foreach ($exe in @($u, $s)) {
+        if (Test-Path $exe) {
+          try { Start-Process $exe -ArgumentList '/uninstall' -Wait -NoNewWindow -ErrorAction Stop; Write-Output "uninstaller: $exe" }
+          catch { Write-Warning "uninstaller $exe : $($_.Exception.Message)" }
+        }
+      }
+    runas: currentUserElevated
+    wait: true
+    option: 'od-remove'
+  # 3) Auto-start keys: user Run (reg delete — value may not exist, error swallowed)
+  - !powerShell:
+    command: |
+      cmd /c "reg delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v OneDrive /f >nul 2>&1"
+      cmd /c "reg delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v OneDriveSetup /f >nul 2>&1"
+      cmd /c "reg delete HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run /v OneDriveSetup /f >nul 2>&1"
+      cmd /c "reg delete HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run /v OneDriveStandaloneUpdateTaskLogon /f >nul 2>&1"
+      Write-Output 'Run keys stripped (HKCU + HKLM)'
+    runas: currentUserElevated
+    wait: true
+    option: 'od-remove'
+  - !powerShell:
+    command: |
+      foreach ($t in @('OneDrive*', 'OneDrive Standalone Update Task*')) {
+        Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue | ForEach-Object {
+          Unregister-ScheduledTask -TaskName $_.TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+      }
+      Write-Output 'OneDrive scheduled tasks removed'
+    runas: currentUserElevated
+    wait: true
+    option: 'od-remove'
+  # 4) Explorer sidebar CLSID off (system + Wow6432Node - FSOS 4-hive, 2 online hive covers it)
+  - !registryValue: {path: 'HKCR\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}', value: 'System.IsPinnedToNameSpaceTree', data: 0, type: REG_DWORD, option: 'od-remove'}
+  - !registryValue: {path: 'HKCR\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}', value: 'System.IsPinnedToNameSpaceTree', data: 0, type: REG_DWORD, option: 'od-remove'}
+  # 5) Default user hive Run key (every NEW profile never sees OneDrive auto-start;
+  #    the same step the NEXUS ISO does offline via reg load NXS_DEF)
+  - !powerShell:
+    command: |
+      $h = 'HKU\AME_UserHive_Default'
+      reg load $h "$env:SystemDrive\Users\Default\NTUSER.DAT" 2>$null | Out-Null
+      if ($LASTEXITCODE -eq 0 -or (reg query $h 2>$null)) {
+        cmd /c "reg delete `"$h\Software\Microsoft\Windows\CurrentVersion\Run`" /v OneDrive /f >nul 2>&1"
+        cmd /c "reg delete `"$h\Software\Microsoft\Windows\CurrentVersion\Run`" /v OneDriveSetup /f >nul 2>&1"
+        [gc]::Collect(); Start-Sleep 1
+        reg unload $h 2>$null | Out-Null
+        Write-Output 'Default hive Run keys stripped'
+      } else { Write-Warning 'Default hive already loaded or not accessible - skipped (main.yml mirror step also handles this)' }
+    runas: currentUserElevated
+    wait: true
+    option: 'od-remove'

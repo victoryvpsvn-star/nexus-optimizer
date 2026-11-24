@@ -1,0 +1,98 @@
+---
+title: NEXUS Optimizer Root Playbook File
+description: >-
+  Runs all NEXUS modules in a safe order: precheck -> optional restore point ->
+  backups -> AppX debloat (Atlas+FSOS-X merged, deprovision diff) -> OneDrive strip
+  -> services -> gaming registry -> privacy/telemetry -> reinstall blockers ->
+  optional release pin -> finish report.
+actions:
+  # ---------------------------------------------------------------- precheck ---
+  - !writeStatus: {status: 'Checking Windows version and gaming stack'}
+  # NEXUS targets 26100 (24H2) / 26200 (25H2) / 26300 (26H2) only. playbook.conf
+  # SupportedBuilds already gates this, this is a second belt-and-suspenders check.
+  - !powerShell:
+    command: |
+      $b = [System.Environment]::OSVersion.Version.Build
+      if ($b -notmatch '^(26100|26200|26300)$') {
+        throw "NEXUS supports Windows 11 24H2/25H2/26H2 (builds 26100/26200/26300) - this machine is build $b"
+      }
+      Write-Output "Windows build $b - OK"
+    runas: currentUserElevated
+    wait: true
+
+  # -------------------------------------------------------------- restore pt ---
+  - !writeStatus: {status: 'Creating System Restore point'}
+  # Checkpoint-Computer is rate-limited (1 per 24h) - failure is non-fatal, the
+  # run continues with the file backups below.
+  - !powerShell:
+    command: |
+      try {
+        New-Item -ItemType Directory -Force -Path "$env:SystemDrive\NEXUS" | Out-Null
+        Checkpoint-Computer -Description "NEXUS Optimizer" -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
+        Write-Output 'Restore point OK'
+      } catch {
+        Write-Warning "Restore point skipped: $($_.Exception.Message)"
+      }
+    runas: currentUserElevated
+    wait: true
+    option: 'rp-on'
+
+  # ------------------------------------------------------------------ backup ---
+  - !writeStatus: {status: 'Backing up current state'}
+  # Snapshot AppX families (feeds the deprovision diff + undo), services start
+  # types and scheduled tasks - written to C:\Windows\NEXUS\Backups.
+  - !powerShell:
+    command: '.\NEXUSBackup.ps1'
+    exeDir: true
+    runas: currentUserElevated
+    wait: true
+
+  # ---------------------------------------------------------------- debloat ---
+  - !writeStatus: {status: 'Removing bloatware (Atlas + FSOS-X merged list)'}
+  - !task: {path: 'tweaks\debloat\appx-removals.yml'}
+  - !writeStatus: {status: 'Blocking app reinstalls and suggested apps'}
+  - !task: {path: 'tweaks\debloat\reinstall-blockers.yml'}
+
+  # --------------------------------------------------------------- onedrive ---
+  - !writeStatus: {status: 'Stripping OneDrive'}
+  # FSOS-X strip-onedrive style: uninstaller /uninstall, Run keys (system +
+  # Default hive), Explorer sidebar CLSID off.
+  - !task: {path: 'tweaks\onedrive\strip.yml'}
+  # od-keep keeps OneDrive but still stops OOBE auto-start churn? No: od-keep
+  # skips the whole module - handled per-action below via option '!od-remove'.
+  # (kept here for clarity; strip.yml gates every action with option 'od-remove')
+
+  # --------------------------------------------------------------- services ---
+  - !writeStatus: {status: 'Tuning services (SysMain, DiagTrack, ... )'}
+  - !task: {path: 'tweaks\services\services.yml'}
+
+  # ----------------------------------------------------------------- gaming ---
+  - !writeStatus: {status: 'Applying gaming registry tuning'}
+  - !task: {path: 'tweaks\gaming\gaming.yml'}
+
+  # ------------------------------------------------- performance extras ---
+  - !writeStatus: {status: 'Applying power scheme and timer resolution'}
+  # Ultimate Performance scheme + GlobalTimerResolutionRequests + PowerThrottling off
+  - !task: {path: 'tweaks\gaming\performance.yml'}
+
+  # ---------------------------------------------------------- privacy/tasks ---
+  - !writeStatus: {status: 'Applying privacy and telemetry lockdown'}
+  - !task: {path: 'tweaks\privacy\telemetry.yml'}
+  - !task: {path: 'tweaks\tasks\telemetry-tasks.yml'}
+
+  # ------------------------------------------------------------ default user ---
+  - !writeStatus: {status: 'Mirroring tweaks to the Default user hive'}
+  # New profiles get the same HKCU baseline (GameBar panel, advertising, OneDrive Run key already stripped by strip.yml)
+  - !powerShell:
+    command: '.\NEXUSDefaultHive.ps1'
+    exeDir: true
+    runas: currentUserElevated
+    wait: true
+
+  # --------------------------------------------------------- release pin ---
+  - !writeStatus: {status: 'Applying TargetReleaseVersion policy'}
+  - !task: {path: 'tweaks\updates\version.yml'}
+
+  # ------------------------------------------------------------------ finish ---
+  - !writeStatus: {status: 'Generating install report'}
+  - !task: {path: 'tweaks\ultra\finish.yml'}

@@ -1,0 +1,20 @@
+---
+title: Power scheme and timer resolution
+description: Ultimate Performance power scheme + PowerThrottling off (registry part is in gaming.yml). Gated with option 'pm-on'.
+onUpgrade: false
+actions:
+  - !writeStatus: {status: 'Applying Ultimate Performance scheme'}
+  - !powerShell:
+    command: |
+      # Ultimate Performance GUID duplicates on some builds — reuse if present
+      $g = (powercfg /L | Select-String 'e9a42b02-d5df-448d-aa00-03f14749eb61').ToString() -replace '.*GUID:\s*([0-9a-f-]{36}).*','$1'
+      if ($g) { powercfg /S $g; Write-Output "Ultimate Performance active ($g)" }
+      else {
+        $out = powercfg /DUPSCHEME e9a42b02-d5df-448d-aa00-03f14749eb61 2>&1
+        $g2 = ($out | Select-String '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' -AllMatches).Matches.Value
+        if ($g2) { powercfg /S $g2; Write-Output "Ultimate Performance created + active ($g2)" }
+        else { Write-Warning "khong tao duoc Ultimate Performance: $out" }
+      }
+    runas: currentUserElevated
+    wait: true
+    option: 'pm-on'

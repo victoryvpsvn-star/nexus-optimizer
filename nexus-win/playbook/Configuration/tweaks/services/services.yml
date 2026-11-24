@@ -1,0 +1,27 @@
+---
+title: Service tuning
+description: >-
+  Disables the background services the NEXUS Gaming ISO disables offline
+  (SysMain, DiagTrack, dmwappushservice, MapsBroker, RetailDemo, WpcMonSvc) and
+  turns Prefetch/Superfetch off. Defender, Xbox and audio services are untouched
+  by design.
+onUpgrade: false
+actions:
+  - !writeStatus: {status: 'Tuning services'}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Services\SysMain', value: 'Start', data: 4, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Services\DiagTrack', value: 'Start', data: 4, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Services\dmwappushservice', value: 'Start', data: 4, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Services\MapsBroker', value: 'Start', data: 4, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Services\RetailDemo', value: 'Start', data: 4, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Services\WpcMonSvc', value: 'Start', data: 4, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters', value: 'EnablePrefetcher', data: 0, type: REG_DWORD}
+  - !registryValue: {path: 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters', value: 'EnableSuperfetch', data: 0, type: REG_DWORD}
+  # Stopping the running services now (Start=4 applies next boot; stop them live so
+  # DiagTrack stops flushing telemetry this session)
+  - !powerShell:
+    command: |
+      foreach ($s in @('SysMain', 'DiagTrack', 'dmwappushservice', 'MapsBroker', 'RetailDemo', 'WpcMonSvc')) {
+        try { Stop-Service $s -Force -ErrorAction Stop; Write-Output "stopped: $s" } catch { Write-Output "skip: $s ($($_.Exception.Message))" }
+      }
+    runas: currentUserElevated
+    wait: true
