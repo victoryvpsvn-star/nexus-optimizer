@@ -478,6 +478,14 @@ jobs:
           # boot.wim trong ISO Win11 chinh chu = WinSE (Windows Setup PE) cua MS:
           # co san PowerShell + WMI + .NET — khong can ADK/add-on/WinPE_OCs nua.
           # job build-windows-pe dung artifact nay lam nen boot.wim cua windows-nexus.iso
+          # Run #107: C: HET CHO khi copy boot.wim (ISO 4.5GB + 7z parts 6GB + swm 5.2GB
+          # cung ton tai) → don truoc: 7z parts DA UPLOAD roi, ISO da split xong,
+          # install*.swm da dua vao ISO — chi con can boot.wim trong cay goc.
+          Write-Host "Truoc don: C: con $([math]::Round((Get-PSDrive C).Free/1GB,1)) GB"
+          Get-ChildItem 'C:\out\*.7z.0*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Get-ChildItem 'C:\out\*.iso' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Get-ChildItem 'C:\win11src\sources\install*.swm' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Write-Host "Sau don: C: con $([math]::Round((Get-PSDrive C).Free/1GB,1)) GB"
           New-Item -ItemType Directory -Force -Path C:\winpe-artifact | Out-Null
           Copy-Item C:\win11src\sources\boot.wim C:\winpe-artifact\boot.wim -Force
           Write-Host "boot.wim: $([math]::Round((Get-Item C:\winpe-artifact\boot.wim).Length/1MB,1)) MB"

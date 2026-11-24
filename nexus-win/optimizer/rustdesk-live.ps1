@@ -1,5 +1,17 @@
 ﻿# rustdesk-live.ps1 — NEXUS: tự cài RustDesk trên runner GitHub, mở wizard, giữ ĐÚNG N phút
 # Mọi call CLI đều có timeout + kill. CHẤM PASS/FAIL từng bước: log job + GITHUB_STEP_SUMMARY + live-session.json
+#
+# v3 (diag #27, soi mã nguồn hbb_common): 3 root-cause đã xử lý
+# 1) HAI INSTANCE / HAI ID: New-Service (LocalSystem) + service installer (LocalService) chạy song song,
+#    mỗi instance một config một enc_id (bằng chứng dump [CFG] run #27) → --get-id trả ID APP USER,
+#    bro gõ ID đó = "offline" → KHÔNG BAO GIỜ vào được dù password đúng.
+#    → v3: chỉ giữ ĐÚNG MỘT service chuẩn của installer; service thủ công bị xóa.
+# 2) ID PHẢI LẤY TỪ ACCOUNT CỦA SERVICE: task /RU <account-service> chạy --get-id → ID service thật.
+# 3) PASSWORD PLAIN LÀ ĐÚNG THIẾT KẾ (không phải lỗi): hbb_common/src/password_security.rs
+#    decrypt_str_or_original() — chuỗi không có dạng "version-prefix + base64" được DÙNG NGUYÊN GIÁ TRỊ
+#    (plain được chấp nhận khi đọc; mã hóa lại chỉ xảy ra khi SAVE). CLI --password chạy bằng account
+#    khác sẽ ghi hash mã hóa theo machine_uid/config của ACCOUNT ĐÓ → service không giải mã nổi → sai pw.
+#    → v3: KHÔNG dùng CLI --password nữa; plain pw ghi thẳng vào config của service.
 param([int]$Minutes = 10, [string]$Mode = 'all')
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
@@ -135,9 +147,9 @@ if ($dl) {
     Mark 'download-installer' $false 'không có URL tải (không tag, không asset)'
 }
 
-# 3) Cài im lặng (/S, Unblock, exit code, tìm nhiều đường dẫn)
+# 3) Cài im lặng (--silent-install: Program Files + service chuẩn 'RustDesk' chạy LocalService)
 if ((Test-Path $exe) -and ((Get-Item $exe -ErrorAction SilentlyContinue).Length -gt 5MB)) {
-    Write-Host "[3/8] Cai im lang (/S)..."
+    Write-Host "[3/8] Cai im lang (--silent-install)..."
     Unblock-File $exe -ErrorAction SilentlyContinue
     # --silent-install = cài im lặng TOÀN HỆ THỐNG chuẩn của RustDesk (Program Files + đăng ký service
     # + RustDesk coi là "installed" → --password hoạt động). Diag #21/#22: /S và /allusers chỉ cài
@@ -168,53 +180,53 @@ if (-not $script:rd) {
     throw 'cài RustDesk thất bại — xem các dòng FAIL ở trên'
 }
 
-# 4) SERVICE = rustdesk.exe --service chạy LocalSystem — tạo bằng New-Service (không phụ thuộc installer/flag RustDesk)
-Write-Host "[4/8] RustDesk service (New-Service)..."
+# 4) SERVICE — DUY NHẤT service chuẩn của installer ('RustDesk' / LocalService).
+# v3 diag #27: run truoc tao THEM RustDeskService (New-Service, LocalSystem) → 2 instance RustDesk
+# song song, moi cai mot config/enc_id → --get-id (chay runneradmin) tra ID APP USER, khong phai
+# ID service → bro go ID "offline" = nguyen nhan chua vao duoc. Xoa service thu cong, giu 1 chuan.
+Write-Host "[4/8] RustDesk service (DUY NHAT - chuan installer)..."
 Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep 2
-$svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue
-if (-not $svc) {
-    New-Service -Name 'RustDeskService' -DisplayName 'RustDesk Service' -BinaryPathName "`"$script:rd`" --service" -StartupType Automatic -ErrorAction SilentlyContinue | Out-Null
-    Start-Sleep 1
-    $svc = Get-Service -Name 'RustDeskService' -ErrorAction SilentlyContinue
-}
-if ($svc -and $svc.Status -ne 'Running') { Start-Service $svc.Name -ErrorAction SilentlyContinue; Start-Sleep 6; $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' } }
-if ($svc) {
-    New-NetFirewallRule -DisplayName 'RustDesk' -Program $script:rd -Direction Inbound -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
-    Mark 'service-running' $true "$($svc.Name)=Running — LocalSystem unattended, nhận kết nối qua relay"
-} else {
-    Write-Host ("     sc query rustdesk*: {0}" -f ((sc.exe query state= all 2>&1 | Select-String -Pattern 'rustdesk' -Context 0,2 | Out-String).Trim() -replace '\s+', ' '))
-    $null = & $script:rd --install-service 2>&1
-    Start-Sleep 5
-    $svc = Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }
-    if (-not $svc) {
-        Start-Process $script:rd -ErrorAction SilentlyContinue
-        Start-Sleep 6
-        $proc = Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue
-        Mark 'service-running' $false "KHÔNG tạo được service — fallback app per-user (process=$([bool]$proc)) — KẾT NỐI CÓ THỂ THẤT BẠI"
-    } else {
-        Mark 'service-running' $true "$($svc.Name)=Running (flag --install-service)"
+foreach ($sn in @('RustDeskService')) {
+    if (Get-Service -Name $sn -ErrorAction SilentlyContinue) {
+        sc.exe stop $sn 2>&1 | Out-Null; Start-Sleep 1
+        sc.exe delete $sn 2>&1 | Out-Null
+        Write-Host "     da xoa service thu cong $sn (v3: chi giu service chuan cua installer)"
     }
 }
+$svc = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
+if (-not $svc) {
+    $null = & $script:rd --install-service 2>&1
+    Start-Sleep 5
+    $svc = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
+}
+if (-not $svc) {
+    # fallback cuoi cung (chi khi installer khong tao duoc service) — ROLLBACK nguy co 2 instance
+    New-Service -Name 'RustDesk' -DisplayName 'RustDesk Service' -BinaryPathName "`"$script:rd`" --service" -StartupType Automatic -ErrorAction SilentlyContinue | Out-Null
+    Start-Sleep 1
+    $svc = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
+}
+if ($svc -and $svc.Status -ne 'Running') { Start-Service $svc.Name -ErrorAction SilentlyContinue; Start-Sleep 8; $svc = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue }
+if ($svc -and $svc.Status -eq 'Running') {
+    New-NetFirewallRule -DisplayName 'RustDesk' -Program $script:rd -Direction Inbound -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
+    $svcAccount = ((sc.exe qc $svc.Name 2>&1 | Out-String) -split "`n" | Select-String 'SERVICE_START_NAME' | Out-String).Trim()
+    Mark 'service-running' $true "$($svc.Name)=Running — $svcAccount — DUY NHAT (1 instance = 1 ID)"
+} else {
+    Mark 'service-running' $false 'service RustDesk KHÔNG chạy được — session sẽ không nhận kết nối'
+    $svcAccount = ''
+}
 
-# 5) Password — GHI PLAIN TEXT VÀO TOML, SERVICE TỰ MÃ HÓA KHI RESTART (cách documented)
-# Diag #24 (bằng chứng từ [CFG] dump): CLI --password chạy bằng runneradmin ghi hash MÃ HÓA
-# THEO KEY CỦA USER vào CẢ 2 file config (LocalService + runneradmin — hash GIỐNG HỆT nhau
-# chứng tỏ 1 process user ghi, không phải service). Service (LocalSystem, đọc config
-# LocalService) KHÔNG GIẢI MÃ được hash đó → bro nhập đúng 123456789 vẫn "Wrong password".
-# RustDesk discussion #9229 xác nhận: (a) copy hash+salt sang install khác KHÔNG hoạt động,
-# (b) ghi password PLAIN TEXT vào toml → RustDesk TỰ MÃ HÓA sau khi start.
-# → Ghi plain vào config service + user, restart service, VERIFY service đã re-encrypt
-#   (password khác plain = service đã đọc và mã hóa bằng key CỦA NÓ → verify client sẽ đúng)
-Write-Host '[5/8] Dat password (plain text toml → service tu ma hoa khi restart)...'
+# 5) PASSWORD — PLAIN TRONG CONFIG CỦA SERVICE (đúng thiết kế mã nguồn, KHÔNG dùng CLI nữa).
+# hbb_common/src/password_security.rs decrypt_str_or_original(): giá trị không mang dạng
+# "version-prefix + base64" (plain) → được DÙNG NGUYÊN. Mã hóa lại chỉ xảy ra khi SAVE.
+# CLI --password chạy bằng account khác ghi hash theo machine_uid/config ACCOUNT ĐÓ → service
+# không giải mã nổi → sai pw (diag #24). Vì vậy: stop service → ghi plain → start lại.
+Write-Host '[5/8] Dat password (plain → config service, dung thiet ke ma nguon)...'
 # PW CỐ ĐỊNH theo yêu cầu bro — 123456789 (9 số, gõ KHÔNG THỂ sai; RustDesk nhận pw ≥8 ký tự)
 $pw = '123456789'
 $pwB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pw))
-$o1 = RDC @('--password', $pw) 40
-Write-Host ("     CLI pw out: {0}" -f (($o1 | Out-String).Trim() -replace '\s+', ' '))
 
-# STOP service trước khi ghi file config của nó (file đang bị giữ)
-Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
+Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
 Start-Sleep 4
 $cfgDirs3 = @(
     'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config',
@@ -241,65 +253,91 @@ if ($plainWritten.Count -lt 1) {
     Mark 'set-password' $false 'không tìm thấy RustDesk.toml nào để ghi plain password'
 } else {
     Mark 'pw-plain-written' $true "plain pw ghi vao $($plainWritten.Count) config: $(($plainWritten | ForEach-Object { $_.Replace('\RustDesk.toml', '') }) -join ' | ')"
-    # START service lại — service đọc plain password trong config CỦA NÓ, TỰ MÃ HÓA, rồi dùng
-    Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
-    Start-Sleep 10
-    # VERIFY QUYẾT ĐỊNH: service phải đã re-encrypt (password != plain) trong config service
+    # CƯỜNG HÓA: verification-method = use-permanent-password trong RustDesk2.toml [options] của service
+    # (mặc định UseBoth — đặt hẳn permanent để tránh nhầm temporary pw 6 số)
+    foreach ($dir in @('C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config', 'C:\Windows\System32\config\systemprofile\AppData\Roaming\RustDesk\config')) {
+        $r2 = Join-Path $dir 'RustDesk2.toml'
+        if (-not (Test-Path $r2)) { continue }
+        $t = [IO.File]::ReadAllText($r2)
+        if ($t -match "(?m)^verification-method\s*=") { $t = $t -replace "(?m)^verification-method\s*=.*$", "verification-method = 'use-permanent-password'" }
+        elseif ($t -match "(?m)^\[options\]") { $t = $t -replace "(?m)^\[options\]", "[options]`r`nverification-method = 'use-permanent-password'" }
+        else { $t = $t.TrimEnd() + "`r`n[options]`r`nverification-method = 'use-permanent-password'`r`n" }
+        [IO.File]::WriteAllText($r2, $t, [Text.UTF8Encoding]::new($false))
+        Write-Host "     verification-method=use-permanent-password → $r2"
+    }
+    # START service lại — service đọc plain password trong config CỦA NÓ
+    Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
+    Start-Sleep 8
+    # VERIFY: plain pw nằm trong config service + service đang chạy → password active
     $svcToml = 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml'
-    $svcHashOk = $false; $spw = ''
+    $pwActive = $false
     if (Test-Path $svcToml) {
         $stxt = [IO.File]::ReadAllText($svcToml)
-        if ($stxt -match "(?m)^password\s*=\s*'([^']*)'") { $spw = $Matches[1] }
-        if ($spw -and $spw -ne $pw) { $svcHashOk = $true }
+        $pwActive = ($stxt -match "(?m)^password\s*=\s*'$pw'") -and ((Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue).Status -eq 'Running')
     }
-    if ($svcHashOk) {
-        Mark 'set-password' $true "service đã RE-ENCRYPT plain pw (hash $($spw.Length) ký tự = key của service) — service sẽ CHẤP NHẬN $pw"
-    } elseif ($spw -eq $pw -and (Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue).Status -eq 'Running') {
-        Start-Sleep 10
-        $stxt = [IO.File]::ReadAllText($svcToml)
-        if ($stxt -match "(?m)^password\s*=\s*'([^']*)'") { $spw = $Matches[1] }
-        if ($spw -and $spw -ne $pw) { Mark 'set-password' $true "service re-encrypt chậm (hash $($spw.Length) ký tự) — OK" }
-        else { Mark 'set-password' $false 'password VẪN là plain sau restart+20s — service chưa đọc (soi log)' }
+    if ($pwActive) {
+        Mark 'set-password' $true "plain pw ACTIVE trong config service + service Running (decrypt_str_or_original chấp nhận plain — mã nguồn hbb_common)"
     } else {
-        Mark 'set-password' $false 'config service không có password sau restart — bất thường'
+        Mark 'set-password' $false 'plain pw không nằm trong config service hoặc service chưa chạy'
     }
-    # insurance thêm: chờ service đăng ký lại relay rồi mới tính ID (bước sau)
-    Start-Sleep 3
 }
 
-# 6) ID — ƯU TIÊN CONFIG CỦA SERVICE (LocalSystem): service đăng ký ID trong config của NÓ,
-# còn --get-id chạy bằng user thường có thể trả ID của app user → lệch ID là "offline"
-Write-Host "[6/8] Lay ID (config service truoc, toi da ~2 phut)..."
-$cfgDirs = @(
-    'C:\Windows\System32\config\systemprofile\AppData\Roaming\RustDesk\config',
-    'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config',
-    "$env:APPDATA\RustDesk\config",
-    "$env:LOCALAPPDATA\RustDesk\config"
-)
-$id = $null; $idSrc = ''
-for ($i = 0; $i -lt 12 -and -not $id; $i++) {
-    Start-Sleep 5
-    foreach ($dir in $cfgDirs) {
-        foreach ($f in (Get-ChildItem $dir -Filter 'RustDesk*.toml' -ErrorAction SilentlyContinue)) {
-            $txt = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
-            if ($txt -match "(?<![\w])id\s*=\s*['`"]?(\d{7,})") { $id = $Matches[1]; $idSrc = $f.FullName; break }
-        }
-        if ($id) { break }
-    }
-    if ($id) { break }
-    $out = RDC @('--get-id') 25
-    if ($out -match '(\d{7,})') { $id = $Matches[1]; $idSrc = 'CLI --get-id'; break }
+# 6) ID — LẤY TỪ ĐÚNG ACCOUNT CỦA SERVICE (v3 — bước QUYẾT ĐỊNH).
+# --get-id chạy bằng runneradmin trả ID của APP USER (khác ID service!). v3: scheduled task
+# /RU <account-service> chạy --get-id → đọc config CỦA account đó → ID service thật đăng ký.
+Write-Host '[6/8] Lay ID SERVICE (task /RU account-service, toi da ~4 phut)...'
+$ru = 'SYSTEM'
+if ($svcAccount -match 'LocalService') { $ru = 'NT AUTHORITY\LOCAL SERVICE' }
+elseif ($svcAccount -match 'NetworkService') { $ru = 'NT AUTHORITY\NETWORK SERVICE' }
+Write-Host "     service account → /RU $ru"
+$rdDir = 'C:\ProgramData\nexus-rd'
+New-Item -ItemType Directory -Force -Path $rdDir | Out-Null
+$null = icacls $rdDir /grant 'Everyone:(OI)(CI)F' 2>&1
+$idOut = Join-Path $rdDir 'svc-id.txt'
+$cmdFile = Join-Path $rdDir 'get-id.cmd'
+Set-Content -Path $cmdFile -Value ("@echo off`r`n`"{0}`" --get-id > `"{1}`" 2>&1`r`n" -f $script:rd, $idOut) -Encoding ASCII
+$null = schtasks /Create /TN NEXUSRdGetID /TR ('"{0}"' -f $cmdFile) /SC ONCE /ST 23:59 /RU $ru /RL HIGHEST /F 2>&1
+$svcId = $null; $svcIdErr = ''
+foreach ($round in 1..3) {
+    Remove-Item $idOut -Force -ErrorAction SilentlyContinue
+    $runOut = schtasks /Run /TN NEXUSRdGetID 2>&1 | Out-String
+    for ($i = 0; $i -lt 9; $i++) { Start-Sleep 5; if (Test-Path $idOut) { break } }
+    if (Test-Path $idOut) {
+        $t = Get-Content $idOut -Raw -ErrorAction SilentlyContinue
+        if ($t -match '(\d{7,})') { $svcId = $Matches[1]; break }
+        $svcIdErr = "task chay nhung output khong phai ID: $($t.Trim() -replace '\s+', ' ')"
+    } else { $svcIdErr = "task khong tao ra file ($($runOut.Trim() -replace '\s+', ' '))" }
+    Write-Host "     vong $round chua co ID service: $svcIdErr — cho service dang ky roi thu lai"
+    Start-Sleep 10
 }
-if ($id) { Mark 'get-id' $true "ID=$id (nguon: $idSrc)" }
-else { Mark 'get-id' $false 'không lấy được sau ~1-2 phút' }
+$null = schtasks /Delete /TN NEXUSRdGetID /F 2>&1
+# ID app user (đối chiếu — CHỈ để cảnh báo lệch, KHÔNG dùng làm ID chính nữa)
+$cliId = $null
+$cliOut = RDC @('--get-id') 25
+if ($cliOut -match '(\d{7,})') { $cliId = $Matches[1] }
+
+$id = $null; $idSrc = ''
+if ($svcId) {
+    $id = $svcId; $idSrc = "task /RU $ru (ID SERVICE that)"
+    $note = if ($cliId -and $cliId -ne $svcId) { "ID app user ($cliId) KHAC ID service — dung ID SERVICE" } else { 'khop' }
+    Mark 'get-id' $true "ID=$id (nguon: $idSrc) — $note"
+} else {
+    # fallback cuối: ID CLI + cảnh báo lớn (ID có thể là app user → offline)
+    if ($cliId) {
+        $id = $cliId; $idSrc = 'CLI --get-id (FALLBACK — co the la ID app user!)'
+        Mark 'get-id' $false "KHONG lay duoc ID service ($svcIdErr) — dung ID app user $cliId LAM SAU: co the offline"
+    } else {
+        Mark 'get-id' $false 'không lấy được ID nào (service + CLI đều fail)'
+    }
+}
 
 # 6c) XÁC NHẬN password đã nằm trong config của SERVICE + dump config vào log (ground truth)
 $pwCfgFile = ''
-foreach ($dir in $cfgDirs) {
+foreach ($dir in $cfgDirs3 + @("$env:LOCALAPPDATA\RustDesk\config")) {
     foreach ($f in (Get-ChildItem $dir -Filter 'RustDesk*.toml' -ErrorAction SilentlyContinue)) {
         $txt = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
         $flat = ($txt -replace '\r?\n', ' | ')
-        if ($flat.Length -gt 320) { $flat = $flat.Substring(0, 320) + '...' }
+        if ($flat.Length -gt 260) { $flat = $flat.Substring(0, 260) + '...' }
         Write-Host ("     [CFG] {0} => {1}" -f $f.FullName, $flat)
         if (-not $pwCfgFile -and $txt -match "(?<![\w])password\s*=\s*['`"]?([^'`"\r\n]{4,})") { $pwCfgFile = $f.FullName }
     }
@@ -363,7 +401,7 @@ if ($id) {
     Publish @{ id = $id; pw_b64 = $pwB64; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
     Write-Host ("::notice title=NEXUS {0}/{1} PASS - SESSION LIVE::RUSTDESK_ID={2} | PASSWORD={3} | {4} phut | wizard da mo tren man hinh" -f $passCount, $total, $id, $pw, $Minutes)
 } else {
-    if ($id -eq $null) { Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue)) }
+    if ($null -eq $id) { Write-Host ("     rd-out lan cuoi: {0}" -f (Get-Content "$env:TEMP\rd-out.txt" -Raw -ErrorAction SilentlyContinue)) }
     Publish @{ id = ''; pw_b64 = $pwB64; minutes = $Minutes; pass = $passCount; total = $total; checklist = $script:Checks }
     Write-Host ("::notice title=NEXUS {0}/{1} PASS - KHONG CO ID::xem cac dong FAIL (annotation do) o tren" -f $passCount, $total)
     throw 'RUSTDESK_ID không lấy được — xem các dòng FAIL ở trên'
