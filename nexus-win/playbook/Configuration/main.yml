@@ -8,13 +8,14 @@ description: >-
 actions:
   # ---------------------------------------------------------------- precheck ---
   - !writeStatus: {status: 'Checking Windows version and gaming stack'}
-  # NEXUS targets 26100 (24H2) / 26200 (25H2) / 26300 (26H2) only. playbook.conf
-  # SupportedBuilds already gates this, this is a second belt-and-suspenders check.
+  # NEXUS targets 22000 (21H2) / 26100 (24H2) / 26200 (25H2) / 26300 (26H2).
+  # playbook.conf SupportedBuilds already gates this, this is a second
+  # belt-and-suspenders check.
   - !powerShell:
     command: |
       $b = [System.Environment]::OSVersion.Version.Build
-      if ($b -notmatch '^(26100|26200|26300)$') {
-        throw "NEXUS supports Windows 11 24H2/25H2/26H2 (builds 26100/26200/26300) - this machine is build $b"
+      if ($b -notmatch '^(22000|26100|26200|26300)$') {
+        throw "NEXUS supports Windows 11 21H2/24H2/25H2/26H2 (builds 22000/26100/26200/26300) - this machine is build $b"
       }
       Write-Output "Windows build $b - OK"
     runas: currentUserElevated
