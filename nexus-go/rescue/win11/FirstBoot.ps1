@@ -1,4 +1,4 @@
-# NEXUS Win11 Pro 24H2 Gaming - FirstBoot (chay 1 lan khi vao desktop lan dau)
+﻿# NEXUS Win11 Pro 24H2 Gaming - FirstBoot (chay 1 lan khi vao desktop lan dau)
 # Log: C:\NEXUS\FirstBoot.log  |  Re-run: shortcut "NEXUS Gaming Setup" tren Desktop
 $ErrorActionPreference = 'Continue'
 $log = 'C:\NEXUS\FirstBoot.log'

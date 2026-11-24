@@ -1,4 +1,4 @@
-# NEXUS App Installer + Sakura-style Debloat (WinPE v4.5)
+﻿# NEXUS App Installer + Sakura-style Debloat (WinPE v4.5)
 # Tai installer CHINH CHU ve Windows that + dat RunOnce: khi boot lai Windows se
 # tu debloat + tu cai apps. Khong bam tay gi sau khi boot lai.
 $ErrorActionPreference = 'Continue'

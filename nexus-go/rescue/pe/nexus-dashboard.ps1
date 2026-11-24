@@ -1,4 +1,4 @@
-# NEXUS Rescue PE - dashboard cau hinh _ay _u (gaming ultra-light, v4.5.0)
+﻿# NEXUS Rescue PE - dashboard cau hinh _ay _u (gaming ultra-light, v4.5.0)
 # Chay trong WinPE: PowerShell + WMI + StorageWMI (_a inject vao image).
 $ErrorActionPreference = 'Continue'
 Clear-Host

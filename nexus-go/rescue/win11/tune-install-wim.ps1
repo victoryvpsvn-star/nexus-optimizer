@@ -1,4 +1,4 @@
-# NEXUS Win11 Pro 24H2 Gaming - tune install.wim offline (chay tren GitHub runner)
+﻿# NEXUS Win11 Pro 24H2 Gaming - tune install.wim offline (chay tren GitHub runner)
 # Input : C:\win11src (ISO da giai nen), C:\win11mount (Trong), C:\win11out
 # Output: C:\win11out\install.wim (Pro duy nhat, da debloat + tweak, compress recovery)
 $ErrorActionPreference = 'Stop'
@@ -49,7 +49,7 @@ Write-Host "=== AUDIT: provisioned CON LAI sau debloat: $($remain.Count) package
 $remain | ForEach-Object { Write-Host "  + $($_.DisplayName)" }
 $keepMust = @('Microsoft.WindowsStore', 'Microsoft.DesktopAppInstaller')
 foreach ($k in $keepMust) {
-  if (-not ($remain | Where-Object { $_.DisplayName -eq $k })) { throw "KEEP-CHECK FAIL: $k bi mat — Store/winget se hong, kiem tra blacklist" }
+  if (-not ($remain | Where-Object { $_.DisplayName -eq $k })) { throw "KEEP-CHECK FAIL: $k bi mat - Store/winget se hong, kiem tra blacklist" }
 }
 $keepWarn = @('Microsoft.VCLibs', 'Microsoft.UI.Xaml', 'Microsoft.NET.Native', 'Microsoft.SecHealthUI', 'Microsoft.StorePurchaseApp')
 foreach ($k in $keepWarn) {
