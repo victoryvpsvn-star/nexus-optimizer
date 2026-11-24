@@ -106,8 +106,10 @@ RA "$S\Policies\Microsoft\Windows\CloudContent" 'DisableWindowsConsumerFeatures'
 RA "$S\Policies\Microsoft\Windows\CloudContent" 'DisableConsumerAccountStateContent' 1
 RA "$S\Policies\Microsoft\Windows\CloudContent" 'DisableSoftLanding' 1
 # OneDrive: xoa Run key first-logon (installer da xoa o buoc 4 — day la phan con lai)
-reg delete "$S\Microsoft\Windows\CurrentVersion\Run" /v OneDriveSetup /f 2>&1 | Out-Null
-reg delete "$S\Microsoft\Windows\CurrentVersion\Run" /v OneDriveStandaloneUpdateTaskLogon /f 2>&1 | Out-Null
+# Run #102: reg delete tren gia tri KHONG ton tai → stderr + EAP=Stop → terminating.
+# Dung cmd /c de nuot hoan toan (key co san hay khong cung khong bao loi).
+cmd /c "reg delete `"$S\Microsoft\Windows\CurrentVersion\Run`" /v OneDriveSetup /f >nul 2>&1"
+cmd /c "reg delete `"$S\Microsoft\Windows\CurrentVersion\Run`" /v OneDriveStandaloneUpdateTaskLogon /f >nul 2>&1"
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'ContentDeliveryAllowed' 0
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'OemPreInstalledAppsEnabled' 0
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'PreInstalledAppsEnabled' 0
