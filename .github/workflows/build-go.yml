@@ -240,7 +240,10 @@ jobs:
           }
           # WinSE boot.wim goc co 2 index: 1 = bootmgr (WinPE toi thieu), 2 = Setup (WinSE day du
           # PowerShell + WMI + .NET). Chon index CO PowerShell: kiem bang file marker
+          # Run #110: DISM 0xc1420115 "mount to a directory that does not exist" —
+          # quen tao C:\winpe\mount truoc khi Mount-Image
           $idx = 2
+          New-Item -ItemType Directory -Force -Path C:\winpe\mount | Out-Null
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:2 /MountDir:C:\winpe\mount
           if ($LASTEXITCODE -ne 0) { throw "mount index 2 failed - thu lai index 1" }
           if (-not (Test-Path 'C:\winpe\mount\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')) {
