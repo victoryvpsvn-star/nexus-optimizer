@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "498505936",
-    "run":  "45401555331",
+    "id":  "226955810",
+    "run":  "45416588504",
     "pw_b64":  "MTIzNDU2Nzg5",
-    "pass":  11,
+    "pass":  9,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3 ",
@@ -35,7 +35,7 @@
                           "n":  "set-password"
                       },
                       {
-                          "d":  "ID=498505936 (nguon: task /RU SYSTEM (ID SERVICE that)) — khop",
+                          "d":  "ID=226955810 (nguon: task /RU SYSTEM (ID SERVICE that)) — khop",
                           "ok":  true,
                           "n":  "get-id"
                       },
@@ -48,18 +48,8 @@
                           "d":  "TCP rs-ny.rustdesk.com:21116 = OPEN",
                           "ok":  true,
                           "n":  "relay-reachable"
-                      },
-                      {
-                          "d":  "live-session.json (9/9 PASS trước bước này)",
-                          "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  11,
+    "total":  9,
     "minutes":  60
 }
