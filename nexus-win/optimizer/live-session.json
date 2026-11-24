@@ -1,8 +1,8 @@
 ﻿{
-    "id":  "316050794",
-    "run":  "45189001084",
+    "id":  "137263185",
+    "run":  "45316916210",
     "pw_b64":  "MTIzNDU2Nzg5",
-    "pass":  12,
+    "pass":  8,
     "checklist":  [
                       {
                           "d":  "tag 1.5.3 ",
@@ -25,22 +25,17 @@
                           "n":  "service-running"
                       },
                       {
-                          "d":  "CLI trả lời 2/2 (không timeout)",
+                          "d":  "plain pw ghi vao 2 config: C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config | C:\\Users\\runneradmin\\AppData\\Roaming\\RustDesk\\config",
                           "ok":  true,
+                          "n":  "pw-plain-written"
+                      },
+                      {
+                          "d":  "password VẪN là plain sau restart+20s — service chưa đọc (soi log)",
+                          "ok":  false,
                           "n":  "set-password"
                       },
                       {
-                          "d":  "pw nằm trong config SERVICE (IPC chuẩn — hash 118 ký tự)",
-                          "ok":  true,
-                          "n":  "pw-user-config"
-                      },
-                      {
-                          "d":  "pw VẪN nằm trong config service sau restart (hash 118 ký tự) — config = bộ nhớ",
-                          "ok":  true,
-                          "n":  "pw-after-restart"
-                      },
-                      {
-                          "d":  "ID=316050794 (nguon: CLI --get-id)",
+                          "d":  "ID=137263185 (nguon: CLI --get-id)",
                           "ok":  true,
                           "n":  "get-id"
                       },
@@ -53,18 +48,8 @@
                           "d":  "TCP rs-ny.rustdesk.com:21116 = OPEN",
                           "ok":  true,
                           "n":  "relay-reachable"
-                      },
-                      {
-                          "d":  "live-session.json (10/10 PASS trước bước này)",
-                          "ok":  true,
-                          "n":  "publish-session"
-                      },
-                      {
-                          "d":  "schtasks NEXUSWizardLive đã chạy (console session)",
-                          "ok":  true,
-                          "n":  "launch-wizard"
                       }
                   ],
-    "total":  12,
-    "minutes":  30
+    "total":  9,
+    "minutes":  20
 }
