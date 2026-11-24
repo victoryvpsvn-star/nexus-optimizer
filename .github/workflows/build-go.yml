@@ -232,31 +232,20 @@ jobs:
           gh release download go-v${{ github.run_number }} --repo ${{ github.repository }} --pattern "*.exe" --dir C:\out
           Get-ChildItem C:\out
 
-      - name: Mount boot.wim + inject NEXUS (WinSE da co san PowerShell/WMI — khong can OCs)
+      - name: Mount boot.wim + nhung NEXUS + PowerShell 7 portable (WinSE 26H2 khong co PS)
         shell: powershell
         run: |
           if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
             throw "C:\winpe\media\sources\boot.wim thieu - step lay artifact da phai stage"
           }
-          # WinSE boot.wim goc co 2 index: 1 = bootmgr (WinPE toi thieu), 2 = Setup (WinSE day du
-          # PowerShell + WMI + .NET). Chon index CO PowerShell: kiem bang file marker
-          # Run #110: DISM 0xc1420115 "mount to a directory that does not exist" —
-          # quen tao C:\winpe\mount truoc khi Mount-Image
-          $idx = 2
+          # WinSE boot.wim 26H2 co 2 index, KHONG index nao co PowerShell (bi loai khoi
+          # WinSE tu Win11 — Run #112 throw 'KHONG index nao co PowerShell').
+          # Nhung PowerShell 7 portable (self-contained, kem .NET runtime) vao image —
+          # dashboard/menu/apps PS scripts chay binh thuong. Fallback neu pwsh loi: exe Go web.
+          # Run #110: DISM 0xc1420115 - nho New-Item mount dir truoc khi Mount-Image.
           New-Item -ItemType Directory -Force -Path C:\winpe\mount | Out-Null
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:2 /MountDir:C:\winpe\mount
-          if ($LASTEXITCODE -ne 0) { throw "mount index 2 failed - thu lai index 1" }
-          if (-not (Test-Path 'C:\winpe\mount\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')) {
-            Write-Host 'index 2 khong co PowerShell — doi sang index 1'
-            dism /Unmount-Image /MountDir:C:\winpe\mount /Discard
-            $idx = 1
-            dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
-            if ($LASTEXITCODE -ne 0) { throw "mount boot.wim failed" }
-            if (-not (Test-Path 'C:\winpe\mount\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')) {
-              throw 'KHONG index nao co PowerShell — boot.wim khong phai WinSE'
-            }
-          }
-          Write-Host "mount index $idx OK — PowerShell co san"
+          if ($LASTEXITCODE -ne 0) { throw "mount index 2 failed" }
           # NEXUS vao image
           New-Item -ItemType Directory -Force -Path C:\winpe\mount\NEXUS | Out-Null
           Copy-Item C:\out\*.exe C:\winpe\mount\NEXUS\nexus.exe -Force
@@ -264,12 +253,18 @@ jobs:
           Copy-Item nexus-go\rescue\pe\nexus-dashboard.ps1 C:\winpe\mount\NEXUS\nexus-dashboard.ps1 -Force
           Copy-Item nexus-go\rescue\pe\nexus-offline-tune.ps1 C:\winpe\mount\NEXUS\nexus-offline-tune.ps1 -Force
           Copy-Item nexus-go\rescue\pe\nexus-apps.ps1 C:\winpe\mount\NEXUS\nexus-apps.ps1 -Force
-          # WinSE ~500MB da day du — KHONG Add-Package (ADK OCs khong con)
+          # PowerShell 7 portable (zip ~72MB, self-contained kem .NET runtime) — GitHub release chinh hang
+          Invoke-WebRequest -Uri 'https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/PowerShell-7.4.6-win-x64.zip' -OutFile C:\winpe\pwsh.zip -UseBasicParsing
+          if ((Get-Item C:\winpe\pwsh.zip).Length -lt 50MB) { throw "pwsh zip qua nho - tai loi?" }
+          New-Item -ItemType Directory -Force -Path C:\winpe\mount\NEXUS\pwsh | Out-Null
+          Expand-Archive -Path C:\winpe\pwsh.zip -DestinationPath C:\winpe\mount\NEXUS\pwsh -Force
+          if (-not (Test-Path 'C:\winpe\mount\NEXUS\pwsh\pwsh.exe')) { throw 'pwsh.exe khong ton tai sau khi bung zip' }
+          Write-Host "pwsh portable OK — image tang them $([math]::Round((Get-ChildItem C:\winpe\mount\NEXUS\pwsh -Recurse | Measure-Object Length -Sum).Sum/1MB,1)) MB"
           # Commit - boot.wim in media updated in place
           dism /Unmount-Image /MountDir:C:\winpe\mount /Commit
           if ($LASTEXITCODE -ne 0) { throw "unmount commit failed" }
           # export lai CHI index da inject (giam kich thuoc ISO: boot~500MB thay vi 2 image)
-          dism /Export-Image /SourceImageFile:C:\winpe\media\sources\boot.wim /SourceIndex:$idx /DestinationImageFile:C:\winpe\boot-new.wim /Compress:recovery
+          dism /Export-Image /SourceImageFile:C:\winpe\media\sources\boot.wim /SourceIndex:2 /DestinationImageFile:C:\winpe\boot-new.wim /Compress:recovery
           if ($LASTEXITCODE -ne 0) { throw "export boot.wim failed" }
           Move-Item C:\winpe\boot-new.wim C:\winpe\media\sources\boot.wim -Force
           Write-Host "boot.wim (Pro-only da inject): $([math]::Round((Get-Item C:\winpe\media\sources\boot.wim).Length/1MB,1)) MB"
@@ -286,7 +281,7 @@ jobs:
           # Verify image 1 chua NEXUS + startnet + dashboard + 2 script gaming
           dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount2
-          foreach ($f in @("C:\winpe\mount2\NEXUS\nexus.exe","C:\winpe\mount2\Windows\System32\startnet.cmd","C:\winpe\mount2\NEXUS\nexus-dashboard.ps1","C:\winpe\mount2\NEXUS\nexus-offline-tune.ps1","C:\winpe\mount2\NEXUS\nexus-apps.ps1")) {
+          foreach ($f in @("C:\winpe\mount2\NEXUS\nexus.exe","C:\winpe\mount2\Windows\System32\startnet.cmd","C:\winpe\mount2\NEXUS\nexus-dashboard.ps1","C:\winpe\mount2\NEXUS\nexus-offline-tune.ps1","C:\winpe\mount2\NEXUS\nexus-apps.ps1","C:\winpe\mount2\NEXUS\pwsh\pwsh.exe")) {
             if (-not (Test-Path $f)) { throw "missing in image: $f" }
             Write-Host "OK: $f ($((Get-Item $f).Length) B)"
           }
