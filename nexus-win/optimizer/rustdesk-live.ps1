@@ -197,51 +197,75 @@ if ($svc) {
     }
 }
 
-# 5) Password — luồng CHUẨN unattended: service đang chạy + RustDesk "installed" (/allusers)
-# → CLI --password IPC tới service → service tự ghi pw vào config của nó (LocalService profile).
-# Diag #21: cài per-user thì CLI chào "Installation and administrative privileges required!".
-# Fallback: nếu config user có pw mà config service rỗng (salt giống nhau) → copy hash sang.
-Write-Host "[5/8] Dat password (IPC qua service)..."
+# 5) Password — GHI PLAIN TEXT VÀO TOML, SERVICE TỰ MÃ HÓA KHI RESTART (cách documented)
+# Diag #24 (bằng chứng từ [CFG] dump): CLI --password chạy bằng runneradmin ghi hash MÃ HÓA
+# THEO KEY CỦA USER vào CẢ 2 file config (LocalService + runneradmin — hash GIỐNG HỆT nhau
+# chứng tỏ 1 process user ghi, không phải service). Service (LocalSystem, đọc config
+# LocalService) KHÔNG GIẢI MÃ được hash đó → bro nhập đúng 123456789 vẫn "Wrong password".
+# RustDesk discussion #9229 xác nhận: (a) copy hash+salt sang install khác KHÔNG hoạt động,
+# (b) ghi password PLAIN TEXT vào toml → RustDesk TỰ MÃ HÓA sau khi start.
+# → Ghi plain vào config service + user, restart service, VERIFY service đã re-encrypt
+#   (password khác plain = service đã đọc và mã hóa bằng key CỦA NÓ → verify client sẽ đúng)
+Write-Host '[5/8] Dat password (plain text toml → service tu ma hoa khi restart)...'
 # PW CỐ ĐỊNH theo yêu cầu bro — 123456789 (9 số, gõ KHÔNG THỂ sai; RustDesk nhận pw ≥8 ký tự)
-# JSON vẫn lưu pw_b64; log hiện RAW — không khớp secret-pattern nào nên không bị mask
 $pw = '123456789'
 $pwB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pw))
 $o1 = RDC @('--password', $pw) 40
-$o2 = RDC @('--password', $pw) 40
-Write-Host ("     CLI pw out 1: {0} | out 2: {1}" -f (($o1 | Out-String).Trim() -replace '\s+', ' '), (($o2 | Out-String).Trim() -replace '\s+', ' '))
-if ($null -ne $o1 -and $null -ne $o2) { Mark 'set-password' $true 'CLI trả lời 2/2 (không timeout)' }
-else { Mark 'set-password' $false "CLI timeout — o1=$($null -ne $o1) o2=$($null -ne $o2)" }
+Write-Host ("     CLI pw out: {0}" -f (($o1 | Out-String).Trim() -replace '\s+', ' '))
 
-# verify pw nằm trong config nào (service: LocalService profile; user: runneradmin)
-$usrCfg = "$env:APPDATA\RustDesk\config\RustDesk.toml"
-$svcCfg = 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml'
-$utxt = ''; $stxt = ''
-if (Test-Path $usrCfg) { $utxt = Get-Content $usrCfg -Raw -ErrorAction SilentlyContinue }
-if (Test-Path $svcCfg) { $stxt = Get-Content $svcCfg -Raw -ErrorAction SilentlyContinue }
-$upw = ''; $spw = ''
-if ($utxt -match "(?<![\w])password\s*=\s*'([^']*)'") { $upw = $Matches[1] }
-if ($stxt -match "(?<![\w])password\s*=\s*'([^']*)'") { $spw = $Matches[1] }
-if ($spw) {
-    Mark 'pw-user-config' $true "pw nằm trong config SERVICE (IPC chuẩn — hash $($spw.Length) ký tự)"
-} elseif ($upw) {
-    Mark 'pw-user-config' $true "pw vào config user (hash $($upw.Length) ký tự) — copy sang config service (salt giống nhau)"
-    if (Test-Path $svcCfg) {
-        $new = $stxt -replace "(?m)^password\s*=\s*'[^']*'", "password = '$upw'"
-        [IO.File]::WriteAllText($svcCfg, $new, [Text.UTF8Encoding]::new($false))
-        Write-Host '     đã copy pw-hash sang config service (LocalService), UTF8 no BOM'
-        Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Restart-Service -Force -ErrorAction SilentlyContinue
-        Start-Sleep 5
+# STOP service trước khi ghi file config của nó (file đang bị giữ)
+Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
+Start-Sleep 4
+$cfgDirs3 = @(
+    'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config',
+    'C:\Windows\System32\config\systemprofile\AppData\Roaming\RustDesk\config',
+    "$env:APPDATA\RustDesk\config"
+)
+$plainWritten = @()
+foreach ($dir in $cfgDirs3) {
+    $toml = Join-Path $dir 'RustDesk.toml'
+    if (-not (Test-Path $toml)) { continue }
+    $txt = [IO.File]::ReadAllText($toml)
+    if ($txt -match "(?m)^password\s*=\s*'[^']*'") {
+        $txt = $txt -replace "(?m)^password\s*=\s*'[^']*'", "password = '$pw'"
+    } else {
+        # chen ngay sau dong dau (password la root-level key, phai truoc section [options])
+        $parts = $txt -split "\r?\n", 2
+        $txt = if ($parts.Count -eq 2) { "$($parts[0])`r`npassword = '$pw'`r`n$($parts[1])" } else { "$txt`r`npassword = '$pw'`r`n" }
     }
-} else {
-    Mark 'pw-user-config' $false 'pw KHÔNG vào config nào (soi "CLI pw out" ở log — nếu vẫn "privileges required" thì installer lại cài per-user)'
+    [IO.File]::WriteAllText($toml, $txt, [Text.UTF8Encoding]::new($false))
+    $plainWritten += $toml
+    Write-Host "     plain pw → $toml"
 }
-
-# insurance: restart service để bảo đảm pw trong CONFIG = pw trong BỘ NHỚ của service đang chạy
-Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Restart-Service -Force -ErrorAction SilentlyContinue
-Start-Sleep 6
-$spw2 = ''
-if (Test-Path $svcCfg) { $stxt2 = Get-Content $svcCfg -Raw -ErrorAction SilentlyContinue; if ($stxt2 -match "(?<![\w])password\s*=\s*'([^']*)'") { $spw2 = $Matches[1] } }
-Mark 'pw-after-restart' ([bool]$spw2) $(if ($spw2) { "pw VẪN nằm trong config service sau restart (hash $($spw2.Length) ký tự) — config = bộ nhớ" } else { 'pw MẤT khỏi config service sau restart — bất thường' })
+if ($plainWritten.Count -lt 1) {
+    Mark 'set-password' $false 'không tìm thấy RustDesk.toml nào để ghi plain password'
+} else {
+    Mark 'pw-plain-written' $true "plain pw ghi vao $($plainWritten.Count) config: $(($plainWritten | ForEach-Object { $_.Replace('\RustDesk.toml', '') }) -join ' | ')"
+    # START service lại — service đọc plain password trong config CỦA NÓ, TỰ MÃ HÓA, rồi dùng
+    Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
+    Start-Sleep 10
+    # VERIFY QUYẾT ĐỊNH: service phải đã re-encrypt (password != plain) trong config service
+    $svcToml = 'C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml'
+    $svcHashOk = $false; $spw = ''
+    if (Test-Path $svcToml) {
+        $stxt = [IO.File]::ReadAllText($svcToml)
+        if ($stxt -match "(?m)^password\s*=\s*'([^']*)'") { $spw = $Matches[1] }
+        if ($spw -and $spw -ne $pw) { $svcHashOk = $true }
+    }
+    if ($svcHashOk) {
+        Mark 'set-password' $true "service đã RE-ENCRYPT plain pw (hash $($spw.Length) ký tự = key của service) — service sẽ CHẤP NHẬN $pw"
+    } elseif ($spw -eq $pw -and (Get-Service -Name 'RustDesk*' -ErrorAction SilentlyContinue).Status -eq 'Running') {
+        Start-Sleep 10
+        $stxt = [IO.File]::ReadAllText($svcToml)
+        if ($stxt -match "(?m)^password\s*=\s*'([^']*)'") { $spw = $Matches[1] }
+        if ($spw -and $spw -ne $pw) { Mark 'set-password' $true "service re-encrypt chậm (hash $($spw.Length) ký tự) — OK" }
+        else { Mark 'set-password' $false 'password VẪN là plain sau restart+20s — service chưa đọc (soi log)' }
+    } else {
+        Mark 'set-password' $false 'config service không có password sau restart — bất thường'
+    }
+    # insurance thêm: chờ service đăng ký lại relay rồi mới tính ID (bước sau)
+    Start-Sleep 3
+}
 
 # 6) ID — ƯU TIÊN CONFIG CỦA SERVICE (LocalSystem): service đăng ký ID trong config của NÓ,
 # còn --get-id chạy bằng user thường có thể trả ID của app user → lệch ID là "offline"

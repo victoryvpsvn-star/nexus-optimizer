@@ -31,7 +31,9 @@ dism /Mount-Image /ImageFile:"$src\sources\install.wim" /Index:$proIdx /MountDir
 if ($LASTEXITCODE -ne 0) { throw "mount install.wim failed ($LASTEXITCODE)" }
 
 Write-Host '[4] Debloat provisioned AppX...'
-$blacklist = 'Microsoft\.3DBuilder|Microsoft\.3DViewer|Microsoft\.BingNews|Microsoft\.BingWeather|Microsoft\.BingSearch|Microsoft\.Copilot|Microsoft\.GetHelp|Microsoft\.Getstarted|Microsoft\.MicrosoftOfficeHub|Microsoft\.MicrosoftSolitaireCollection|Microsoft\.MixedReality\.Portal|Microsoft\.Office\.OneNote|Microsoft\.OutlookForWindows|Microsoft\.People|Microsoft\.PowerAutomateDesktop|Microsoft\.Print3D|Microsoft\.SkypeApp|Microsoft\.Todos|Microsoft\.Windows\.DevHome|Microsoft\.WindowsFeedbackHub|Microsoft\.WindowsMaps|Microsoft\.YourPhone|Microsoft\.ZuneMusic|Microsoft\.ZuneVideo|MicrosoftCorporationII\.QuickAssist|microsoft\.microsoftskydrive|Clipchamp\.Clipchamp|MicrosoftTeams|^MSTeams|Microsoft\.XboxSpeechToTextOverlay|Microsoft\.Advertising\.Xaml|Microsoft\.549981C3F77F5|Microsoft\.Whiteboard|Microsoft\.MicrosoftStickyNotes|Microsoft\.WindowsSoundRecorder|Microsoft\.WindowsCamera'
+# Audit run #97 (26H2 26300): 20 package thuc te bi remove — blacklist khop dung cac bloat co mat.
+# Them Widgets (WebExperience + WidgetsPlatformRuntime) — taskbar widgets an RAM + ads, gamer khong can.
+$blacklist = 'Microsoft\.3DBuilder|Microsoft\.3DViewer|Microsoft\.BingNews|Microsoft\.BingWeather|Microsoft\.BingSearch|Microsoft\.Copilot|Microsoft\.GetHelp|Microsoft\.Getstarted|Microsoft\.MicrosoftOfficeHub|Microsoft\.MicrosoftSolitaireCollection|Microsoft\.MixedReality\.Portal|Microsoft\.Office\.OneNote|Microsoft\.OutlookForWindows|Microsoft\.People|Microsoft\.PowerAutomateDesktop|Microsoft\.Print3D|Microsoft\.SkypeApp|Microsoft\.Todos|Microsoft\.Windows\.DevHome|Microsoft\.WindowsFeedbackHub|Microsoft\.WindowsMaps|Microsoft\.YourPhone|Microsoft\.ZuneMusic|Microsoft\.ZuneVideo|MicrosoftCorporationII\.QuickAssist|microsoft\.microsoftskydrive|Clipchamp\.Clipchamp|MicrosoftTeams|^MSTeams|Microsoft\.XboxSpeechToTextOverlay|Microsoft\.Advertising\.Xaml|Microsoft\.549981C3F77F5|Microsoft\.Whiteboard|Microsoft\.MicrosoftStickyNotes|Microsoft\.WindowsSoundRecorder|Microsoft\.WindowsCamera|MicrosoftWindows\.Client\.WebExperience|Microsoft\.WidgetsPlatformRuntime'
 $removed = 0
 Get-AppxProvisionedPackage -Path $mnt | Where-Object { $_.DisplayName -match $blacklist } | ForEach-Object {
   Write-Host "  - $($_.DisplayName)"
@@ -39,8 +41,27 @@ Get-AppxProvisionedPackage -Path $mnt | Where-Object { $_.DisplayName -match $bl
   $removed++
 }
 Write-Host "Removed: $removed packages"
-# OneDrive consumer inline (giai nen thi khong con OneDrive consumer?)
-if (Test-Path "$mnt\Windows\System32\OneDriveSetup.exe") { Write-Host 'OneDriveSetup co - khong go (an toan)' }
+
+# AUDIT CHUYEN SAU (yeu cau bro): dump DAY DU danh sach provisioned con lai de doi chieu
+# (lan sau khong phai doan mo coi nao con trong image), + KEEP-CHECK hang rao khong xoa nham:
+$remain = Get-AppxProvisionedPackage -Path $mnt
+Write-Host "=== AUDIT: provisioned CON LAI sau debloat: $($remain.Count) packages ==="
+$remain | ForEach-Object { Write-Host "  + $($_.DisplayName)" }
+$keepMust = @('Microsoft.WindowsStore', 'Microsoft.DesktopAppInstaller')
+foreach ($k in $keepMust) {
+  if (-not ($remain | Where-Object { $_.DisplayName -eq $k })) { throw "KEEP-CHECK FAIL: $k bi mat — Store/winget se hong, kiem tra blacklist" }
+}
+$keepWarn = @('Microsoft.VCLibs', 'Microsoft.UI.Xaml', 'Microsoft.NET.Native', 'Microsoft.SecHealthUI', 'Microsoft.StorePurchaseApp')
+foreach ($k in $keepWarn) {
+  if (-not ($remain | Where-Object { $_.DisplayName -like "$k*" })) { Write-Host "  [CANH BAO] khong thay $k* trong provisioned con lai" }
+}
+Write-Host "KEEP-CHECK OK: Store + DesktopAppInstaller con nguyen (can cho winget FirstBoot)"
+
+# OneDrive consumer: xoa installer inline (26H2 van con OneDriveSetup.exe — run #97 xac nhan)
+# + Run key first-logon — khong xoa thi OOBE van tu cai OneDrive
+foreach ($od in @("$mnt\Windows\System32\OneDriveSetup.exe", "$mnt\Windows\SysWOW64\OneDriveSetup.exe")) {
+  if (Test-Path $od) { Remove-Item $od -Force; Write-Host "  xoa $(Split-Path $od -Leaf) [$(Split-Path (Split-Path $od) -Leaf)]" }
+}
 
 # ---------- 5. Offline registry tweaks ----------
 Write-Host '[5] Offline registry tweaks...'
@@ -72,6 +93,9 @@ RA "$S\Policies\Microsoft\Windows\DeliveryOptimization" 'DODownloadMode' 0
 RA "$S\Policies\Microsoft\Windows\CloudContent" 'DisableWindowsConsumerFeatures' 1
 RA "$S\Policies\Microsoft\Windows\CloudContent" 'DisableConsumerAccountStateContent' 1
 RA "$S\Policies\Microsoft\Windows\CloudContent" 'DisableSoftLanding' 1
+# OneDrive: xoa Run key first-logon (installer da xoa o buoc 4 — day la phan con lai)
+reg delete "$S\Microsoft\Windows\CurrentVersion\Run" /v OneDriveSetup /f 2>&1 | Out-Null
+reg delete "$S\Microsoft\Windows\CurrentVersion\Run" /v OneDriveStandaloneUpdateTaskLogon /f 2>&1 | Out-Null
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'ContentDeliveryAllowed' 0
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'OemPreInstalledAppsEnabled' 0
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'PreInstalledAppsEnabled' 0
