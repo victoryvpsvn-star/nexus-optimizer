@@ -67,8 +67,11 @@ foreach ($svc in @('DiagTrack','dmwappushservice','SysMain','MapsBroker','Retail
 try { Stop-Service DiagTrack -Force -ErrorAction SilentlyContinue } catch {}
 
 # ---------- 5. Winget: cai apps game thu ----------
-L '[5] Winget apps (Discord, Steam, Chrome, Opera GX)'
+L '[5] Winget apps (Discord, Steam, Chrome, Opera GX, VCRedist)'
+# VCRedist 2015-2022 x64: runtime 99% game can (FSOS-X bundle san trong ISO - NEXUS cai
+# qua winget nhe hon, khong lam ISO phinh 400MB dxredist)
 $apps = @(
+  @{ id = 'Microsoft.VCRedist.2015+.x64'; name = 'VCRedist 2015-2022 x64' },
   @{ id = 'Discord.Discord';  name = 'Discord' },
   @{ id = 'Valve.Steam';      name = 'Steam' },
   @{ id = 'Google.Chrome';    name = 'Chrome' },

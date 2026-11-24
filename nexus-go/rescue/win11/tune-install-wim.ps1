@@ -31,9 +31,61 @@ dism /Mount-Image /ImageFile:"$src\sources\install.wim" /Index:$proIdx /MountDir
 if ($LASTEXITCODE -ne 0) { throw "mount install.wim failed ($LASTEXITCODE)" }
 
 Write-Host '[4] Debloat provisioned AppX...'
-# Audit run #97 (26H2 26300): 20 package thuc te bi remove — blacklist khop dung cac bloat co mat.
-# Them Widgets (WebExperience + WidgetsPlatformRuntime) — taskbar widgets an RAM + ads, gamer khong can.
-$blacklist = 'Microsoft\.3DBuilder|Microsoft\.3DViewer|Microsoft\.BingNews|Microsoft\.BingWeather|Microsoft\.BingSearch|Microsoft\.Copilot|Microsoft\.GetHelp|Microsoft\.Getstarted|Microsoft\.MicrosoftOfficeHub|Microsoft\.MicrosoftSolitaireCollection|Microsoft\.MixedReality\.Portal|Microsoft\.Office\.OneNote|Microsoft\.OutlookForWindows|Microsoft\.People|Microsoft\.PowerAutomateDesktop|Microsoft\.Print3D|Microsoft\.SkypeApp|Microsoft\.Todos|Microsoft\.Windows\.DevHome|Microsoft\.WindowsFeedbackHub|Microsoft\.WindowsMaps|Microsoft\.YourPhone|Microsoft\.ZuneMusic|Microsoft\.ZuneVideo|MicrosoftCorporationII\.QuickAssist|microsoft\.microsoftskydrive|Clipchamp\.Clipchamp|MicrosoftTeams|^MSTeams|Microsoft\.XboxSpeechToTextOverlay|Microsoft\.Advertising\.Xaml|Microsoft\.549981C3F77F5|Microsoft\.Whiteboard|Microsoft\.MicrosoftStickyNotes|Microsoft\.WindowsSoundRecorder|Microsoft\.WindowsCamera|MicrosoftWindows\.Client\.WebExperience|Microsoft\.WidgetsPlatformRuntime'
+# Blacklist HOP NHAT theo chuan custom OS (NEXUS doi chieu truc tiep nguon):
+#   - Atlas OS : package/Executables/AtlasModules/Scripts/Modules/Atlas.Appx/Domain/Removal.ps1 (52 family chinh chu)
+#   - FSOS-X R11: Configuration/Tasks/phase2-strip.yml (playbook AME Wizard - mo .apbx 7z pw 'malte')
+# NGUYEN TAC NEXUS Gaming ISO (khac Atlas/FSOS mot cau):
+#   GIU: GamingApp (Game Pass) + XboxGamingOverlay (Game Bar) + XboxIdentityProvider + Xbox.TCUI
+#        + Microsoft.Paint (Paint classic - FSOS note ro: MSPaint moi la Paint 3D)
+#        + ScreenSketch (Snipping Tool) + Store + AppInstaller/winget + SecHealthUI (Defender)
+#        + Notepad/Calculator/Photos/Terminal/Edge
+#   BO: moi thu con lai ma Atlas hoac FSOS remove (ke ca XboxApp = app Xbox CU - Atlas remove mac dinh)
+$bl = @(
+  # --- Nen tang: ca Atlas lan FSOS deu remove ---
+  'Microsoft\.3DBuilder', 'Microsoft3DViewer', 'Microsoft\.3DViewer',
+  'Microsoft\.BingNews', 'Microsoft\.BingWeather', 'Microsoft\.BingSearch',
+  'Microsoft\.BingFinance', 'Microsoft\.BingSports', 'MicrosoftCorporationII\.Bing',
+  'Microsoft\.Copilot', 'Microsoft\.Windows\.Copilot', 'MicrosoftWindows\.Client\.Copilot',
+  'MicrosoftWindows\.Client\.AIX', 'Microsoft\.Windows\.Ai\.Copilot\.Provider', 'Microsoft\.Windows\.AIHub',
+  'Microsoft\.549981C3F77F5', 'Microsoft\.549981C3F5F10',
+  'Microsoft\.GetHelp', 'Microsoft\.Getstarted', 'Microsoft\.MicrosoftOfficeHub',
+  'Microsoft\.MicrosoftSolitaireCollection', 'Microsoft\.MicrosoftStickyNotes', 'Microsoft\.StickyNotesPreview',
+  'Microsoft\.MixedReality\.Portal', 'Microsoft\.Office\.OneNote',
+  'Microsoft\.OutlookForWindows', 'Microsoft\.OutlookPWA',
+  'Microsoft\.People', 'Microsoft\.Windows\.PeopleExperienceHost', 'microsoft\.windowscommunicationsapps',
+  'Microsoft\.PowerAutomateDesktop', 'Microsoft\.MicrosoftPowerBIForWindows',
+  'Microsoft\.Print3D', 'Microsoft\.MSPaint',
+  'Microsoft\.SkypeApp', 'Microsoft\.Todos', 'Microsoft\.Wallet', 'Microsoft\.Whiteboard',
+  'Microsoft\.Windows\.DevHome', 'Microsoft\.Windows\.SecureAssessmentBrowser',
+  'Microsoft\.WindowsFeedbackHub', 'Microsoft\.WindowsMaps', 'Microsoft\.WindowsAlarms',
+  'Microsoft\.WindowsBackup', 'Microsoft\.WindowsSoundRecorder', 'Microsoft\.WindowsCamera',
+  'Microsoft\.StartExperiencesApp', 'Ink\.Handwriting\.Main\.Store',
+  'Microsoft\.YourPhone', 'Microsoft\.ZuneMusic', 'Microsoft\.ZuneVideo',
+  'MicrosoftCorporationII\.QuickAssist', 'MicrosoftCorporationII\.MicrosoftFamily',
+  'MicrosoftCorporationII\.MailforSurfaceHub', 'Microsoft\.MicrosoftTeamsforSurfaceHub',
+  'microsoft\.microsoftskydrive', 'Microsoft\.OneDrive',
+  'Clipchamp\.Clipchamp', 'MicrosoftTeams', '^MSTeams',
+  'Microsoft\.XboxSpeechToTextOverlay', 'Microsoft\.XboxApp',
+  'Microsoft\.Advertising\.Xaml',
+  'MicrosoftWindows\.Client\.WebExperience', 'Microsoft\.WidgetsPlatformRuntime',
+  # --- FSOS them: stub M365 + phu tung MS ---
+  'Microsoft\.Office\.Word', 'Microsoft\.Office\.Excel', 'Microsoft\.Office\.PowerPoint', 'Microsoft\.Office\.Sway',
+  'Microsoft\.M365Companions', '7EE7776C\.LinkedInforWindows', 'Microsoft\.MicrosoftJournal',
+  'Microsoft\.PCManager', 'Microsoft\.NetworkSpeedTest', 'Microsoft\.Flipgrid',
+  'Microsoft\.MicrosoftEdgeDevToolsClient',
+  'AppleInc\.AppleMusicWin', 'AppleInc\.iTunes',
+  # --- App qua cao cap / sponsored (FSOS full list) ---
+  'king\.com', 'SpotifyAB', 'TikTok', 'Netflix', 'Disney', 'Facebook', 'Instagram', 'Twitter',
+  'Pandora', 'iHeartRadio', 'Shazam', 'Viber', 'WinZip', 'NYTCrossword', 'Duolingo',
+  'Fitbit', 'Flipboard', 'EclipseManager', 'ActiproSoftware', 'CyberLink', 'PicsArt', 'Polarr',
+  'Phototastic', 'Drawboard', 'Autodesk', 'XING', 'Wunderlist', 'TuneIn', 'SlingTV',
+  'OneCalendar', 'ACGMediaPlayer', 'LiveWallpaper', 'Asphalt8', 'CaesarsSlots', 'COOKINGFEVER',
+  'HiddenCity', 'MarchofEmpires', 'RoyalRevolt', 'AdobeSystemsIncorporated',
+  'Amazon', 'PrimeVideo', 'HULU', 'Booking', 'Plex',
+  # --- OEM bloat (FSOS: HP/Dell/Lenovo - retail MS ISO khong co, de phong) ---
+  'AD2F1837\.', 'DellInc\.', 'LenovoCompanyLimited\.', 'E046963F\.'
+)
+$blacklist = $bl -join '|'
 $removed = 0
 Get-AppxProvisionedPackage -Path $mnt | Where-Object { $_.DisplayName -match $blacklist } | ForEach-Object {
   Write-Host "  - $($_.DisplayName)"
@@ -110,6 +162,19 @@ RA "$S\Policies\Microsoft\Windows\CloudContent" 'DisableSoftLanding' 1
 # Dung cmd /c de nuot hoan toan (key co san hay khong cung khong bao loi).
 cmd /c "reg delete `"$S\Microsoft\Windows\CurrentVersion\Run`" /v OneDriveSetup /f >nul 2>&1"
 cmd /c "reg delete `"$S\Microsoft\Windows\CurrentVersion\Run`" /v OneDriveStandaloneUpdateTaskLogon /f >nul 2>&1"
+# OneDrive phan con lai theo FSOS-X strip-onedrive (offline):
+# 1) Run key trong profile DEFAULT user (User moi = khong bao gio thay OneDrive auto-start)
+$defNtu = "$mnt\Users\Default\NTUSER.DAT"
+if (Test-Path $defNtu) {
+  reg load HKLM\NXS_DEF "$defNtu" 2>&1 | Out-Null
+  cmd /c "reg delete `"HKLM\NXS_DEF\Software\Microsoft\Windows\CurrentVersion\Run`" /v OneDriveSetup /f >nul 2>&1"
+  cmd /c "reg delete `"HKLM\NXS_DEF\Software\Microsoft\Windows\CurrentVersion\Run`" /v OneDrive /f >nul 2>&1"
+  [gc]::Collect(); Start-Sleep 1
+  reg unload HKLM\NXS_DEF 2>&1 | Out-Null
+}
+# 2) CLSID OneDrive o sidebar Explorer (an khoi This PC - FSOS lam 4 hive, offline 2 hive du)
+RA "$S\Classes\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" 'System.IsPinnedToNameSpaceTree' 0
+RA "$S\Wow6432Node\Classes\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" 'System.IsPinnedToNameSpaceTree' 0
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'ContentDeliveryAllowed' 0
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'OemPreInstalledAppsEnabled' 0
 RA "$S\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 'PreInstalledAppsEnabled' 0
