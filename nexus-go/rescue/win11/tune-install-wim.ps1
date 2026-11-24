@@ -59,8 +59,20 @@ Write-Host "KEEP-CHECK OK: Store + DesktopAppInstaller con nguyen (can cho winge
 
 # OneDrive consumer: xoa installer inline (26H2 van con OneDriveSetup.exe — run #97 xac nhan)
 # + Run key first-logon — khong xoa thi OOBE van tu cai OneDrive
+# Run #101: file co attribute ReadOnly/System trong offline mount → Remove-Item -Force
+# van bi "Access denied" → bo attribute truoc. OneDrive la phan PHU: xoa khong duoc thi
+# chi WARN (Run key da bi chan o buoc 5), KHONG de no gian do ca build.
 foreach ($od in @("$mnt\Windows\System32\OneDriveSetup.exe", "$mnt\Windows\SysWOW64\OneDriveSetup.exe")) {
-  if (Test-Path $od) { Remove-Item $od -Force; Write-Host "  xoa $(Split-Path $od -Leaf) [$(Split-Path (Split-Path $od) -Leaf)]" }
+  if (-not (Test-Path $od)) { continue }
+  try {
+    $f = Get-Item $od -Force
+    $f.Attributes = [IO.FileAttributes]::Normal
+    $f.IsReadOnly = $false
+    Remove-Item $od -Force
+    Write-Host "  xoa $(Split-Path $od -Leaf) [$(Split-Path (Split-Path $od) -Leaf)]"
+  } catch {
+    Write-Host "  [NHE] khong xoa duoc $od — bo qua (Run key da chan, khong anh huong build)"
+  }
 }
 
 # ---------- 5. Offline registry tweaks ----------
