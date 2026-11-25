@@ -72,6 +72,26 @@ Quy trình: `next build` → `post-build.mjs` (copy static/public/prisma engine 
   - Chạy hằng ngày 02:00 + bấm "Run workflow" thủ công được
 - Secrets cần thiết: `S3_ACCESS_KEY_ID`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `DISCORD_WEBHOOK_URL` (tùy chọn)
 
+## NEXUS Playbook cho AME Wizard (.apbx)
+
+Bản tinh chỉnh Windows 11 kiểu **Atlas OS / FSOS-X** chạy qua **AME Wizard** — không phải script PowerShell:
+
+- Hỗ trợ **Windows 11 21H2 / 24H2 / 25H2 / 26H2** (builds 22000 / 26100 / 26200 / 26300)
+- 126 pattern debloat AppX (gộp trực tiếp từ Atlas OS + FSOS-X R11H2) + deprovision markers (feature update không cài lại app đã gỡ)
+- Guardrails: giữ nguyên Game Pass, Game Bar, Xbox sign-in, Store, winget, Paint classic, Snipping Tool, Defender
+- Gaming registry (HAGS, GPU priority 8, timer resolution, power throttling off) + telemetry/ads lockdown + service tuning
+- Restore point (tuỳ chọn) + full backups + `install-report.html` trong `C:\Windows\NEXUS`
+- Build: `scripts/build_nexus_apbx.sh` → `download/NEXUS-Playbook-v1.0.2.apbx` (verify: `scripts/verify_nexus_apbx.py`)
+- **Test an toàn**: playbook KHÔNG reboot — chạy trọn vẹn trên VM/runner được; muốn test reboot tự do thì dùng VM Hyper-V + checkpoint (`download/nexus-playbook-lab.ps1`)
+
+## ISO NEXUS (CI tự build)
+
+- **Win11NEXUS-26H2**: ISO Win11 Pro 26H2 gốc (link chính chủ prss.microsoft.com qua python MS connector) → tune offline trong CI (debloat AppX, registry, LabConfig, split .swm) → release `go-vN` (7z parts + merge.bat + SHA256)
+- **windows-nexus.iso**: WinPE gaming ultra-light — dashboard phần cứng, offline gaming tune, app installer; PowerShell 7 portable nhúng sẵn (WinSE 26H2 không còn powershell.exe); NEXUS web trên `:8080` truy cập LAN
+- **nexus-rescue.iso**: Alpine rescue (SMART, disk, network) giữ nguyên El Torito boot
+
+> ISO Win11 là **en-US** (MS không phân phối tiếng Việt qua connector) — đổi display language trong Settings sau khi cài.
+
 ## Kỹ thuật
 
 - Next.js 16 (App Router, Turbopack) + TypeScript + Tailwind CSS v4 + shadcn/ui

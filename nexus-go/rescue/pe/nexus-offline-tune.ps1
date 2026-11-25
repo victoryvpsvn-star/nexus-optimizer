@@ -1,4 +1,4 @@
-﻿# NEXUS Offline Gaming Tune (WinPE v4.5) - apply tweaks vao WINDOWS THAT (offline registry)
+﻿# NEXUS Offline Gaming Tune (WinPE v4.6) - apply tweaks vao WINDOWS THAT (offline registry)
 # An toan: chi ghi vai key quen thuoc, khong xoa file; snapshot/rollback = System Restore cua ban.
 $ErrorActionPreference = 'Continue'
 Write-Host ''

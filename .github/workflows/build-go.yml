@@ -403,13 +403,13 @@ jobs:
           # khong bao gio Trim() tren null - regex extract.
           # Bug run truoc: $args la AUTOMATIC VARIABLE -> gan bi nuot -> & pwsh khong arg -> REPL silent!
           Write-Host '===== FIDO direct call (pwsh7) ====='
-          & C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang Vietnamese -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut
+          & C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang English -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut
           Write-Host "FIDO exit: $LASTEXITCODE"
           $raw = $fidoOut | Out-String
           $url = [regex]::Match($raw, 'https://[^\s]*\.iso[^\s]*').Value
           if (-not $url) {
             Write-Host '===== FIDO PS5.1 retry ====='
-            & powershell -NoProfile -ExecutionPolicy Bypass -File C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang Vietnamese -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut2
+            & powershell -NoProfile -ExecutionPolicy Bypass -File C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang English -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut2
             Write-Host "FIDO PS5.1 exit: $LASTEXITCODE"
             $raw2 = $fidoOut2 | Out-String
             $url = [regex]::Match($raw2, 'https://[^\s]*\.iso[^\s]*').Value
@@ -423,7 +423,17 @@ jobs:
           Write-Host "ISO URL: $url"
           if (-not $url) { throw "Ca Fido lan python MS connector deu khong lay duoc URL - xem log tren" }
           $url | Out-File C:\Fido\iso-url.txt -Encoding ascii
-          curl.exe -L --retry 3 --retry-delay 5 -o C:\win11-original.iso $url
+          # Run #114: prss ngat giua chung (curl 18 'end of response ... bytes missing') —
+          # -C - resume + retry-all-errors (retry thuong bo qua loi transfer), loop 6 lan
+          $ok = $false
+          foreach ($i in 1..6) {
+            Write-Host "=== tai ISO (thu $i/6) ==="
+            curl.exe -L -C - --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 -o C:\win11-original.iso $url
+            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
+            Write-Host "curl exit $LASTEXITCODE — thu lai sau 10s (tiep tuc tu vi tri da tai)"
+            Start-Sleep -Seconds 10
+          }
+          if (-not $ok) { throw "tai ISO that bai sau 6 lan (curl exit $LASTEXITCODE)" }
           $iso = Get-Item C:\win11-original.iso
           Write-Host "ISO goc: $([math]::Round($iso.Length/1GB,2)) GB"
           if ($iso.Length -lt 4GB) { throw "ISO goc qua nho - download loi?" }
@@ -469,3 +479,36 @@ jobs:
         run: |
           gh release upload go-v${{ github.run_number }} C:\out\Win11NEXUS-24H2.7z.001 C:\out\Win11NEXUS-24H2.7z.002 C:\out\Win11NEXUS-24H2.7z.003 C:\out\merge.bat C:\out\README-NEXUS-Win11.txt C:\out\SHA256.txt --repo ${{ github.repository }} --clobber
           Write-Host "Uploaded Win11 ISO parts to release go-v${{ github.run_number }}"
+
+      - name: Export boot.wim goc lam artifact cho job WinPE (ADK ngõ cụt trên runner)
+        if: always()
+        shell: powershell
+        run: |
+          # boot.wim trong ISO Win11 chinh chu = WinSE (Windows Setup PE) cua MS:
+          # co san PowerShell + WMI + .NET — khong can ADK/add-on/WinPE_OCs nua.
+          # job build-windows-pe dung artifact nay lam nen boot.wim cua windows-nexus.iso
+          # Run #107: C: HET CHO khi copy boot.wim (ISO 4.5GB + 7z parts 6GB + swm 5.2GB
+          # cung ton tai) → don truoc: 7z parts DA UPLOAD roi, ISO da split xong,
+          # install*.swm da dua vao ISO — chi con can boot.wim trong cay goc.
+          # Run #114: job chinh fail o buoc tai ISO → boot.wim khong ton tai —
+          # FAIL-NHE (warning) thay vi error: job WinPE se tu skip (can artifact).
+          if (-not (Test-Path 'C:\win11src\sources\boot.wim')) {
+            Write-Host '::warning::khong co boot.wim (job chinh fail truoc do?) — bo qua export, job WinPE se skip'
+            exit 0
+          }
+          Write-Host "Truoc don: C: con $([math]::Round((Get-PSDrive C).Free/1GB,1)) GB"
+          Get-ChildItem 'C:\out\*.7z.0*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Get-ChildItem 'C:\out\*.iso' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Get-ChildItem 'C:\win11src\sources\install*.swm' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Write-Host "Sau don: C: con $([math]::Round((Get-PSDrive C).Free/1GB,1)) GB"
+          New-Item -ItemType Directory -Force -Path C:\winpe-artifact | Out-Null
+          Copy-Item C:\win11src\sources\boot.wim C:\winpe-artifact\boot.wim -Force
+          Write-Host "boot.wim: $([math]::Round((Get-Item C:\winpe-artifact\boot.wim).Length/1MB,1)) MB"
+      - name: Upload boot.wim artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win11-boot-wim
+          path: C:\winpe-artifact\boot.wim
+          retention-days: 1
+          if-no-files-found: ignore
