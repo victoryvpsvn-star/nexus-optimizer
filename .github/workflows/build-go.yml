@@ -193,48 +193,35 @@ jobs:
           path: /tmp/iso/nexus-rescue.iso
 
 
-  # v4.5.0: WINDOWS NEXUS ISO — WinPE chính chủ Microsoft (như AOMEI PE Builder) cho gaming thủ:
-  # boot ngoài Windows → dashboard cấu hình đầy đủ + NEXUS web qua LAN. Siêu nhẹ: chỉ WMI +
-  # PowerShell + StorageWMI (SMART); không desktop env; mọi ghi chỉ trong RAM disk X:.
+  # v4.6.0: WINDOWS NEXUS ISO — nen boot.wim = WinSE (Windows Setup PE) chinh chu MS lay tu
+  # ISO Win11 (job win11-iso export artifact): co san PowerShell + WMI + .NET, khong can ADK
+  # (ADK ngõ cụt tren runner: choco khong co boot.wim, adkwinpesetup /layout chi bung MSI 0.6MB).
+  # Boot ngoai Windows → dashboard cau hinh day du + NEXUS web qua LAN; ghi chi trong RAM disk X:.
   build-windows-pe:
     name: Build Windows NEXUS ISO (WinPE gaming ultra-light)
     runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' && !cancelled() && needs.release.result == 'success' && needs.win11-iso.result == 'success'
     timeout-minutes: 45
-    needs: [release]   # đoi release cat xong đe nap exe + upload ISO vao cung tag go-vN
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    needs: [release, win11-iso]   # win11-iso export boot.wim goc lam artifact
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cai WinPE add-on (choco) - ISO tao bang pycdlib, khong can ADK base
+      - name: Lay boot.wim goc (WinSE) tu artifact cua job win11-iso (cung run)
+        uses: actions/download-artifact@v4
+        with:
+          name: win11-boot-wim
+          path: C:\winpe\artifact
+
+      - name: Stage boot.wim vao media/sources + soi image info
         shell: powershell
-        timeout-minutes: 30
         run: |
-          # Bai hoc run 58-64: ADK base installer tren runner khong on dinh (exit 1000,
-          # registry stub VS SDK che path) -> DUY NHAT can la PE add-on (media template +
-          # boot.wim + WinPE_OCs). ISO tao bang python pycdlib (El Torito BIOS+UEFI) -
-          # khong copype, khong oscdimg, khong registry.
-          choco install -y --no-progress vcredist2010
-          choco install -y --no-progress windows-adk-winpe
-          $pe = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
-          # Tim toan bo boot.wim trong add-on (run truoc: Media\sources co the thu)/ chua ro)
-          $wims = Get-ChildItem $pe -Recurse -Filter boot.wim -ErrorAction SilentlyContinue
-          $wims | ForEach-Object { Write-Host "boot.wim: $($_.FullName) ($([math]::Round($_.Length/1MB,1)) MB)" }
-          if ($wims.Count -eq 0) {
-            Get-ChildItem $pe -Recurse -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-            throw "PE add-on KHONG co boot.wim nao - choco windows-adk-winpe thieu media. Fix: tai adkwinpesetup.exe truc tiep fwlink"
-          }
-          $src = $wims[0].Directory.Parent.FullName
-          if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
-            robocopy "$pe\amd64\media" C:\winpe\media /E /NFL /NDL /NJH /NJS
-          }
-          if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
-            New-Item -ItemType Directory -Force -Path C:\winpe\media\sources | Out-Null
-            Copy-Item $wims[0].FullName C:\winpe\media\sources\boot.wim -Force
-            Write-Host "copy boot.wim tu $($wims[0].FullName)"
-          }
-          Write-Host "ADK PE OK: $pe"
+          New-Item -ItemType Directory -Force -Path C:\winpe\media\sources | Out-Null
+          $w = Get-ChildItem C:\winpe\artifact -Recurse -Filter boot.wim | Select-Object -First 1
+          if (-not $w) { throw 'artifact win11-boot-wim khong chua boot.wim' }
+          Copy-Item $w.FullName C:\winpe\media\sources\boot.wim -Force
+          Write-Host "boot.wim: $([math]::Round($w.Length/1MB,1)) MB"
+          dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
 
       - name: Tai exe NEXUS tu release go-vN
         shell: powershell
@@ -245,23 +232,20 @@ jobs:
           gh release download go-v${{ github.run_number }} --repo ${{ github.repository }} --pattern "*.exe" --dir C:\out
           Get-ChildItem C:\out
 
-      - name: Tao workspace PE + mount + inject NEXUS
+      - name: Mount boot.wim + nhung NEXUS + PowerShell 7 portable (WinSE 26H2 khong co PS)
         shell: powershell
         run: |
-          $pe  = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
-          if (-not (Test-Path $pe)) { $pe = "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment" }
-          if (-not (Test-Path "$pe\amd64\WinPE_OCs")) {
-            Get-ChildItem "$pe" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName
-            throw "WinPE_OCs amd64 thieu - ADK/add-on chua dung version"
-          }
           if (-not (Test-Path "C:\winpe\media\sources\boot.wim")) {
-            # stage media template truc tiep tu add-on (bo qua copype - khong can registry)
-            robocopy "$pe\amd64\media" C:\winpe\media /E /NFL /NDL /NJH /NJS
-            if ($LASTEXITCODE -ge 8) { throw "media robocopy failed - $pe\amd64\media thieu" }
+            throw "C:\winpe\media\sources\boot.wim thieu - step lay artifact da phai stage"
           }
-          # Mount image index 1 (real PE - not Setup)
-          dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount
-          if ($LASTEXITCODE -ne 0) { throw "mount boot.wim failed" }
+          # WinSE boot.wim 26H2 co 2 index, KHONG index nao co PowerShell (bi loai khoi
+          # WinSE tu Win11 — Run #112 throw 'KHONG index nao co PowerShell').
+          # Nhung PowerShell 7 portable (self-contained, kem .NET runtime) vao image —
+          # dashboard/menu/apps PS scripts chay binh thuong. Fallback neu pwsh loi: exe Go web.
+          # Run #110: DISM 0xc1420115 - nho New-Item mount dir truoc khi Mount-Image.
+          New-Item -ItemType Directory -Force -Path C:\winpe\mount | Out-Null
+          dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:2 /MountDir:C:\winpe\mount
+          if ($LASTEXITCODE -ne 0) { throw "mount index 2 failed" }
           # NEXUS vao image
           New-Item -ItemType Directory -Force -Path C:\winpe\mount\NEXUS | Out-Null
           Copy-Item C:\out\*.exe C:\winpe\mount\NEXUS\nexus.exe -Force
@@ -269,17 +253,21 @@ jobs:
           Copy-Item nexus-go\rescue\pe\nexus-dashboard.ps1 C:\winpe\mount\NEXUS\nexus-dashboard.ps1 -Force
           Copy-Item nexus-go\rescue\pe\nexus-offline-tune.ps1 C:\winpe\mount\NEXUS\nexus-offline-tune.ps1 -Force
           Copy-Item nexus-go\rescue\pe\nexus-apps.ps1 C:\winpe\mount\NEXUS\nexus-apps.ps1 -Force
-          # Minimal packages (ultra-light): WMI first (PowerShell needs it), then PowerShell, StorageWMI (SMART)
-          $ocs = "$pe\amd64\WinPE_OCs"
-          foreach ($p in @("WinPE-WMI","WinPE-PowerShell","WinPE-StorageWMI")) {
-            dism /Image:C:\winpe\mount /Add-Package /PackagePath:"$ocs\$p.cab"
-            if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$p base add failed (may already exist) - continue" }
-            dism /Image:C:\winpe\mount /Add-Package /PackagePath:"$ocs\en-us\$p.cab"
-            if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$p en-us add failed - continue" }
-          }
+          # PowerShell 7 portable (zip ~72MB, self-contained kem .NET runtime) — GitHub release chinh hang
+          Invoke-WebRequest -Uri 'https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/PowerShell-7.4.6-win-x64.zip' -OutFile C:\winpe\pwsh.zip -UseBasicParsing
+          if ((Get-Item C:\winpe\pwsh.zip).Length -lt 50MB) { throw "pwsh zip qua nho - tai loi?" }
+          New-Item -ItemType Directory -Force -Path C:\winpe\mount\NEXUS\pwsh | Out-Null
+          Expand-Archive -Path C:\winpe\pwsh.zip -DestinationPath C:\winpe\mount\NEXUS\pwsh -Force
+          if (-not (Test-Path 'C:\winpe\mount\NEXUS\pwsh\pwsh.exe')) { throw 'pwsh.exe khong ton tai sau khi bung zip' }
+          Write-Host "pwsh portable OK — image tang them $([math]::Round((Get-ChildItem C:\winpe\mount\NEXUS\pwsh -Recurse | Measure-Object Length -Sum).Sum/1MB,1)) MB"
           # Commit - boot.wim in media updated in place
           dism /Unmount-Image /MountDir:C:\winpe\mount /Commit
           if ($LASTEXITCODE -ne 0) { throw "unmount commit failed" }
+          # export lai CHI index da inject (giam kich thuoc ISO: boot~500MB thay vi 2 image)
+          dism /Export-Image /SourceImageFile:C:\winpe\media\sources\boot.wim /SourceIndex:2 /DestinationImageFile:C:\winpe\boot-new.wim /Compress:recovery
+          if ($LASTEXITCODE -ne 0) { throw "export boot.wim failed" }
+          Move-Item C:\winpe\boot-new.wim C:\winpe\media\sources\boot.wim -Force
+          Write-Host "boot.wim (Pro-only da inject): $([math]::Round((Get-Item C:\winpe\media\sources\boot.wim).Length/1MB,1)) MB"
 
       - name: Tao ISO (pycdlib) + verify
         shell: powershell
@@ -289,11 +277,11 @@ jobs:
           $iso = Get-Item C:\out\windows-nexus.iso
           Write-Host "ISO: $($iso.Length) bytes ($([math]::Round($iso.Length/1MB,1)) MB)"
           if ($iso.Length -lt 150MB) { throw "ISO qua nho - boot.wim khong duoc inject?" }
-          if ($iso.Length -gt 900MB) { throw "ISO qua lon - review packages" }
+          if ($iso.Length -gt 1200MB) { Write-Host "::warning::ISO lon (WinSE day du) - xem xet slim bot index khac" }
           # Verify image 1 chua NEXUS + startnet + dashboard + 2 script gaming
           dism /Get-ImageInfo /ImageFile:C:\winpe\media\sources\boot.wim
           dism /Mount-Image /ImageFile:C:\winpe\media\sources\boot.wim /Index:1 /MountDir:C:\winpe\mount2
-          foreach ($f in @("C:\winpe\mount2\NEXUS\nexus.exe","C:\winpe\mount2\Windows\System32\startnet.cmd","C:\winpe\mount2\NEXUS\nexus-dashboard.ps1","C:\winpe\mount2\NEXUS\nexus-offline-tune.ps1","C:\winpe\mount2\NEXUS\nexus-apps.ps1")) {
+          foreach ($f in @("C:\winpe\mount2\NEXUS\nexus.exe","C:\winpe\mount2\Windows\System32\startnet.cmd","C:\winpe\mount2\NEXUS\nexus-dashboard.ps1","C:\winpe\mount2\NEXUS\nexus-offline-tune.ps1","C:\winpe\mount2\NEXUS\nexus-apps.ps1","C:\winpe\mount2\NEXUS\pwsh\pwsh.exe")) {
             if (-not (Test-Path $f)) { throw "missing in image: $f" }
             Write-Host "OK: $f ($((Get-Item $f).Length) B)"
           }
@@ -383,45 +371,35 @@ jobs:
           [ -f nexus-go/ci/fps-summary.md ] && cat nexus-go/ci/fps-summary.md >> $GITHUB_STEP_SUMMARY || true
 
   win11-iso:
-    name: Build Win11 Pro 24H2 Gaming ISO (Debloated + Tuned)
+    name: Build Win11 Pro 26H2 Gaming ISO (Debloated + Tuned)
     runs-on: windows-latest
-    timeout-minutes: 55
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fido Rufus -> lay link ISO Win11 24H2 chinh chu + tai ve (~5.5GB)
+      - name: Lay link ISO Win11 chinh chu (python MS connector + Fido backup) + tai ve (~5.5GB)
         shell: pwsh
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
           $ErrorActionPreference = 'Continue'
+          # Bai hoc 17-j/17-k: Fido tren runner exit 1 SILENT (ca pwsh7/PS5.1); python MS
+          # connector da chay OK that trong CI (run 44535306296) + tren sandbox -> DUNG
+          # CONNECTOR LAM CHINH, Fido chi la backup. MS chi con phan phoi 26H2 (26300).
           New-Item -ItemType Directory -Force -Path C:\Fido | Out-Null
-          Invoke-WebRequest -Uri 'https://github.com/pbatard/Fido/raw/master/Fido.ps1' -OutFile C:\Fido\Fido.ps1 -UseBasicParsing
-          Write-Host "Fido.ps1 size: $((Get-Item C:\Fido\Fido.ps1).Length) bytes"
-          # Bai hoc run truoc: PS5.1 silent fail khong output -> dung pwsh 7 + PS5.1 luot doi,
-          # PlatformArch x64 de bo WMI, capture 2>&1, IN RA RAW de debug. Bai hoc run 64:
-          # khong bao gio Trim() tren null - regex extract.
-          # Bug run truoc: $args la AUTOMATIC VARIABLE -> gan bi nuot -> & pwsh khong arg -> REPL silent!
-          Write-Host '===== FIDO direct call (pwsh7) ====='
-          & C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang English -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut
-          Write-Host "FIDO exit: $LASTEXITCODE"
-          $raw = $fidoOut | Out-String
-          $url = [regex]::Match($raw, 'https://[^\s]*\.iso[^\s]*').Value
+          Write-Host '===== MS connector (chinh) ====='
+          python nexus-go\rescue\win11\ms_connector.py 2>&1 | Tee-Object -Variable msOut
+          $raw3 = $msOut | Out-String
+          $url = [regex]::Match($raw3, 'NEXUS-ISO-URL=(https://\S+)').Groups[1].Value
           if (-not $url) {
-            Write-Host '===== FIDO PS5.1 retry ====='
-            & powershell -NoProfile -ExecutionPolicy Bypass -File C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang English -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut2
-            Write-Host "FIDO PS5.1 exit: $LASTEXITCODE"
-            $raw2 = $fidoOut2 | Out-String
-            $url = [regex]::Match($raw2, 'https://[^\s]*\.iso[^\s]*').Value
-          }
-          if (-not $url) {
-            Write-Host '===== FALLBACK python MS connector (Fido that bai) ====='
-            python nexus-go\rescue\win11\ms_connector.py 2>&1 | Tee-Object -Variable msOut
-            $raw3 = $msOut | Out-String
-            $url = [regex]::Match($raw3, 'NEXUS-ISO-URL=(https://\S+)').Groups[1].Value
+            Write-Host '===== Fido backup ====='
+            Invoke-WebRequest -Uri 'https://github.com/pbatard/Fido/raw/master/Fido.ps1' -OutFile C:\Fido\Fido.ps1 -UseBasicParsing
+            & C:\Fido\Fido.ps1 -Win 11 -Rel Latest -Lang English -Arch x64 -PlatformArch x64 -GetUrl 2>&1 | Tee-Object -Variable fidoOut
+            $url = [regex]::Match(($fidoOut | Out-String), 'https://[^\s]*\.iso[^\s]*').Value
           }
           Write-Host "ISO URL: $url"
-          if (-not $url) { throw "Ca Fido lan python MS connector deu khong lay duoc URL - xem log tren" }
+          if (-not $url) { throw "Ca MS connector lan Fido deu khong lay duoc URL - xem log tren" }
           $url | Out-File C:\Fido\iso-url.txt -Encoding ascii
           # Run #114: prss ngat giua chung (curl 18 'end of response ... bytes missing') —
           # -C - resume + retry-all-errors (retry thuong bo qua loi transfer), loop 6 lan
@@ -438,46 +416,67 @@ jobs:
           Write-Host "ISO goc: $([math]::Round($iso.Length/1GB,2)) GB"
           if ($iso.Length -lt 4GB) { throw "ISO goc qua nho - download loi?" }
 
-      - name: Tune install.wim (debloat AppX + registry offline + LabConfig + Pro-only)
+      - name: Tune install.wim (debloat AppX + registry offline + LabConfig + export recovery + split .swm)
         shell: powershell
-        timeout-minutes: 35
+        # Run 94: tune tron bo (mount+debloat+reg+unmount+bootwim+export 5.21GB) het ~55' trong 75'
+        timeout-minutes: 80
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File nexus-go\rescue\win11\tune-install-wim.ps1 C:\win11-original.iso
 
+      - name: Verify install.swm sau tune (26H2 recovery 5.2GB > 4GB ISO9660 → chuan .swm)
+        shell: powershell
+        timeout-minutes: 5
+        run: |
+          # tune da split .swm (install.swm + install2.swm...) — Setup doc tu nhien
+          $swms = Get-ChildItem 'C:\win11src\sources\install*.swm' | Sort-Object Name
+          if ($swms.Count -lt 2) { throw "thieu swm parts sau tune (thay: $($swms.Count))" }
+          $swms | ForEach-Object { Write-Host "$($_.Name): $([math]::Round($_.Length/1GB,2)) GB" }
+          if (($swms | Measure-Object Length -Maximum).Maximum -gt 3.9GB) { throw 'co phan swm > 3.9GB' }
+          $info = Get-WindowsImage -ImagePath $swms[0].FullName
+          if ($info.Count -ne 1) { throw 'install.swm phai chi con 1 image (Pro)' }
+          Write-Host "Image duy nhat: $($info.ImageName)"
+
       - name: Tao ISO (pycdlib UDF) + verify
         shell: powershell
-        timeout-minutes: 12
+        # Run 94: cay ISO ~6GB (8.4GB goc - install.wim 7.6GB + swm 5.2GB) — 12' khong du
+        timeout-minutes: 35
         run: |
           python nexus-go\rescue\win11\make_win11_iso.py
-          $iso = Get-Item C:\out\Win11Pro-NEXUS-24H2-Gaming.iso
+          $iso = Get-Item C:\out\Win11Pro-NEXUS-26H2-Gaming.iso
           Write-Host "ISO: $([math]::Round($iso.Length/1GB,2)) GB"
-          if ($iso.Length -lt 2.5GB) { throw "ISO qua nho" }
-          dism /Get-ImageInfo /ImageFile:C:\win11src\sources\install.wim
-          $info = Get-WindowsImage -ImagePath C:\win11src\sources\install.wim
-          if ($info.Count -ne 1) { throw "install.wim phai chi con 1 image (Pro)" }
-          Write-Host "Image duy nhat: $($info.ImageName)"
+          if ($iso.Length -lt 3GB) { throw "ISO qua nho" }
+          if (-not (Test-Path 'C:\win11src\sources\install.swm')) { throw 'install.swm thieu trong cay stage' }
+          if (Test-Path 'C:\win11src\sources\install.wim') { throw 'install.wim con sot trong cay - phai chi co swm' }
 
       - name: 7z split <2GB + merge.bat + SHA256 (gioi han asset GitHub 2GB/file)
         shell: powershell
         timeout-minutes: 10
         run: |
           $sz = 'C:\Program Files\7-Zip\7z.exe'
-          & $sz a -t7z -mx=0 -v1900m C:\out\Win11NEXUS-24H2.7z C:\out\Win11Pro-NEXUS-24H2-Gaming.iso | Select-Object -Last 5
-          $parts = Get-ChildItem C:\out\Win11NEXUS-24H2.7z.* | Sort-Object Name
+          & $sz a -t7z -mx=0 -v1900m C:\out\Win11NEXUS-26H2.7z C:\out\Win11Pro-NEXUS-26H2-Gaming.iso | Select-Object -Last 5
+          $parts = Get-ChildItem C:\out\Win11NEXUS-26H2.7z.* | Sort-Object Name
+          if ($parts.Count -lt 2) { throw '7z split khong tao duoc phan nao' }
           $parts | ForEach-Object { Write-Host "$($_.Name): $([math]::Round($_.Length/1GB,2)) GB" }
-          $merge = "@echo off`r`nREM Ghep lai: copy /b 001+002+003 -> ISO (hoac mo .001 bang 7-Zip/WinRAR de giai nen)`r`ncopy /b `"Win11NEXUS-24H2.7z.001`"+`"Win11NEXUS-24H2.7z.002`"+`"Win11NEXUS-24H2.7z.003`" `"Win11Pro-NEXUS-24H2-Gaming.iso`"`r`necho Done: Win11Pro-NEXUS-24H2-Gaming.iso`r`npause`r`n"
+          # merge.bat DONG theo so phan that (ISO 2.5-3.2GB co the ra 2-3 phan - hardcode 3 phan la bug cu)
+          $join = ($parts | ForEach-Object { '"{0}"' -f $_.Name }) -join '+'
+          $merge = "@echo off`r`nREM Ghep lai $($parts.Count) phan thanh ISO (hoac mo file .001 bang 7-Zip/WinRAR de giai nen truc tiep)`r`ncopy /b $join `"Win11Pro-NEXUS-26H2-Gaming.iso`"`r`necho Done: Win11Pro-NEXUS-26H2-Gaming.iso`r`npause`r`n"
           [IO.File]::WriteAllText('C:\out\merge.bat', $merge)
-          $readme = "NEXUS Win11 Pro 24H2 Gaming ISO - huong dan`r`n=============================================`r`n1. Tai du 3 phan: Win11NEXUS-24H2.7z.001/.002/.003 cung thu muc`r`n2. De giai nen: mo file .001 bang 7-Zip hoac WinRAR -> duoc file ISO`r`n   (hoac chay merge.bat de ghep thanh ISO roi ghi ra USB bang Rufus)`r`n3. Ghi USB: Rufus (chon GPT/UEFI), boot, cai dat`r`n`r`nDa san co:`r`n- Debloat: 25+ app UWP rac (Bing/Copilot/Teams/Skype/Solitaire/Maps/YourPhone...)`r`n- Game: HAGS bat, GameDVR tat (FPS tang), Game Mode bat, GPU Priority 8, timer resolution, Power Throttling tat, SysMain tat, Ultimate Performance (first boot)`r`n- Telemetry/ads tat, tat deal ao & suggest app, khoi 24H2 (khong tu nang cap LTS style)`r`n- Boot cu: bypass TPM/SecureBoot/RAM/CPU (may cu van cai duoc)`r`n- OOBE: user 'Gamer' (khong mat khau, tu dong dang nhap) - doi mat khau sau khi vao`r`n- FirstBoot tu chay: tune HKCU + power Ultimate + winget cai Discord/Steam/Chrome/Opera GX (can internet)`r`n- Da go OneDrive consumer - Store/Photos/Calculator/Notepad/Terminal/Xbox (Game Pass) giu nguyen`r`n`r`nSafety: Defender giu nguyen. Log first boot: C:\NEXUS\FirstBoot.log. Re-run apps: shortcut NEXUS Gaming Setup.`r`n"
+          $names = ($parts | ForEach-Object { $_.Name }) -join '/'
+          $readme = "NEXUS Win11 Pro 26H2 Gaming ISO (en-US) - huong dan`r`n=============================================`r`n1. Tai du $($parts.Count) phan: $names cung thu muc`r`n2. De giai nen: mo file .001 bang 7-Zip hoac WinRAR -> duoc file ISO`r`n   (hoac chay merge.bat de ghep thanh ISO roi ghi ra USB bang Rufus)`r`n3. Ghi USB: Rufus (chon GPT/UEFI), boot, cai dat`r`n4. ISO la ban en-US - sau khi cai vao Settings > Time & language > Language & region them tieng Viet (mi`n phi)`r`n`r`nDa san co:`r`n- Debloat: 25+ app UWP rac (Bing/Copilot/Teams/Skype/Solitaire/Maps/YourPhone...)`r`n- Game: HAGS bat, GameDVR tat (FPS tang), Game Mode bat, GPU Priority 8, timer resolution, Power Throttling tat, SysMain tat, Ultimate Performance (first boot)`r`n- Telemetry/ads tat, tat deal ao & suggest app, khoa 26H2 (khong tu nang cap)`r`n- Boot cu: bypass TPM/SecureBoot/RAM/CPU (may cu van cai duoc)`r`n- OOBE: user 'Gamer' (khong mat khau, tu dong dang nhap) - doi mat khau sau khi vao`r`n- FirstBoot tu chay: tune HKCU + power Ultimate + winget cai Discord/Steam/Chrome/Opera GX (can internet)`r`n`r`nSafety: Defender giu nguyen. Log first boot: C:\NEXUS\FirstBoot.log. Re-run apps: shortcut NEXUS Gaming Setup.`r`n"
           [IO.File]::WriteAllText('C:\out\README-NEXUS-Win11.txt', $readme)
-          Get-ChildItem C:\out\Win11NEXUS-24H2.7z.* | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8 }
-          Get-FileHash C:\out\Win11Pro-NEXUS-24H2-Gaming.iso -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8
+          $parts | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8 }
+          Get-FileHash C:\out\Win11Pro-NEXUS-26H2-Gaming.iso -Algorithm SHA256 | Out-File C:\out\SHA256.txt -Append -Encoding utf8
+          # ghi lai danh sach phan cho step upload (dong, khong hardcode)
+          ($parts | ForEach-Object { $_.FullName }) -join ' ' | Out-File C:\out\parts-list.txt -Encoding ascii
 
       - name: Upload ISO parts vao release go-vN
         shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload go-v${{ github.run_number }} C:\out\Win11NEXUS-24H2.7z.001 C:\out\Win11NEXUS-24H2.7z.002 C:\out\Win11NEXUS-24H2.7z.003 C:\out\merge.bat C:\out\README-NEXUS-Win11.txt C:\out\SHA256.txt --repo ${{ github.repository }} --clobber
+          $parts = (Get-Content C:\out\parts-list.txt -Raw).Trim() -split '\s+'
+          Write-Host "Uploading: $($parts -join ', ')"
+          gh release upload go-v${{ github.run_number }} @parts C:\out\merge.bat C:\out\README-NEXUS-Win11.txt C:\out\SHA256.txt --repo ${{ github.repository }} --clobber
           Write-Host "Uploaded Win11 ISO parts to release go-v${{ github.run_number }}"
 
       - name: Export boot.wim goc lam artifact cho job WinPE (ADK ngõ cụt trên runner)
@@ -490,12 +489,6 @@ jobs:
           # Run #107: C: HET CHO khi copy boot.wim (ISO 4.5GB + 7z parts 6GB + swm 5.2GB
           # cung ton tai) → don truoc: 7z parts DA UPLOAD roi, ISO da split xong,
           # install*.swm da dua vao ISO — chi con can boot.wim trong cay goc.
-          # Run #114: job chinh fail o buoc tai ISO → boot.wim khong ton tai —
-          # FAIL-NHE (warning) thay vi error: job WinPE se tu skip (can artifact).
-          if (-not (Test-Path 'C:\win11src\sources\boot.wim')) {
-            Write-Host '::warning::khong co boot.wim (job chinh fail truoc do?) — bo qua export, job WinPE se skip'
-            exit 0
-          }
           Write-Host "Truoc don: C: con $([math]::Round((Get-PSDrive C).Free/1GB,1)) GB"
           Get-ChildItem 'C:\out\*.7z.0*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
           Get-ChildItem 'C:\out\*.iso' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -504,6 +497,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path C:\winpe-artifact | Out-Null
           Copy-Item C:\win11src\sources\boot.wim C:\winpe-artifact\boot.wim -Force
           Write-Host "boot.wim: $([math]::Round((Get-Item C:\winpe-artifact\boot.wim).Length/1MB,1)) MB"
+
       - name: Upload boot.wim artifact
         if: always()
         uses: actions/upload-artifact@v4
